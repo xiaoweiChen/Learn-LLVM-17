@@ -1,0 +1,94 @@
+Constructing a compiler is a complex and fascinating task. The LLVM project provides reusable components for your compiler and the LLVM core libraries implement a world-class optimizing code generator, which translates a source language-independent intermediate representation of machine code for all popular CPU architectures. The compilers for many programming languages already take advantage of LLVM technology.
+
+This book teaches you how to implement your own compiler and how to use LLVM to achieve it. You will learn how the frontend of a compiler turns source code into an abstract syntax tree, and how to generate Intermediate Representation (IR) from it. Furthermore, you will also explore adding an optimization pipeline to your compiler, which allows you to compile the IR to performant machine code.
+
+The LLVM framework can be extended in several ways, and you will learn how to add new passes, and even a completely new backend to LLVM. Advanced topics such as compiling for a different CPU architecture and extending clang and the clang static analyzer with your own plugins and checkers are also covered. This book follows a practical approach and is packed with example source code, which makes it easy to apply the gained knowledge within your own projects.
+
+\mySubsubsection{}{What’s new in this edition}
+
+Learn LLVM 17 now features a new chapter dedicated to introducing the concept and syntax of the TableGen language used within LLVM, in which readers can leverage to define classes, records, and an entire LLVM backend. Furthermore, this book also presents an emphasis on backend development, which discusses various new backend concepts that can be implemented for an LLVM backend, such as implementing the GlobalISel instruction framework and developing machine function passes.
+
+\mySubsubsection{}{Who this book is for}
+
+This book is for compiler developers, enthusiasts, and engineers who are interested in learning about the LLVM framework. It is also useful for C++ software engineers looking to use compiler-based tools for code analysis and improvement, as well as casual users of LLVM libraries who want to gain more knowledge of LLVM essentials. Intermediate-level experience with C++ programming is mandatory to understand the concepts covered in this book more effectively.
+
+\mySubsubsection{}{What this book covers}
+
+Chapter 1, Installing LLVM, explains how to set up and use your development environment. At the end of the chapter, you will have compiled the LLVM libraries and learned how to customize the build process.
+
+Chapter 2, The Structure of a Compiler, gives you an overview of the components of a compiler. At the end of the chapter, you will have implemented your first compiler producing LLVM IR.
+
+Chapter 3, Turning the Source File into an Abstract Syntax Tree, teaches you in detail how to implement the frontend of a compiler. You will create your own frontend for a small programming language, ending with the construction of an abstract syntax tree.
+
+Chapter 4, Basics of IR Code Generation, shows you how to generate LLVM IR from an abstract syntax tree. At the end of the chapter, you will have implemented a compiler for the example language, emitting assembly text or object code files as a result.
+
+Chapter 5, IR Generation for High-Level Language Constructs, illustrates how you translate source language features commonly found in high-level programming languages to LLVM IR. You will learn about the translation of aggregate data types, the various options to implement class inheritance and virtual functions, and how to comply with the application binary interface of your system.
+
+Chapter 6, Advanced IR Generation, shows you how to generate LLVM IR for exception-handling statements in the source language. You will also learn how to add metadata for type-based alias analysis, and how to add debug information to the generated LLVM IR, and you will extend your compiler-generated metadata.
+
+Chapter 7, Optimizing IR, explains the LLVM pass manager. You will implement your own pass, both as part of LLVM and as a plugin, and you will learn how to add your new pass to the optimizing pass pipeline.
+
+Chapter 8, The TableGen Language, introduces LLVM’s own domain-specific language called TableGen. This language is used to reduce the coding effort of the developer, and you will learn about the different ways you can define data in the TableGen language, and how it can be leveraged in the backend.
+
+Chapter 9, JIT Compilation, discusses how you can use LLVM to implement a just-in-time (JIT) compiler. By the end of the chapter, you will have implemented your own JIT compiler for LLVM IR in two different ways.
+
+Chapter 10, Debugging Using LLVM Tools, explores the details of various libraries and components of LLVM, which helps you to identify bugs in your application. You will use the sanitizers to identify buffer overflows and other bugs. With the libFuzzer library, you will test functions with random data as input, and XRay will help you find performance bottlenecks. You will use the clang static analyzer to identify bugs at the source level, and you will learn that you can add your own checker to the analyzer. You will also learn how to extend clang with your own plugin.
+
+Chapter 11, The Target Description, explains how you can add support for a new CPU architecture. This chapter discusses the necessary and optional steps like defining registers and instructions, developing instruction selection, and supporting the assembler and disassembler.
+
+Chapter 12, Instruction Selection, demonstrates two different approaches to instruction selection, specifically explaining how SelectionDAG and GlobalISel work and showing how to implement these functionalities in a target, based on the example from the previous chapter. In addition, you will learn how to debug and test instruction selection.
+
+Chapter 13, Beyond Instruction Selection, explains how you complete the backend implementation by exploring concepts beyond instruction selection. This includes adding new machine passes to implement target-specific tasks and points you to advanced topics that are not necessary for a simple backend but may be interesting for highly optimizing backends, such as cross-compilation to another CPU architecture.
+
+\mySubsubsection{}{To get the most out of this book}
+
+You need a computer running Linux, Windows, Mac OS X, or FreeBSD, with the development toolchain installed for the operating system. Please see the table for the required tools. All tools should be in the search path of your shell.
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{书中涉及的软件/硬件} & \textbf{操作系统} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\begin{tabular}[c]{@{}l@{}}A C/C++ compiler:\\ gcc 7.1.0或更高版本, clang 3.0或更高版本,\\ Apple clang 10.0 或更高版本,\\ Visual Studio 2019 16.7或更高版本\end{tabular} &
+\begin{tabular}[c]{@{}l@{}}Linux(any), Windows,\\ Mac OS X, or FreeBSD\end{tabular} \\ \hline
+CMake 3.20.0或更高版本                          \\ \hline
+Ninja 1.11.1                                   &                          \\ \hline
+Python 3.6或更高版本                            &                          \\ \hline
+Git 2.39或更高版本                   \\ \hline
+\end{longtable}
+
+To create the flame graph in Chapter 10, Debugging Using LLVM Tools, you need to install the scripts from \href{https://github.com/brendangregg/FlameGraph}. To run the script, you also need a recent version of Perl installed, and to view the graph you need a web browser capable of displaying SVG files, which all modern browsers do. To see the Chrome Trace Viewer visualization in the same chapter, you need to have the Chrome browser installed.
+
+\textbf{如果正在使用本书的数字版本，我们建议您自己输入代码或通过GitHub存储库访问代码(下一节提供链接)，将避免复制和粘贴代码。}
+
+\mySubsubsection{}{下载示例}
+
+可以从GitHub网站\url{https://github.com/PacktPublishing/Learn-LLVM-17}下载本书的示例代码。如果有对代码的更新，也会在现有的GitHub存储库中更新。
+
+我们还在\url{https://github.com/PacktPublishing/}上提供了丰富的图书和视频目录中的其他代码包。可以一起拿来看看!
+
+
+\mySubsubsection{}{联系方式}
+
+我们欢迎读者的反馈。
+
+\textbf{反馈}：如果你对这本书的任何方面有疑问，需要在你的信息的主题中提到书名，并给我们发邮件到\url{customercare@packtpub.com}。
+
+\textbf{勘误}：尽管我们谨慎地确保内容的准确性，但错误还是会发生。如果您在本书中发现了错误，请向我们报告，我们将不胜感激。请访问\url{www.packtpub.com/support/errata}，选择相应书籍，点击勘误表提交表单链接，并输入详细信息。
+
+\textbf{盗版}:如果您在互联网上发现任何形式的非法拷贝，非常感谢您提供地址或网站名称。请通过\url{copyright@packt.com}与我们联系，并提供材料链接。
+
+\textbf{如果对成为书籍作者感兴趣}：如果你对某主题有专长，又想写一本书或为之撰稿，请访问\url{authors.packtpub.com}。
+
+
+\mySubsubsection{}{欢迎评论}
+
+我们很想听听读者们对本书的看法!欢迎请点击这里直接进入这本书的亚马逊评论页面，分享你的反馈。
+
+您的评论对我们和技术社区都很重要，将帮助确保书籍内容的品质。
+
