@@ -1,10 +1,95 @@
 
+To work with LLVM, your development system should run a common operating system such as Linux, FreeBSD, macOS, or Windows. You can build LLVM and clang in different modes. A build with debug symbols enabled can take up to 30 GB of space. The required disk space depends heavily on the chosen build options. For example, building only the LLVM core libraries in release mode, targeting only one platform, requires about 2 GB of free disk space, which is the bare minimum needed.
+
+To reduce compile times, a fast CPU (such as a quad-core CPU with a 2.5 GHz clock speed) and a fast SSD are also helpful. It is even possible to build LLVM on a small device such as a Raspberry Pi – it only takes a lot of time. The examples within this book were developed on a laptop with an Intel quad-core CPU running at a 2.7 GHz clock speed, with 40 GB RAM and 2.5 TB SSD disk space. This system is well suited for the development task.
+
+Your development system must have some prerequisite software installed. Let’s review the minimal required version of these software packages.
+
+To check out the source from GitHub, you need Git (\url{https://git-scm.com/}). There is no requirement for a specific version. The GitHub help pages recommend using at least version 1.17.10. Due to known security issues found in the past, it is recommended to use the latest available version, which is 2.39.1 at the time of writing.
+
+The LLVM project uses CMake (\url{https://cmake.org/}) as the build file generator. At least the 3.20.0 version is required. CMake can generate build files for various build systems. In this book, Ninja (\url{https://ninja-build.org/}) is used because it is fast and available on all platforms. The latest version, 1.11.1, is recommended.
+
+Obviously, you also need a C/C++ compiler. The LLVM projects are written in modern C++, based on the C++17 standard. A conforming compiler and standard library are required. The following compilers are known to work with LLVM 17:
+
+\begin{itemize}
+\item 
+gcc 7.1.0 or later
+
+\item 
+clang 5.0 or later
+
+\item 
+Apple clang 10.0 or later
+
+\item 
+Visual Studio 2019 16.7 or later
+\end{itemize}
+
+\begin{myTip}{Tip}
+Please be aware that with further development of the LLVM project, the requirements for the compiler are most likely to change. In general, you should use the latest compiler version available for your system.
+\end{myTip}
+
+Python (\url{https://python.org/}) is used during the generation of the build files and for running the test suite. It should be at least the 3.8 version.
+
+Although not covered in this book, there can be reasons that you need to use Make instead of Ninja. In this case, you need to use GNU Make (\url{https://www.gnu.org/software/make/}) version 3.79 or later. The usage of both build tools is very similar. It is sufficient to replace ninja in each command with make for the scenarios described below.
+
+LLVM also depends on the zlib library (\url{https://www.zlib.net/}). You should have at least version 1.2.3.4 installed. As usual, we recommend using the latest version, 1.2.13.
+
+To install the prerequisite software, the easiest way is to use the package manager from your operating system. In the following sections, the commands required to install the software are shown for the most popular operating systems.
+
 \mySubsubsection{1.2.1.}{Ubuntu}
+
+Ubuntu 22.04 uses the apt package manager. Most of the basic utilities are already installed; only the development tools are missing. To install all packages at once, you type the following:
+
+\begin{shell}
+$ sudo apt -y install gcc g++ git cmake ninja-build zlib1g-dev
+\end{shell}
 
 \mySubsubsection{1.2.2.}{Fedora and RedHat}
 
+The package manager of Fedora 37 and RedHat Enterprise Linux 9 is called dnf. Like Ubuntu, most of the basic utilities are already installed. To install all packages at once, you type the following:
+
+\begin{shell}
+$ sudo dnf –y install gcc gcc-c++ git cmake ninja-build zlib-devel
+\end{shell}
+
 \mySubsubsection{1.2.3.}{FreeBSD}
+
+On FreeBSD 13 or later, you have to use the pkg package manager. FreeBSD differs from Linux-based systems in that the clang compiler is already installed. To install all other packages at once, you type the following:
+
+\begin{shell}
+$ sudo pkg install –y git cmake ninja zlib-ng
+\end{shell}
 
 \mySubsubsection{1.2.4.}{OS X}
 
+For development on OS X, it is best to install Xcode from the Apple store. While the Xcode IDE is not used in this book, it comes with the required C/C++ compilers and supporting utilities. For installation of the other tools, the package manager Homebrew (\url{https://brew.sh/}) can be used. To install all packages at once, you type the following:
+
+\begin{shell}
+$ brew install git cmake ninja zlib
+\end{shell}
+
 \mySubsubsection{1.2.5.}{Windows}
+
+Like OS X, Windows does not come with a package manager. For the C/C++ compiler, you need to download Visual Studio Community 2022 (\url{https://visualstudio.microsoft.com/vs/community/}), which is free for personal use. Please make sure that you install the workload named Desktop Development with C++. You can use the package manager Scoop (\url{https://scoop.sh/}) to install the other packages. After installing Scoop as described on the website, you open x64 Native Tools Command Prompt for VS 2022 from your Windows menu. To install the required packages, you type the following:
+
+\begin{shell}
+$ scoop install git cmake ninja python gzip bzip2 coreutils
+$ scoop bucket add extras
+$ scoop install zlib
+\end{shell}
+
+Please watch the output from Scoop closely. For the Python and zlib packages, it advises adding some registry keys. These entries are needed so that other software can find these packages. To add the registry keys, you’d best copy and paste the output from Scoop, which looks like the following:
+
+\begin{shell}
+$ %HOMEPATH%\scoop\apps\python\current\install-pep-514.reg
+$ %HOMEPATH%\scoop\apps\zlib\current\register.reg
+\end{shell}
+
+After each command, a message window from the registry editor will pop up asking whether you really want to import those registry keys. You need to click on Yes to finish the import. Now all prerequisites are installed.
+
+For all examples in this book, you must use the x64 Native Tools Command Prompt for VS 2022. Using this command prompt, the compiler is automatically added to the search path.
+
+\begin{myTip}{Tip}
+The LLVM code base is very large. To comfortably navigate the source, we recommend using an IDE that allows you to jump to the definition of classes and search through the source. We find Visual Studio Code (\url{https://code.visualstudio.com/download}), which is an extensible cross-platform IDE, very comfortable to use. However, this is no requirement for following the examples in this book.
+\end{myTip}

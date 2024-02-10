@@ -1,0 +1,13 @@
+You can install LLVM binaries from various sources. If you are using Linux, then your distribution contains the LLVM libraries. Why bother compiling LLVM yourself? 
+
+First, not all install packages contain all the files required for developing with LLVM. Compiling and installing LLVM yourself prevents this problem. Another reason stems from the fact that LLVM is highly customizable. With building LLVM, you learn how you can customize LLVM, and this will enable you to diagnose problems that may arise if you bring your LLVM application to another platform. And last, in the third part of this book, you will extend LLVM itself, and for this, you need the skill of building LLVM yourself.
+
+However, it is perfectly fine to avoid compiling LLVM for the first steps. If you want to go on this route, then you only need to install the prerequisites as described in the next section.
+
+
+\begin{myNotic}{Note}
+Many Linux distributions split LLVM into several packages. Please make sure that you install
+the development package. For example, on Ubuntu, you need to install the llvm-dev package.
+Please also make sure that you install LLVM 17. For other versions, the examples in this book
+may require changes.
+\end{myNotic}

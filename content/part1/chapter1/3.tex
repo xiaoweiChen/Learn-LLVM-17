@@ -1,10 +1,194 @@
 
+With the build tools ready, you can now check out all LLVM projects from GitHub and build LLVM. This process is essentially the same on all platforms:
+
+\begin{enumerate}
+\item 
+Configure Git.
+
+\item 
+Clone the repository.
+
+\item 
+Create the build directory.
+
+\item 
+Generate the build system files.
+
+\item 
+Finally, build and install LLVM.
+\end{enumerate}
+
+Let’s begin with configuring Git.
+
 \mySubsubsection{1.3.1.}{Configuring Git}
+
+The LLVM project uses Git for version control. If you have not used Git before, then you should do some basic configuration of Git first before continuing: to set the username and email address. Both pieces of information are used if you commit changes.
+
+One can check whether they previously had an email and username already configured in Git with the following commands:
+
+\begin{shell}
+$ git config user.email
+$ git config user.name
+\end{shell}
+
+The preceding commands will output the respective email and username that you already have set when using Git. However, in the event that you are setting the username and email for the first time, the following commands can be entered for first-time configuration. In the following commands, you can simply replace Jane with your name and jane@email.org with your email:
+
+\begin{shell}
+$ git config --global user.email "jane@email.org"
+$ git config --global user.name "Jane"
+\end{shell}
+
+These commands change the global Git configuration. Inside a Git repository, you can locally overwrite those values by not specifying the -{}-global option.
+
+By default, Git uses the vi editor for commit messages. If you prefer another editor, then you can change the configuration in a similar way. To use the nano editor, you type the following:
+
+\begin{shell}
+$ git config --global core.editor nano
+\end{shell}
+
+For more information about Git, please see the Git Version Control Cookbook (\url{https:// www.packtpub.com/product/git-version-control-cookbook-secondedition/9781789137545}).
+
+Now you are ready to clone the LLVM repository from GitHub.
 
 \mySubsubsection{1.3.2.}{Cloning the repository}
 
+The command to clone the repository is essentially the same on all platforms. Only on Windows, it is recommended to turn off the auto-translation of line endings.
+
+On all non-Windows platforms, you type the following command to clone the repository:
+
+\begin{shell}
+$ git clone https://github.com/llvm/llvm-project.git
+\end{shell}
+
+Only on Windows, add the option to disable auto-translation of line endings. Here, you type the following:
+
+\begin{shell}
+$ git clone --config core.autocrlf=false \
+  https://github.com/llvm/llvm-project.git
+\end{shell}
+
+This Git command clones the latest source code from GitHub into a local directory named llvmproject. Now change the current directory into the new llvm-project directory with the following command:
+
+\begin{shell}
+$ cd llvm-project
+\end{shell}
+
+Inside the directory are all LLVM projects, each one in its own directory. Most notably, the LLVM core libraries are in the llvm subdirectory. The LLVM project uses branches for subsequent release development (“release/17.x”) and tags (“llvmorg-17.0.1”) to mark a certain release. With the preceding clone command, you get the current development state. This book uses LLVM 17. To check out the first release of LLVM 17 into a branch called llvm-17, you type the following:
+
+\begin{shell}
+$ git checkout -b llvm-17 llvmorg-17.0.1
+\end{shell}
+
+With the previous steps, you cloned the whole repository and created a branch from a tag. This is the most flexible approach.
+Git also allows you to clone only a branch or a tag (including history). With git clone -{}-branch release/17.x https://github.com/llvm/llvm-project, you only clone the release/17.x branch and its history. You then have the latest state of the LLVM 17 release branch, so you only need to create a branch from the release tag like before if you need the exact release version.
+
+With the additional –{}-depth=1 option, which is known as a shallow clone with Git, you prevent the cloning of the history, too. This saves time and space but obviously limits what you can do locally, including checking out a branch based on the release tags.
+
 \mySubsubsection{1.3.3.}{Creating a build directory}
+
+Unlike many other projects, LLVM does not support inline builds and requires a separate build directory. Most easily, this is created inside the llvm-project directory, which is your current directory. Let us name the build directory, build, for simplicity. Here, the commands for Unix and Windows systems differ. On a Unix-like system, you use the following:
+
+\begin{shell}
+$ mkdir build
+\end{shell}
+
+And on Windows, use the following:
+
+\begin{shell}
+$ md build
+\end{shell}
+
+Now you are ready to create the build system files with the CMake tool inside this directory.
 
 \mySubsubsection{1.3.4.}{Generating the build system files}
 
+In order to generate build system files to compile LLVM and clang using Ninja, you run the following:
+
+\begin{shell}
+$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DLLVM_ENABLE_PROJECTS=clang -B build -S llvm
+\end{shell}
+
+The -G option tells CMake for which system to generate build files. Often-used values for that option are as follows:
+
+\begin{itemize}
+\item 
+Ninja – for the Ninja build system
+
+\item 
+Unix Makefiles – for GNU Make
+
+\item 
+Visual Studio 17 VS2022 – for Visual Studio and MS Build
+
+\item 
+Xcode – for Xcode projects
+\end{itemize}
+
+With the –B option, you tell CMake the path of the build directory. Similarly, you specify the source directory with the –S option. The generation process can be influenced by setting various variables with the –D option. Usually, they are prefixed with CMAKE\_ (if defined by CMake) or LLVM\_ (if defined by LLVM).
+
+As mentioned previously, we are also interested in compiling clang alongside LLVM. With the LLVM\_ENABLE\_PROJECTS=clang variable setting, this allows CMake to generate the build files for clang in addition to LLVM. Furthermore, the CMAKE\_BUILD\_TYPE=Release variable tells CMake that it should generate build files for a release build.
+
+The default value for the –G option depends on your platform, and the default value for the build type depends on the toolchain. However, you can define your own preference with environment variables. The CMAKE\_GENERATOR variable controls the generator, and the CMAKE\_BUILD\_TYPE variable specifies the build type. If you use bash or a similar shell, then you can set the variables with the following:
+
+\begin{shell}
+$ export CMAKE_GENERATOR=Ninja
+$ export CMAKE_BUILD_TYPE=Release
+\end{shell}
+
+If you are using the Windows command prompt instead, then you set the variables with the following:
+
+\begin{shell}
+$ set CMAKE_GENERATOR=Ninja
+$ set CMAKE_BUILD_TYPE=Release
+\end{shell}
+
+With these settings, the command to create the build system files becomes the following, which is easier to type:
+
+\begin{shell}
+$ cmake -DLLVM_ENABLE_PROJECTS=clang -B build -S llvm
+\end{shell}
+
+You will find more about CMake variables in the Customizing the build process section.
+
 \mySubsubsection{1.3.5.}{Compiling and installing LLVM}
+
+After the build files are generated, LLVM and clang can be compiled with the following:
+
+\begin{shell}
+$ cmake –-build build
+\end{shell}
+
+This command runs Ninja under the hood because we told CMake to generate Ninja files in the configuration step. However, if you generate build files for a system such as Visual Studio, which supports multiple build configurations, then you need to specify the configuration to use for the build with the -{}-config option. Depending on the hardware resources, this command runs for between 15 minutes (server with lots of CPU cores, memory, and fast storage) and several hours (dual-core Windows notebook with limited memory).
+
+By default, Ninja utilizes all available CPU cores. This is good for the speed of compilation but may prevent other tasks from running; for example, on a Windows-based notebook, it is almost impossible to surf the internet while Ninja is running. Fortunately, you can limit the resource usage with the –j option.
+
+Let’s assume you have four CPU cores available and Ninja should only use two (because you have parallel tasks to run); you then use this command for compilation:
+
+\begin{shell}
+$ cmake --build build –j2
+\end{shell}
+
+After compilation is finished, a best practice is to run the test suite to check whether everything works as expected:
+
+\begin{shell}
+$ cmake --build build --target check-all
+\end{shell}
+
+Again, the runtime of this command varies widely with the available hardware resources. The checkall Ninja target runs all test cases. Targets are generated for each directory containing test cases. Using check-llvm instead of check-all runs the LLVM tests but not the clang tests; checkllvm-codegen runs only the tests in the CodeGen directory from LLVM (that is, the llvm/test/CodeGen directory).
+
+You can also do a quick manual check. One of the LLVM applications is llc, the LLVM compiler. If you run it with the -version option, it shows the LLVM version, the host CPU, and all supported architectures:
+
+\begin{shell}
+$ build/bin/llc --version
+\end{shell}
+
+If you have trouble getting LLVM compiled, then you should consult the Common Problems section of the Getting Started with the LLVM System documentation \url{https://releases.llvm.org/17.0.1/ docs/GettingStarted.html#common-problems}) for solutions to typical problems.
+
+As the last step, you can install the binaries:
+
+\begin{shell}
+$ cmake --install build
+\end{shell}
+
+On a Unix-like system, the install directory is /usr/local. On Windows, C:\verb|\|Program Files\verb|\|LLVM is used. This can be changed, of course. The next section explains how.
