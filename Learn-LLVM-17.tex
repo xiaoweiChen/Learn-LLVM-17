@@ -184,7 +184,18 @@
 
 \NewDocumentCommand { \mySection } { mmm }
 {
+\color{black}
+\pagecolor{white}
 \section*{\zihao{2}{#1}\hspace{0.5cm}{#2}}
+\addcontentsline{toc}{section}{{#1}\hspace{0.5cm}{#2}}
+\subfile{{#3}}
+}
+
+\NewDocumentCommand { \myPart } { mmm }
+{
+\color{white}		
+\section*{\zihao{2}{#1}\hspace{0.5cm}{#2}}
+\pagecolor{gray}
 \addcontentsline{toc}{section}{{#1}\hspace{0.5cm}{#2}}
 \subfile{{#3}}
 }
@@ -242,7 +253,7 @@
     \mySection{}{前言}{content/chapter0/3.tex}
     \newpage
 
-    \mySection{第一部分}{The Basics of Compiler Construction with LLVM}{content/part1/part1.tex}
+    \myPart{第一部分}{The Basics of Compiler Construction with LLVM}{content/part1/part1.tex}
     \newpage
 
     \mySection{第1章}{安装LLVM}{content/part1/chapter1/0.tex}
@@ -263,7 +274,7 @@
     \mySubsection{2.7.}{总结}{content/part1/chapter2/7.tex}
     \newpage
 
-    \mySection{第二部分}{From Source to Machine Code Generation}{content/part2/part2.tex}
+    \myPart{第二部分}{From Source to Machine Code Generation}{content/part2/part2.tex}
     \newpage
 
     \mySection{第3章}{Turning the Source File into an Abstract Syntax Tree}{content/part2/chapter3/0.tex}
@@ -309,7 +320,7 @@
     \newpage
 
 
-    \mySection{第三部分}{Taking LLVM to the Next Level}{content/part3/part3.tex}
+    \myPart{第三部分}{Taking LLVM to the Next Level}{content/part3/part3.tex}
     \newpage
 
     \mySection{第8章}{The TableGen Language}{content/part3/chapter8/0.tex}
@@ -340,7 +351,7 @@
     \mySubsection{10.7.}{总结}{content/part3/chapter10/7.tex}
     \newpage
 
-    \mySection{第四部分}{Roll Your Own Backend}{content/part4/part4.tex}
+    \myPart{第四部分}{Roll Your Own Backend}{content/part4/part4.tex}
     \newpage
 
     \mySection{第11章}{The Target Description}{content/part4/chapter11/0.tex}
