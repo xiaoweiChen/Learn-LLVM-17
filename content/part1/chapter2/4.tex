@@ -1,4 +1,370 @@
+The syntactical analysis is done by the parser, which we will implement next. The base of this is the grammar and the lexer from the previous sections. The result of the parsing process is a dynamic data structure called an abstract syntax tree (AST). The AST is a very condensed representation of the input and is well-suited for semantic analysis.
+
+First, we will implement the parser, and after that, we will have a look at the parsing process within the AST.
+
 
 \mySubsubsection{2.4.1.}{A hand-written parser}
 
+The interface of the parser is defined in the header file, Parser.h. It begins with some include declarations:
+
+\begin{cpp}
+#ifndef PARSER_H
+#define PARSER_H
+
+#include "AST.h"
+#include "Lexer.h"
+#include "llvm/Support/raw_ostream.h"
+\end{cpp}
+
+The AST.h header file declares the interface for the AST and is shown later. The coding guidelines from LLVM forbid the use of the <iostream> library, therefore, the header of the equivalent LLVM functionality is included. It is needed to emit an error message:
+
+\begin{enumerate}
+\item
+The Parser class first declares some private members:
+
+\begin{cpp}
+class Parser {
+    Lexer &Lex;
+    Token Tok;
+    bool HasError;
+\end{cpp}
+
+Lex and Tok are instances of the classes from the previous section. Tok stores the next token (the look-ahead) and Lex is used to retrieve the next token from the input. The HasError flag indicates whether an error was detected.
+
+\item
+A couple of methods deal with the token:
+
+\begin{cpp}
+    void error() {
+        llvm::errs() << "Unexpected: " << Tok.getText()
+        << "\n";
+        HasError = true;
+    }
+
+    void advance() { Lex.next(Tok); }
+
+    bool expect(Token::TokenKind Kind) {
+        if (Tok.getKind() != Kind) {
+            error();
+            return true;
+        }
+        return false;
+    }
+
+    bool consume(Token::TokenKind Kind) {
+        if (expect(Kind))
+            return true;
+        advance();
+        return false;
+    }
+\end{cpp}
+
+advance() retrieves the next token from the lexer. expect() tests whether the look-ahead has the expected kind and emits an error message if not. Finally, consume() retrieves the next token if the look-ahead has the expected kind. If an error message is emitted, the HasError flag is set to true.
+
+\item
+For each non-terminal of the grammar, a method to parse the rule is declared:
+
+\begin{cpp}
+    AST *parseCalc();
+    Expr *parseExpr();
+    Expr *parseTerm();
+    Expr *parseFactor();
+\end{cpp}
+
+\begin{myNotic}{Note}
+There are no methods for ident and number. Those rules only return the token and are replaced by the corresponding token.
+\end{myNotic}
+
+\item
+The public interface follows. The constructor initializes all members and retrieves the first token from the lexer:
+
+\begin{cpp}
+public:
+    Parser(Lexer &Lex) : Lex(Lex), HasError(false) {
+        advance();
+    }
+\end{cpp}
+
+\item
+A function is required to get the value of the error flag:
+
+\begin{cpp}
+    bool hasError() { return HasError; }
+\end{cpp}
+
+\item
+And finally, the parse() method is the main entry point into parsing:
+
+\begin{cpp}
+    AST *parse();
+};
+
+#endif
+\end{cpp}
+
+\end{enumerate}
+
+\mySubsubsection{2.4.1.1}{Parser implementation}
+
+Let’s dive into the implementation of the parser!
+
+\begin{enumerate}
+\item
+Our implementation in the Parser.cpp file and begins with the parse() method:
+
+\begin{cpp}
+#include "Parser.h"
+
+AST *Parser::parse() {
+    AST *Res = parseCalc();
+    expect(Token::eoi);
+    return Res;
+}
+\end{cpp}
+
+The main point of the parse() method is that the whole input has been consumed. Do you remember that the parsing example in the first section added a special symbol to denote the end of the input? We check it here.
+
+\item
+The parseCalc() method implements the corresponding rule. It’s worth having a closer look at this method as the other parsing methods follow the same patterns. Let’s recall the rule from the first section:
+
+\begin{cpp}
+calc : ("with" ident ("," ident)* ":")? expr ;
+\end{cpp}
+
+\item
+The method begins with declaring some local variables:
+
+\begin{cpp}
+AST *Parser::parseCalc() {
+    Expr *E;
+    llvm::SmallVector<llvm::StringRef, 8> Vars;
+\end{cpp}
+
+\item
+The first decision to be made is whether the optional group must be parsed or not. The group begins with the with token, so we compare the token to this value:
+
+\begin{cpp}
+if (Tok.is(Token::KW_with)) {
+    advance();
+\end{cpp}
+
+\item
+Next, we expect an identifier:
+
+\begin{cpp}
+    if (expect(Token::ident))
+        goto _error;
+    Vars.push_back(Tok.getText());
+    advance();
+\end{cpp}
+
+If there is an identifier, then we save it in the Vars vector. Otherwise, it is a syntax error, which is handled separately.
+
+\item
+Next in the grammar follows a repeating group, which parses more identifiers, separated with commas:
+
+\begin{cpp}
+    while (Tok.is(Token::comma)) {
+        advance();
+        if (expect(Token::ident))
+            goto _error;
+        Vars.push_back(Tok.getText());
+        advance();
+    }
+\end{cpp}
+
+By now, this should not be surprising. The repetition group begins with the token (,). The test for the token becomes the condition of the while loop, implementing zero or more repetition. The identifier inside the loop is treated as before.
+
+\item
+Finally, the optional group requires a colon at the end:
+
+\begin{cpp}
+    if (consume(Token::colon))
+        goto _error;
+}
+\end{cpp}
+
+\item
+Last, the rule for expr must be parsed:
+
+\begin{cpp}
+    E = parseExpr();
+\end{cpp}
+
+\item
+With this call, the parsing of the rule is finished successfully. The collected information is now used to create the AST node for this rule:
+
+\begin{cpp}
+    if (Vars.empty()) return E;
+    else return new WithDecl(Vars, E);
+\end{cpp}
+
+\end{enumerate}
+
+Now only the error handling is missing. Detecting a syntax error is easy but recovering from it is surprisingly complicated. Here, a simple approach called panic mode is used.
+
+In panic mode, tokens are deleted from the token stream until one is found that the parser can use to continue its work. Most programming languages have symbols that denote an end, e.g., in C++, a ; (end of a statement) or a } (end of a block). Such tokens are good candidates to look for.
+
+On the other hand, the error can be that the symbol we are looking for is missing. In this case, probably a lot of tokens are deleted before the parser can continue. This is not as bad as it sounds. Today, it is more important that a compiler is fast. In the event of an error, the developer looks at the first error message, fixes it, and restarts the compiler. This is quite different from using punch cards, where it was important to get as many error messages as possible, as the next run of the compiler would possibly be only on the next day.
+
+\mySubsubsection{2.4.1.2}{Error handling}
+
+Instead of using some arbitrary tokens to look for, another set of tokens is used here. For each non-terminal, there is a set of tokens that can follow this non-terminal in a rule:
+
+\begin{enumerate}
+\item
+In the case of calc, only the end of input follows this non-terminal. The implementation is trivial:
+
+\begin{cpp}
+_error:
+    while (!Tok.is(Token::eoi))
+        advance();
+    return nullptr;
+}
+\end{cpp}
+
+\item
+The other parsing methods are similarly constructed. parseExpr() is the translation of the rule for expr:
+
+\begin{cpp}
+Expr *Parser ::parseExpr() {
+    Expr *Left = parseTerm() ;
+    while (Tok.isOneOf(Token::plus, Token::minus)) {
+        BinaryOp::Operator Op =
+            Tok.is(Token::plus) ? BinaryOp::Plus :
+                                  BinaryOp::Minus;
+        advance();
+        Expr *Right = parseTerm();
+        Left = new BinaryOp(Op, Left, Right);
+    }
+    return Left;
+}
+\end{cpp}
+
+The repeated group inside the rule is translated as a while loop. Note how the use of the isOneOf() method simplifies the check for several tokens.
+
+\item
+The coding of the term rule looks the same:
+
+\begin{cpp}
+Expr *Parser::parseTerm() {
+    Expr *Left = parseFactor();
+    while (Tok.isOneOf(Token::star, Token::slash)) {
+        BinaryOp::Operator Op =
+            Tok.is(Token::star) ? BinaryOp::Mul :
+                                  BinaryOp::Div;
+        advance();
+        Expr *Right = parseFactor();
+        Left = new BinaryOp(Op, Left, Right);
+    }
+    return Left;
+}
+\end{cpp}
+
+This method is strikingly similar to parseExpr(), and you may be tempted to combine them into one. In a grammar, it is possible to have one rule dealing with multiplicative and additive operators. The advantage of using two rules instead is that then the precedence of the operators fits well with the mathematical order of evaluation. If you combine both rules, then you need to figure out the evaluation order somewhere else.
+
+\item
+Last, you need to implement the rule for factor:
+
+\begin{cpp}
+Expr *Parser::parseFactor() {
+    Expr *Res = nullptr;
+    switch (Tok.getKind()) {
+        case Token::number:
+        Res = new Factor(Factor::Number, Tok.getText());
+        advance(); break;
+\end{cpp}
+
+Instead of using a chain of if and else if statements, a switch statement seems more suitable here, because each alternative begins with just one token. In general, you should think about which translation patterns you like to use. If you later need to change the parsing methods, then it is an advantage if not every method has a different way of implementing a grammar rule.
+
+\item
+If you use a switch statement, then error handling happens in the default case:
+
+\begin{cpp}
+    case Token::ident:
+        Res = new Factor(Factor::Ident, Tok.getText());
+        advance(); break;
+    case Token::l_paren:
+        advance();
+        Res = parseExpr();
+        if (!consume(Token::r_paren)) break;
+    default:
+        if (!Res) error();
+\end{cpp}
+
+We guard emitting the error message here because of the fall-through.
+
+\item
+If there was a syntax error in the parenthesis’s expression, then an error message was already emitted. The guard prevents a second error message:
+
+\begin{cpp}
+        while (!Tok.isOneOf(Token::r_paren, Token::star,
+                            Token::plus, Token::minus,
+                            Token::slash, Token::eoi))
+            advance();
+    }
+    return Res;
+}
+\end{cpp}
+
+\end{enumerate}
+
+That was easy, wasn’t it? Once you have memorized the patterns used, it is almost tedious work to code the parser based on the grammar rules. This type of parser is called a recursive descent parser.
+
+\begin{myNotic}{A recursive descent parser can’t be constructed from every grammar}
+A grammar must satisfy certain conditions to be suitable for the construction of a recursive descent parser. This class of grammar is called LL(1). In fact, most grammar that you can find on the internet does not belong to this class of grammar. Most books about the theory of compiler constructions explain the reason for this. The classic book on this topic is the so-called dragon book, Compilers: Principles, Techniques, and Tools by Aho, Lam, Sethi, and Ullman.
+\end{myNotic}
+
 \mySubsubsection{2.4.2.}{The abstract syntax tree}
+
+The result of the parsing process is the AST. The AST is another compact representation of the input program. It captures the essential information. Many programming languages have symbols that are needed as separators but do not carry further meaning. For example, in C++, a semicolon; denotes the end of a single statement. Of course, this information is important for the parser. As soon as we turn the statement into an in-memory representation, the semicolon is not important anymore and can be dropped.
+
+If you look at the first rule of the example expression language, then it is clear that the with keyword, the comma (,), and the colon (:) are not important for the meaning of a program. What is important is the list of declared variables, which could be used in the expression. The result is that only a couple of classes are required to record the information: Factor holds a number or an identifier, BinaryOp holds the arithmetic operator and the left and right sides of an expression, and WithDecl stores the list of declared variables and the expression. AST and Expr are only used to create a common class hierarchy.
+
+In addition to the information from the parsed input, tree traversal using the visitor pattern is also supported. It’s all in AST.h header file:
+
+\begin{enumerate}
+\item
+It begins with the visitor interface:
+
+\begin{cpp}
+#ifndef AST_H
+#define AST_H
+
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+
+class AST;
+class Expr;
+class Factor;
+class BinaryOp;
+class WithDecl;
+
+class ASTVisitor {
+    public:
+    virtual void visit(AST &){};
+    virtual void visit(Expr &){};
+    virtual void visit(Factor &) = 0;
+    virtual void visit(BinaryOp &) = 0;
+    virtual void visit(WithDecl &) = 0;
+};
+\end{cpp}
+
+The visitor pattern needs to know each class to visit. Because each class also refers to the visitor, we declare all classes at the top of the file. Please note that the visit() methods for AST and Expr have a default implementation, which does nothing.
+
+\item
+clang 5.0 or later
+
+\item
+Apple clang 10.0 or later
+
+\item
+Visual Studio 2019 16.7 or later
+
+\item
+Visual Studio 2019 16.7 or later
+
+\item
+Visual Studio 2019 16.7 or later
+
+\end{enumerate}

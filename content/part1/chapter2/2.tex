@@ -1,5 +1,35 @@
 
+Arithmetic expressions are a part of every programming language. Here is an example of an arithmetic expression calculation language called calc. The calc expressions are compiled into an application that evaluates the following expression:
+
+\begin{shell}
+with a, b: a * (4 + b)
+\end{shell}
+
+The used variables in the expression must be declared with the keyword, with. This program is compiled into an application that asks the user for the values of the a and b variables and prints the result.
+
+Examples are always welcome but, as a compiler writer, you need a more thorough specification than this for implementation and testing. The vehicle for the syntax of the programming language is the grammar.
 
 \mySubsubsection{2.2.1.}{Formalism for specifying the syntax of a programming language}
 
+The elements of a language, for example, keywords, identifiers, strings, numbers, and operators, are called tokens. In this sense, a program is a sequence of tokens, and the grammar specifies which sequences are valid.
+
+Usually, grammar is written in the extended Backus-Naur form (EBNF). A rule in grammar has a left and a right side. The left side is just a single symbol called non-terminal. The right side of a rule consists of non-terminals, tokens, and meta-symbols for alternatives and repetitions. Let’s have a look at the grammar of the calc language:
+
+\begin{shell}
+calc : ("with" ident ("," ident)* ":")? expr ;
+expr : term (( "+" | "-" ) term)* ;
+term : factor (( "*" | "/") factor)* ;
+factor : ident | number | "(" expr ")" ;
+ident : ([a-zAZ])+ ;
+number : ([0-9])+ ;
+\end{shell}
+
+In the first line, calc is a non-terminal. If not otherwise stated, then the first non-terminal of a grammar is the start symbol. The colon (:) is the separator between the left and the right side of the rule. Here, "with", "," and ":" are tokens that represent this string. Parentheses are used for grouping. A group can be optional or repeated. A question mark (?) after the closing parenthesis denotes an optional group. A star * denotes zero or more repetitions and a plus + denotes one or more repetitions. Ident and expr are non-terminals. For each of them, another rule exists. The semicolon (;) marks the end of a rule. The pipe |, in the second line, denotes an alternative. And last, the brackets [ ], in the last two lines, denote a character class. The valid characters are written inside the brackets. For example, the character class [a-zA-Z] matches an upper- or lower-case letter, and ([a-zA-Z])+ matches one or more of these letters. This corresponds to a regular expression.
+
 \mySubsubsection{2.2.2.}{How does grammar help the compiler writer?}
+
+Such grammar may look like a theoretical toy, but it is of value to the compiler writer. First, all the tokens are defined, which is needed to create the lexical analyzer. The rules of the grammar can be translated into the parser. And of course, if questions arise about whether the parser works correctly, then the grammar serves as a good specification.
+
+However, grammar does not define all aspects of a programming language. The meaning – the semantics – of the syntax must also be defined. Formalisms for this purpose were developed, too, but very often, they are specified in plain text, as they were usually drawn up at the initial introduction of the language.
+
+Equipped with this knowledge, the next two sections show how the lexical analysis turns the input into a sequence of tokens and how the grammar is coded in C++ for the syntactical analysis.

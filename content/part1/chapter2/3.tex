@@ -1,2 +1,230 @@
+As already seen in the example in the previous section, a programming language consists of many elements such as keywords, identifiers, numbers, operators, and so on. The task of the lexical analyzer is to take the textual input and create a sequence of tokens from it. The calc language consists of the tokens with, :, +, -, *, /, (, ), and regular expressions ([a-zA-Z])+ (an identifier) and ([0-9])+ (a number). We assign a unique number to each token to make the handling of tokens easier.
 
 \mySubsubsection{2.3.1.}{A hand-written lexer}
+
+The implementation of a lexical analyzer is often called Lexer. Let’s create a header file called Lexer.h and get started with the definition of Token. It begins with the usual header guard and the inclusion of the required headers:
+
+\begin{cpp}
+#ifndef LEXER_H
+#define LEXER_H
+
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/MemoryBuffer.h"
+\end{cpp}
+
+The llvm::MemoryBuffer class provides read-only access to a block of memory, filled with the content of a file. On request, a trailing zero character ('\x00') is added to the end of the buffer. We use this feature to read through the buffer without checking the length of the buffer at each access. The llvm::StringRef class encapsulates a pointer to a C string and its length. Because the length is stored, the string need not be terminated with a zero character ('\x00') like normal C strings. This allows an instance of StringRef to point to the memory managed by MemoryBuffer.
+
+With this in mind, we begin by implementing the Lexer class:
+
+\begin{enumerate}
+\item
+First, the Token class contains the definition of the enumeration for the unique token numbers mentioned previously:
+
+\begin{cpp}
+class Lexer;
+
+class Token {
+    friend class Lexer;
+
+public:
+    enum TokenKind : unsigned short {
+        eoi, unknown, ident, number, comma, colon, plus,
+        minus, star, slash, l_paren, r_paren, KW_with
+    };
+\end{cpp}
+
+Besides defining a member for each token, we added two additional values: eoi and unknown. eoi stands for end of input and is returned when all characters of the input are processed. unknown is used in the event of an error at the lexical level, e.g., \# is no token of the language and would therefore be mapped to unknown.
+
+\item
+In addition to the enumeration, the class has a Text member, which points to the start of the text of the token. It uses the StringRef class mentioned previously:
+
+\begin{cpp}
+private:
+    TokenKind Kind;
+    llvm::StringRef Text;
+
+public:
+    TokenKind getKind() const { return Kind; }
+    llvm::StringRef getText() const { return Text; }
+\end{cpp}
+
+This is useful for semantic processing, e.g., for an identifier, it is useful to know the name.
+
+\item
+The is() and isOneOf() methods are used to test whether the token is of a certain kind. The isOneOf() method uses a variadic template, allowing a variable number of arguments:
+
+\begin{cpp}
+    bool is(TokenKind K) const { return Kind == K; }
+    bool isOneOf(TokenKind K1, TokenKind K2) const {
+        return is(K1) || is(K2);
+    }
+    template <typename... Ts>
+    bool isOneOf(TokenKind K1, TokenKind K2, Ts... Ks) const {
+        return is(K1) || isOneOf(K2, Ks...);
+    }
+};
+\end{cpp}
+
+\item
+The Lexer class itself has a similar simple interface and comes next in the header file:
+
+\begin{cpp}
+class Lexer {
+    const char *BufferStart;
+    const char *BufferPtr;
+
+public:
+    Lexer(const llvm::StringRef &Buffer) {
+        BufferStart = Buffer.begin();
+        BufferPtr = BufferStart;
+    }
+
+    void next(Token &token);
+
+private:
+    void formToken(Token &Result, const char *TokEnd,
+                   Token::TokenKind Kind);
+};
+#endif
+\end{cpp}
+
+Except for the constructor, the public interface has only the next() method, which returns the next token. The method acts like an iterator, always advancing to the next available token. The only members of the class are pointers to the beginning of the input and the next unprocessed character. It is assumed that the buffer ends with a terminating 0 (just like a C string).
+
+\item
+Let’s implement the Lexer class in the Lexer.cpp file. It begins with some helper functions to classify characters:
+
+\begin{cpp}
+#include "Lexer.h"
+namespace charinfo {
+    LLVM_READNONE inline bool isWhitespace(char c) {
+        return c == ' ' || c == '\t' || c == '\f' ||
+        c == '\v' ||
+        c == '\r' || c == '\n';
+    }
+    LLVM_READNONE inline bool isDigit(char c) {
+        return c >= '0' && c <= '9';
+    }
+    LLVM_READNONE inline bool isLetter(char c) {
+        return (c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z');
+}
+}
+\end{cpp}
+
+These functions are used to make conditions more readable.
+
+\begin{myNotic}{Note}
+We are not using the functions provided by the <cctype> standard library header for two reasons. First, these functions change behavior based on the locale defined in the environment. For example, if the locale is a German-language area, then German umlauts can be classified as letters. This is usually not wanted in a compiler. Second, since the functions have int as a parameter type, a conversion from the char type is required. The result of this conversion depends on whether char is treated as a signed or unsigned type, causing portability problems.
+\end{myNotic}
+
+\item
+From the grammar in the previous section, we know all the tokens of the language. But the grammar does not define the characters that should be ignored. For example, a space or newline character adds only whitespace and are often ignored. The next() method begins with ignoring these characters:
+
+\begin{cpp}
+void Lexer::next(Token &token) {
+    while (*BufferPtr &&
+    charinfo::isWhitespace(*BufferPtr)) {
+        ++BufferPtr;
+    }
+\end{cpp}
+
+\item
+Next, make sure that there are still characters left to process:
+
+\begin{cpp}
+    if (!*BufferPtr) {
+        token.Kind = Token::eoi;
+        return;
+    }
+\end{cpp}
+
+There is at least one character to process.
+
+\item
+We first check whether the character is lowercase or uppercase. In this case, the token is either an identifier or the with keyword, because the regular expression for the identifier also matches the keyword. The most common solution here is to collect the characters matched by the regular expression and check whether the string happens to be the keyword:
+
+\begin{cpp}
+    if (charinfo::isLetter(*BufferPtr)) {
+        const char *end = BufferPtr + 1;
+        while (charinfo::isLetter(*end))
+            ++end;
+        llvm::StringRef Name(BufferPtr, end - BufferPtr);
+        Token::TokenKind kind =
+            Name == "with" ? Token::KW_with : Token::ident;
+        formToken(token, end, kind);
+        return;
+    }
+\end{cpp}
+
+The formToken() private method is used to populate the token.
+
+\item
+Next, we check for a number. The code for this is very similar to the preceding snippet:
+
+\begin{cpp}
+    else if (charinfo::isDigit(*BufferPtr)) {
+        const char *end = BufferPtr + 1;
+        while (charinfo::isDigit(*end))
+            ++end;
+        formToken(token, end, Token::number);
+        return;
+    }
+\end{cpp}
+
+Now only the tokens defined by fixed strings are left.
+
+\item
+This is done easily with a switch. As all of these tokens have only one character, the CASE preprocessor macro is used to reduce typing:
+
+\begin{cpp}
+else {
+    switch (*BufferPtr) {
+        #define CASE(ch, tok) \
+        case ch: formToken(token, BufferPtr + 1, tok); break
+        CASE('+', Token::plus);
+        CASE('-', Token::minus);
+        CASE('*', Token::star);
+        CASE('/', Token::slash);
+        CASE('(', Token::Token::l_paren);
+        CASE(')', Token::Token::r_paren);
+        CASE(':', Token::Token::colon);
+        CASE(',', Token::Token::comma);
+        #undef CASE
+\end{cpp}
+
+\item
+Last, we need to check for unexpected characters:
+
+\begin{cpp}
+        default:
+            formToken(token, BufferPtr + 1, Token::unknown);
+        }
+        return;
+    }
+}
+\end{cpp}
+
+Only the formToken() private helper method is still missing.
+
+\item
+It populates the members of the Token instance and updates the pointer to the next unprocessed character:
+
+\begin{cpp}
+void Lexer::formToken(Token &Tok, const char *TokEnd,
+                      Token::TokenKind Kind) {
+    Tok.Kind = Kind;
+    Tok.Text = llvm::StringRef(BufferPtr,
+                               TokEnd - BufferPtr);
+    BufferPtr = TokEnd;
+}
+\end{cpp}
+
+\end{enumerate}
+
+In the next section, we have a look at how to construct a parser for syntactical analysis.
+
+
+
+
+
+
