@@ -1,4 +1,120 @@
+
+The LLVM code generator takes a module in LLVM IR as input and turns it into object code or assembly
+text. We need to transform the AST representation into IR. To implement an IR code generator, we
+will look at a simple example first and then develop the classes needed for the code generator. The
+complete implementation will be divided into three classes:
+
+\begin{itemize}
+\item
+CodeGenerator
+
+\item
+CGModule
+
+\item
+CGProcedure
+\end{itemize}
+
+The CodeGenerator class is the general interface used by the compiler driver. The CGModule
+and CGProcedure classes hold the state required for generating the IR code for a compilation unit
+and a single function.
+
+We’ll begin by looking at the Clang-generated IR.
+
 \mySubsubsection{4.1.1.}{Understanding the IR code}
+
+Before generating the IR code, it’s good to know the main elements of the IR language. In Chapter 2, The Structure of a Compiler, we had a brief look at IR. An easy way to get more knowledge of IR is to study the output from clang. For example, save this C source code, which implements the Euclidean algorithm for calculating the greatest common divisor of two numbers, as gcd.c:
+
+\begin{cpp}
+unsigned gcd(unsigned a, unsigned b) {
+    if (b == 0)
+    return a;
+    while (b != 0) {
+        unsigned t = a % b;
+        a = b;
+        b = t;
+    }
+    return a;
+}
+\end{cpp}
+
+Then, you can create the gcd.ll IR file by using clang and the following command:
+
+\begin{shell}
+$ clang --target=aarch64-linux-gnu -O1 -S -emit-llvm gcd.c
+\end{shell}
+
+The IR code is not target-independent, even if it often looks like it is. The preceding command compiles the source file for an ARM 64-bit CPU on Linux. The -S option instructs clang to output an assembly file, and with the additional specification of -emit-llvm, an IR file is created. The optimization level, -O1, is used to get an easily readable IR code. Clang has many more options, all of which are documented in the command-line argument reference at \url{https://clang.llvm.org/docs/ClangCommandLineReference.html}. Let’s have a look at the generated file and understand how the C source maps to the LLVM IR.
+
+A C file is translated into a module, which holds the functions and the data objects. A function has at least one basic block, and a basic block contains instructions. This hierarchical structure is also reflected in the C++ API. All data elements are typed. Integer types are represented by the letter i, followed by the number of bits. For example, the 64-bit integer type is written as i64. The most basic float types are float and double, denoting the 32-bit and 64-bit IEEE floating-point types. It is also possible to create aggregate types such as vectors, arrays, and structures.
+
+Here is what the LLVM IR looks like. At the top of the file, some basic properties are established:
+
+\begin{shell}
+; ModuleID = 'gcd.c'
+source_filename = "gcd.c"
+target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-
+n32:64-S128"
+target triple = "aarch64-unknown-linux-gnu"
+\end{shell}
+
+The first line is a comment informing you about which module identifier was used. In the following line, the filename of the source file is named. With clang, both are the same.
+
+The target datalayout string establishes some basic properties. The different parts are separated by -. The following information is included:
+
+\begin{itemize}
+\item
+A small e means that bytes in memory are stored using the little-endian schema. To specify a big endian, you must use a big E.
+
+\item
+M: specifies the name mangling that’s applied to symbols. Here, m:e means that ELF name mangling is used.
+
+\item
+The entries in iN:A:P form, such asi8:8:32, specify the alignment of data, given in bits.
+The first number is the alignment required by the ABI, and the second number is the preferred alignment. For bytes (i8), the ABI alignment is 1 byte (8) and the preferred alignment is 4 bytes (32).
+
+\item
+n specifies which native register sizes are available. n32:64 means that 32-bit and 64-bit wide integers are natively supported.
+
+\item
+S specifies the alignment of the stack, again in bits. S128 means that the stack maintains a 16-byte alignment.
+\end{itemize}
+
+\begin{myNotic}{Note}
+The provided target data layout must match what the backend expects. Its purpose is to communicate the captured information to the target-independent optimization passes. For example, an optimization pass can query the data layout to get the size and alignment of a pointer. However, changing the size of a pointer in the data layout does not change the code generation in the backend.
+
+A lot more information is provided with the target data layout. You can find more information in the reference manual at \url{https://llvm.org/docs/LangRef.html#data-layout}.
+\end{myNotic}
+
+Last, the target triple string specifies the architecture we are compiling for. This reflects the information we gave on the command line. The triple is a configuration string that usually consists of the CPU architecture, the vendor, and the operating system. More information about the environment is often added. For example, the x86\_64-pc-win32 triple is used for a Windows system running on a 64-bit X86 CPU. x86\_64 is the CPU architecture, pc is a generic vendor, and win32 is the operating system. The parts are connected by a hyphen. A Linux system running on an ARMv8 CPU uses aarch64-unknown-linux-gnu as its triple. aarch64 is the CPU architecture, while the operating system is linux running a gnu environment. There is no real vendor for a Linux-based system, so this part is unknown. Parts that are not known or unimportant for a specific purpose are often omitted: the aarch64-linux-gnu triple describes the same Linux system.
+
+Next, the gcd function is defined in the IR file:
+
+\begin{shell}
+define i32 @gcd(i32 %a, i32 %b) {
+\end{shell}
+
+This resembles the function signature in the C file. The unsigned data type is translated into the 32-bit integer type, i32. The function name is prefixed with @, and the parameter names are prefixed with \%. The body of the function is enclosed in curly braces. The code of the body follows:
+
+\begin{shell}
+entry:
+    %cmp = icmp eq i32 %b, 0
+    br i1 %cmp, label %return, label %while.body
+\end{shell}
+
+The IR code is organized into so-called basic blocks. A well-formed basic block is a linear sequence of instructions, which begins with an optional label and ends with a terminator instruction. So, each basic block has one entry point and one exit point. LLVM allows malformed basic blocks at construction time. The label of the first basic block is entry. The code in the block is simple: the first instruction compares the \%b parameter against 0. The second instruction branches to the return label if the condition is true and to the while.body label if the condition is false.
+
+Another characteristic of the IR code is that it is in a static single assignment (SSA) form. The code uses an unlimited number of virtual registers, but each register is only written once. The result of the comparison is assigned to the named virtual register, \%cmp. This register is then used, but it is never written again. Optimizations such as constant propagation and common-sub-expression elimination work very well with the SSA form and all modern compilers are using it.
+
+\begin{myTip}{SSA}
+The SSA form was developed in the late 1980s. Since then, it has been widely used in compilers because it simplifies data flow analysis and optimizations. For example, the identification of common sub-expressions inside a loop becomes much easier if the IR is in SSA form. A basic property of SSA is that it establishes def-use and use-def chains: for a single definition, you know of all uses (def-use), and for each use, you know the unique definition (use-def). This knowledge is used a lot, such as in constant propagation: if a definition is determined to be a constant, then all uses of this value can be easily replaced with that constant value.
+
+To construct the SSA form, the algorithm from Cytron et al. (1989) is very popular, and it is also used in the LLVM implementation. Other algorithms have been developed too. An early observation is that these algorithms become simpler if the source language does not have a goto statement.
+
+An in-depth treatment of SSA can be found in the book SSA-based Compiler Design, by F.Rastello and F. B. Tichadou, Springer 2022.
+\end{myTip}
+
+The next basic block is the body of the while loop:
 
 \mySubsubsection{4.1.2.}{Learning about the load-and-store approach}
 

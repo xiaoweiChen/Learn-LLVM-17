@@ -1,0 +1,25 @@
+
+Having created a decorated abstract syntax tree (AST) for your programming language, the next
+task is to generate the LLVM IR code from it. LLVM IR code resembles a three-address code with
+a human-readable representation. Therefore, we need a systematic approach to translate language
+concepts such as control structures into the lower level of LLVM IR.
+
+In this chapter, you will learn about the basics of LLVM IR and how to generate IR for control flow
+structures from the AST. You will also learn how to generate LLVM IR for expressions in static single assignment (SSA) form using a modern algorithm. Finally, you will learn how to emit assembler text and object code.
+
+This chapter will cover the following topics:
+
+\begin{itemize}
+\item
+Generating IR from the AST
+
+\item
+Using AST numbering to generate IR code in SSA form
+
+\item
+Setting up the module and the driver
+\end{itemize}
+
+By the end of this chapter, you will know how to create a code generator for your programming
+language and how to integrate it into your compiler.
+
