@@ -1,6 +1,524 @@
 
+The task of the backend is to create optimized machine code from the LLVM IR of a module. The IR is the interface to the backend and can be created using a C++ interface or in textual form. Again, the IR is generated from the AST.
+
 \mySubsubsection{2.6.1.}{Textual representation of LLVM IR}
+
+\begin{enumerate}
+\item
+Ask the user for the value of each variable.
+
+\item
+Calculate the value of the expression.
+
+\item
+Print the result.
+\end{enumerate}
+
+To ask the user to provide a value for a variable and to print the result, two library functions are used: calc\_read() and calc\_write().  For the with a: 3*a expression, the generated IR is as follows:
+
+\begin{enumerate}
+\item
+The library functions must be declared, like in C. The syntax also resembles C. The type before the function name is the return type.   The type names surrounded by parenthesis are the argument types. The declaration can appear anywhere in the file:
+
+\begin{cpp}
+declare i32 @calc_read(ptr)
+declare void @calc_write(i32)
+\end{cpp}
+
+\item
+The calc\_read() function takes the variable name as a parameter. The following construct defines a constant, holding a and the null byte used as a string terminator in C:
+
+\begin{cpp}
+@a.str = private constant [2 x i8] c"a\00"
+\end{cpp}
+
+\item
+It follows the main() function. The parameter names are omitted because they are not used. Just as in C, the body of the function is enclosed in braces:
+
+\begin{cpp}
+define i32 @main(i32, ptr) {
+\end{cpp}
+
+\item
+Each basic block must have a label. Because this is the first basic block of the function, we name it entry:
+
+\begin{cpp}
+entry:
+\end{cpp}
+
+\item
+The calc\_read() function is called to read the value for the a variable. The nested getelemenptr instruction performs an index calculation to compute the pointer to the first element of the string constant. The function result is assigned to the unnamed \%2 variable.
+
+\begin{cpp}
+    %2 = call i32 @calc_read(ptr @a.str)
+\end{cpp}
+
+\item
+Next, the variable is multiplied by 3:
+
+\begin{cpp}
+    %3 = mul nsw i32 3, %2
+\end{cpp}
+
+\item
+The result is printed on the console via a call to the calc\_write() function:
+
+\begin{cpp}
+    call void @calc_write(i32 %3)
+\end{cpp}
+
+\item
+Last, the main() function returns 0 to indicate a successful execution:
+
+\begin{cpp}
+    ret i32 0
+}
+\end{cpp}
+
+\end{enumerate}
+
+Each value in the LLVM IR is typed, with i32 denoting the 32-bit bit integer type and ptr denoting a pointer.
+
+\begin{myNotic}{Note}
+Previous versions of LLVM used typed pointers. For example, a pointer to a byte was expressed as i8* in LLVM. Since LLVM 16, opaque pointers are the default. An opaque pointer is just a pointer to memory, without carrying any type information about it. The notation in LLVM IR is ptr.
+\end{myNotic}
+
+Since it is now clear what the IR looks like, let’s generate it from the AST.
 
 \mySubsubsection{2.6.2.}{Generating the IR from the AST}
 
+The interface, provided in the CodeGen.h header file, is very small:
+
+\begin{cpp}
+#ifndef CODEGEN_H
+#define CODEGEN_H
+
+#include "AST.h"
+
+class CodeGen
+{
+    public:
+    void compile(AST *Tree);
+};
+#endif
+\end{cpp}
+
+Because the AST contains the information, the basic idea is to use a visitor to walk the AST. The CodeGen.cpp file is implemented as follows:
+
+\begin{enumerate}
+\item
+The required includes are at the top of the file:
+
+\begin{cpp}
+#include "CodeGen.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/Support/raw_ostream.h"
+\end{cpp}
+
+\item
+The namespace of the LLVM libraries is used for name lookups:
+
+\begin{cpp}
+using namespace llvm;
+\end{cpp}
+
+\item
+First, some private members are declared in the visitor. Each compilation unit is represented in LLVM by the Module class and the visitor has a pointer to the module called M. For easy IR generation, the Builder (of type IRBuilder<>) is used. LLVM has a class hierarchy to represent types in IR. You can look up the instances for basic types such as i32 from the LLVM context.
+
+These basic types are used very often. To avoid repeated lookups, we cache the needed type instances: VoidTy, Int32Ty, PtrTy, and Int32Zero. The V member is the current calculated value, which is updated through the tree traversal. And last, nameMap maps a variable name to the value returned from the calc\_read() function:
+
+\begin{cpp}
+namespace {
+class ToIRVisitor : public ASTVisitor {
+    Module *M;
+    IRBuilder<> Builder;
+    Type *VoidTy;
+    Type *Int32Ty;
+    PointerType *PtrTy;
+    Constant *Int32Zero;
+    Value *V;
+    StringMap<Value *> nameMap;
+\end{cpp}
+
+\item
+The constructor initializes all members:
+
+\begin{cpp}
+public:
+    ToIRVisitor(Module *M) : M(M), Builder(M->getContext())
+    {
+        VoidTy = Type::getVoidTy(M->getContext());
+        Int32Ty = Type::getInt32Ty(M->getContext());
+        PtrTy = PointerType::getUnqual(M->getContext());
+        Int32Zero = ConstantInt::get(Int32Ty, 0, true);
+    }
+\end{cpp}
+
+\item
+or each function, a FunctionType instance must be created. In C++ terminology, this is a function prototype. A function itself is defined with a Function instance. The run() method defines the main() function in the LLVM IR first:
+
+\begin{cpp}
+    void run(AST *Tree) {
+        FunctionType *MainFty = FunctionType::get(
+            Int32Ty, {Int32Ty, PtrTy}, false);
+        Function *MainFn = Function::Create(
+            MainFty, GlobalValue::ExternalLinkage,
+            "main", M);
+\end{cpp}
+
+\item
+Then we create the BB basic block with the entry label, and attach it to the IR builder:
+
+\begin{cpp}
+        BasicBlock *BB = BasicBlock::Create(M->getContext(),
+                                            "entry", MainFn);
+        Builder.SetInsertPoint(BB);
+\end{cpp}
+
+\item
+With this preparation done, the tree traversal can begin:
+
+\begin{cpp}
+            Tree->accept(*this);
+\end{cpp}
+
+\item
+After the tree traversal, the computed value is printed via a call to the calc\_write() function. Again, a function prototype (an instance of FunctionType) has to be created.
+The only parameter is the current value, V:
+
+\begin{cpp}
+            Tree->accept(*this);FunctionType *CalcWriteFnTy =
+                FunctionType::get(VoidTy, {Int32Ty}, false);
+            Function *CalcWriteFn = Function::Create(
+                CalcWriteFnTy, GlobalValue::ExternalLinkage,
+                "calc_write", M);
+            Builder.CreateCall(CalcWriteFnTy, CalcWriteFn, {V});
+\end{cpp}
+
+\item
+The generation finishes by returning 0 from the main() function:
+
+\begin{cpp}
+            Builder.CreateRet(Int32Zero);
+        }
+\end{cpp}
+
+\item
+A WithDecl node holds the names of the declared variables. First, we create a function prototype for the calc\_read() function:
+
+\begin{cpp}
+    virtual void visit(WithDecl &Node) override {
+        FunctionType *ReadFty =
+            FunctionType::get(Int32Ty, {PtrTy}, false);
+        Function *ReadFn = Function::Create(
+            ReadFty, GlobalValue::ExternalLinkage,
+            "calc_read", M);
+\end{cpp}
+
+\item
+The method loops through the variable names:
+
+\begin{cpp}
+        for (auto I = Node.begin(), E = Node.end(); I != E;
+            ++I) {
+\end{cpp}
+
+\item
+For each variable, a string with a variable name is created:
+
+\begin{cpp}
+        StringRef Var = *I;
+        Constant *StrText = ConstantDataArray::getString(
+            M->getContext(), Var);
+        GlobalVariable *Str = new GlobalVariable(
+            *M, StrText->getType(),
+            /*isConstant=*/true,
+            GlobalValue::PrivateLinkage,
+            StrText, Twine(Var).concat(".str"));
+\end{cpp}
+
+\item
+Then the IR code to call the calc\_read() function is created. The string created in the previous step is passed as a parameter:
+
+\begin{cpp}
+        CallInst *Call =
+            Builder.CreateCall(ReadFty, ReadFn, {Str});
+\end{cpp}
+
+\item
+The returned value is stored in the mapNames map for later use:
+
+\begin{cpp}
+        nameMap[Var] = Call;
+    }
+\end{cpp}
+
+\item
+The tree traversal continues with the expression:
+
+\begin{cpp}
+    Node.getExpr()->accept(*this);
+};
+\end{cpp}
+
+\item
+A Factor node is either a variable name or a number. For a variable name, the value is looked up in the mapNames map. For a number, the value is converted to an integer and turned into a constant value:
+
+\begin{cpp}
+virtual void visit(Factor &Node) override {
+    if (Node.getKind() == Factor::Ident) {
+        V = nameMap[Node.getVal()];
+    } else {
+        int intval;
+        Node.getVal().getAsInteger(10, intval);
+        V = ConstantInt::get(Int32Ty, intval, true);
+    }
+};
+\end{cpp}
+
+\item
+And last, for a BinaryOp node, the right calculation operation must be used:
+
+\begin{cpp}
+virtual void visit(BinaryOp &Node) override {
+    Node.getLeft()->accept(*this);
+    Value *Left = V;
+    Node.getRight()->accept(*this);
+    Value *Right = V;
+    switch (Node.getOperator()) {
+        case BinaryOp::Plus:
+        V = Builder.CreateNSWAdd(Left, Right); break;
+        case BinaryOp::Minus:
+        V = Builder.CreateNSWSub(Left, Right); break;
+        case BinaryOp::Mul:
+        V = Builder.CreateNSWMul(Left, Right); break;
+        case BinaryOp::Div:
+        V = Builder.CreateSDiv(Left, Right); break;
+    }
+};
+};
+}
+\end{cpp}
+
+\item
+With this, the visitor class is complete. The compile() method creates the global context and the module, runs the tree traversal, and dumps the generated IR to the console:
+
+\begin{cpp}
+void CodeGen::compile(AST *Tree) {
+    LLVMContext Ctx;
+    Module *M = new Module("calc.expr", Ctx);
+    ToIRVisitor ToIR(M);
+    ToIR.run(Tree);
+    M->print(outs(), nullptr);
+}
+\end{cpp}
+
+\end{enumerate}
+
+We now have implemented the frontend of the compiler, from reading the source up to generating the IR. Of course, all these components must work together on user input, which is the task of the compiler driver. We also need to implement the functions needed at runtime. Both are topics of the next section.
+
 \mySubsubsection{2.6.3.}{The missing pieces – the driver and the runtime library}
+
+All the phases from the previous sections are glued together by the Calc.cpp driver, which we implement as follows: a parameter for the input expression is declared, LLVM is initialized, and all the phases from the previous sections are called:
+
+\begin{enumerate}
+\item
+First, we include the required header files:
+
+\begin{cpp}
+#include "CodeGen.h"
+#include "Parser.h"
+#include "Sema.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/raw_ostream.h"
+\end{cpp}
+
+\item
+LLVM comes with its own system for declaring command-line options. You only need to declare a static variable for each option you need. In doing so, the option is registered with a global command line parser. The advantage of this approach is that each component can add command-line options when needed. We declare an option for the input expression:
+
+\begin{cpp}
+static llvm::cl::opt<std::string>
+    Input(llvm::cl::Positional,
+        llvm::cl::desc("<input expression>"),
+        llvm::cl::init(""));
+\end{cpp}
+
+\item
+Inside the main() function, the LLVM libraries are initialized first. You need to call the ParseCommandLineOptions() function to handle the options given on the command line. This also handles the printing of help information. In the event of an error, this method exits the application:
+
+\begin{cpp}
+int main(int argc, const char **argv) {
+    llvm::InitLLVM X(argc, argv);
+    llvm::cl::ParseCommandLineOptions(
+        argc, argv, "calc - the expression compiler\n");
+\end{cpp}
+
+\item
+Next, we call the lexer and the parser. After the syntactical analysis, we check whether any errors occurred. If this is the case, then we exit the compiler with a return code indicating a failure:
+
+\begin{cpp}
+    Lexer Lex(Input);
+    Parser Parser(Lex);
+    AST *Tree = Parser.parse();
+    if (!Tree || Parser.hasError()) {
+        llvm::errs() << "Syntax errors occured\n";
+        return 1;
+    }
+\end{cpp}
+
+\item
+And we do the same if there was a semantic error:
+
+\begin{cpp}
+    Sema Semantic;
+    if (Semantic.semantic(Tree)) {
+        llvm::errs() << "Semantic errors occured\n";
+        return 1;
+    }
+\end{cpp}
+
+\item
+As the last step in the driver, the code generator is called:
+
+\begin{cpp}
+    CodeGen CodeGenerator;
+    CodeGenerator.compile(Tree);
+    return 0;
+}
+\end{cpp}
+
+\end{enumerate}
+
+Now we have successfully created some IR code for the user input. We delegate the object code generation to the LLVM llc static compiler, so this finishes the implementation of our compiler. We link all the components together to create the calc application.
+
+The runtime library consists of a single file, rtcalc.c. It has the implementation for the calc\_ read() and calc\_write() functions, written in C:
+
+\begin{cpp}
+#include <stdio.h>
+#include <stdlib.h>
+
+void calc_write(int v)
+{
+    printf("The result is: %d\n", v);
+}
+\end{cpp}
+
+calc\_write() only writes the result value to the terminal:
+
+\begin{cpp}
+int calc_read(char *s)
+{
+    char buf[64];
+    int val;
+    printf("Enter a value for %s: ", s);
+    fgets(buf, sizeof(buf), stdin);
+    if (EOF == sscanf(buf, "%d", &val))
+    {
+        printf("Value %s is invalid\n", buf);
+        exit(1);
+    }
+    return val;
+}
+\end{cpp}
+
+calc\_read() reads an integer number from the terminal. Nothing prevents the user from entering letters or other characters, so we must carefully check the input. If the input is not a number, we exit the application. A more complex approach would be to make the user aware of the problem and ask for a number again.
+
+The next step is to build and try out our compiler, calc, which is an application that creates IR from an expression.
+
+\mySubsubsection{2.6.3.1}{Building and testing the calc application}
+
+In order to build calc, we first need to create a new CMakeLists.txt file outside of the original src directory that contains all of the source file implementation:
+
+\begin{enumerate}
+\item
+First, we set the minimum required CMake version to the number required by LLVM, and give the project the name calc:
+
+\begin{cmake}
+cmake_minimum_required (VERSION 3.20.0)
+project ("calc")
+\end{cmake}
+
+\item
+Next, the LLVM package needs to be loaded, and we add the directory of the CMake modules provided by LLVM to the search path:
+
+\begin{cmake}
+find_package(LLVM REQUIRED CONFIG)
+message("Found LLVM ${LLVM_PACKAGE_VERSION}, build type ${LLVM_BUILD_TYPE}")
+list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR})
+\end{cmake}
+
+\item
+We also need to add the definitions and the include path from LLVM. The used LLVM components are mapped to the library names with a function call:
+
+\begin{cmake}
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+add_definitions(${LLVM_DEFINITIONS_LIST})
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+llvm_map_components_to_libnames(llvm_libs Core)
+\end{cmake}
+
+\item
+Lastly, we indicate that we need to include the src subdirectory in our build, as this is where all of the C++ implementation that was done within this chapter resides:
+
+\begin{cmake}
+add_subdirectory ("src")
+\end{cmake}
+
+\end{enumerate}
+
+There also needs to be a new CMakeLists.txt file inside of the src subdirectory. This CMake description inside the src directory appears as follows. We simply define the name of the executable, called calc, then list the source files to compile and the library to link against:
+
+\begin{cmake}
+add_executable (calc
+    Calc.cpp CodeGen.cpp Lexer.cpp Parser.cpp Sema.cpp)
+target_link_libraries(calc PRIVATE ${llvm_libs})
+\end{cmake}
+
+Finally, we can begin building the calc application. Outside of the src directory, we create a new build directory and change into it. Afterwards, we can run the CMake and build invocation as follows:
+
+\begin{shell}
+$ cmake -GNinja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+-DLLVM_DIR=<path to llvm installation configuration> ../
+$ ninja
+\end{shell}
+
+We now should have a newly built, functional calc application that can generate LLVM IR code.
+This can further be used with llc, which is the LLVM static backend compiler, to compile the IR code into an object file.
+
+You can then use your favorite C compiler to link against the small runtime library. On Unix on X86, you can type the following:
+
+\begin{shell}
+$ calc "with a: a*3" | llc –filetype=obj -relocation-model=pic –o=expr.o
+$ clang –o expr expr.o rtcalc.c
+$ expr
+Enter a value for a: 4
+The result is: 12
+\end{shell}
+
+On other Unix platforms such as AArch64 or PowerPC, you have to remove the -relocationmodel=pic option.
+
+On Windows, you need to use the cl compiler as follows:
+
+\begin{shell}
+$ calc "with a: a*3" | llc –filetype=obj –o=expr.obj
+$ cl expr.obj rtcalc.c
+$ expr
+Enter a value for a: 4
+The result is: 12
+\end{shell}
+
+You have now created your first LLVM-based compiler! Please take some time to play around with various expressions. Especially check that multiplicative operators are evaluated before additive operators and that using parentheses changes the evaluation order, as we would expect from a basic calculator.
+
+
+
+
+
+
+
+
+
+
+

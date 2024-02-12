@@ -353,18 +353,103 @@ class ASTVisitor {
 The visitor pattern needs to know each class to visit. Because each class also refers to the visitor, we declare all classes at the top of the file. Please note that the visit() methods for AST and Expr have a default implementation, which does nothing.
 
 \item
-clang 5.0 or later
+The AST class is the root of the hierarchy:
+
+\begin{cpp}
+class AST {
+public:
+    virtual ~AST() {}
+    virtual void accept(ASTVisitor &V) = 0;
+};
+\end{cpp}
 
 \item
-Apple clang 10.0 or later
+Similarly, Expr is the root for AST classes related to expressions:
+
+\begin{cpp}
+class Expr : public AST {
+public:
+    Expr() {}
+};
+\end{cpp}
 
 \item
-Visual Studio 2019 16.7 or later
+The Factor class stores a number or the name of a variable:
+
+\begin{cpp}
+class Factor : public Expr {
+public:
+    enum ValueKind { Ident, Number };
+
+private:
+    ValueKind Kind;
+    llvm::StringRef Val;
+
+public:
+    Factor(ValueKind Kind, llvm::StringRef Val)
+        : Kind(Kind), Val(Val) {}
+    ValueKind getKind() { return Kind; }
+    llvm::StringRef getVal() { return Val; }
+    virtual void accept(ASTVisitor &V) override {
+        V.visit(*this);
+    }
+};
+\end{cpp}
+
+In this example, numbers and variables are treated almost identically, therefore, we decided to create only one AST node class to represent them. The Kind member tells us which of both cases the instances represent. In more complex languages, you usually want to have different AST classes, such as a NumberLiteral class for numbers and a VariableAccess class for a reference to a variable.
 
 \item
-Visual Studio 2019 16.7 or later
+The BinaryOp class holds the data needed for evaluating an expression:
+
+\begin{cpp}
+class BinaryOp : public Expr {
+public:
+    enum Operator { Plus, Minus, Mul, Div };
+
+private:
+    Expr *Left;
+    Expr *Right;
+    Operator Op;
+
+public:
+    BinaryOp(Operator Op, Expr *L, Expr *R)
+        : Op(Op), Left(L), Right(R) {}
+    Expr *getLeft() { return Left; }
+    Expr *getRight() { return Right; }
+    Operator getOperator() { return Op; }
+    virtual void accept(ASTVisitor &V) override {
+        V.visit(*this);
+    }
+};
+\end{cpp}
+
+In contrast to the parser, the BinaryOp class makes no distinction between multiplicative and additive operators. The precedence of the operators is implicitly available in the tree structure.
 
 \item
-Visual Studio 2019 16.7 or later
+And last, the WithDecl class stores the declared variables and the expression:
+
+\begin{cpp}
+class WithDecl : public AST {
+    using VarVector =
+        llvm::SmallVector<llvm::StringRef, 8>;
+    VarVector Vars;
+    Expr *E;
+
+public:
+    WithDecl(llvm::SmallVector<llvm::StringRef, 8> Vars,
+            Expr *E)
+        : Vars(Vars), E(E) {}
+    VarVector::const_iterator begin()
+                                { return Vars.begin(); }
+    VarVector::const_iterator end() { return Vars.end(); }
+    Expr *getExpr() { return E; }
+    virtual void accept(ASTVisitor &V) override {
+        V.visit(*this);
+    }
+};
+#endif
+\end{cpp}
 
 \end{enumerate}
+
+The AST is constructed during parsing. The semantic analysis checks that the tree adheres to the meaning of the language (e.g., that used variables are declared) and possibly augments the tree. After that, the tree is used for code generation.

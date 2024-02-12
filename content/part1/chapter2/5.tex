@@ -1,0 +1,102 @@
+The semantic analyzer walks the AST and checks various semantic rules of the language, e.g. a variable must be declared before use or types of variables must be compatible in an expression. The semantic analyzer can also print out warnings if it finds a situation that can be improved. For the example expression language, the semantic analyzer must check that each used variable is declared because that is what the language requires. A possible extension (which is not implemented here) is to print a warning if a declared variable is not used.
+
+The semantic analyzer is implemented in the Sema class, which is performed by the semantic() method. Here is the complete Sema.h header file:
+
+\begin{cpp}
+#ifndef SEMA_H
+#define SEMA_H
+
+#include "AST.h"
+#include "Lexer.h"
+
+class Sema {
+    public:
+    bool semantic(AST *Tree);
+};
+
+#endif
+\end{cpp}
+
+The implementation is in the Sema.cpp file. The interesting part is the semantic analysis, which is implemented using a visitor. The basic idea is that the name of each declared variable is stored in a set. During the creation of the set, each name can be checked for uniqueness, and later it can be checked that the given name is in the set:
+
+\begin{cpp}
+#include "Sema.h"
+#include "llvm/ADT/StringSet.h"
+
+namespace {
+class DeclCheck : public ASTVisitor {
+    llvm::StringSet<> Scope;
+    bool HasError;
+    enum ErrorType { Twice, Not };
+    void error(ErrorType ET, llvm::StringRef V) {
+        llvm::errs() << "Variable " << V << " "
+                     << (ET == Twice ? "already" : "not")
+                     << " declared\n";
+        HasError = true;
+    }
+public:
+    DeclCheck() : HasError(false) {}
+    bool hasError() { return HasError; }
+\end{cpp}
+
+As in the Parser class, a flag is used to indicate that an error occurred. The names are stored in a set called Scope. On a Factor node that holds a variable name, it is checked that the variable name is in the set:
+
+\begin{cpp}
+virtual void visit(Factor &Node) override {
+    if (Node.getKind() == Factor::Ident) {
+        if (Scope.find(Node.getVal()) == Scope.end())
+        error(Not, Node.getVal());
+    }
+};
+\end{cpp}
+
+For a BinaryOp node, there is nothing to check other than that both sides exist and are visited:
+
+\begin{cpp}
+virtual void visit(BinaryOp &Node) override {
+    if (Node.getLeft())
+        Node.getLeft()->accept(*this);
+    else
+        HasError = true;
+    if (Node.getRight())
+        Node.getRight()->accept(*this);
+    else
+        HasError = true;
+};
+\end{cpp}
+
+On a WithDecl node, the set is populated and the walk over the expression is started:
+
+\begin{cpp}
+    virtual void visit(WithDecl &Node) override {
+        for (auto I = Node.begin(), E = Node.end(); I != E;
+            ++I) {
+            if (!Scope.insert(*I).second)
+            error(Twice, *I);
+        }
+        if (Node.getExpr())
+            Node.getExpr()->accept(*this);
+        else
+            HasError = true;
+    };
+};
+}
+\end{cpp}
+
+The semantic() method only starts the tree walk and returns the error flag:
+
+\begin{cpp}
+bool Sema::semantic(AST *Tree) {
+    if (!Tree)
+        return false;
+    DeclCheck Check;
+    Tree->accept(Check);
+    return Check.hasError();
+}
+\end{cpp}
+
+If required, much more could be done here. It would also be possible to print a warning if a declared variable is not used. We leave this for you to implement as an exercise. If the semantic analysis finishes without error, then we can generate the LLVM IR from the AST. This is done in the next section.
+
+
+
+

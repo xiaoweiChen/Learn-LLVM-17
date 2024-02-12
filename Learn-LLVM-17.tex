@@ -148,10 +148,16 @@
   \begin { minted } [ linenos=true ] { cpp } }
 { \end   { minted } }
 
+% Def cmake environment
+\NewDocumentEnvironment { cmake } { }
+{ \VerbatimEnvironment
+  \begin { minted } [ linenos=true, frame=single ] { cmake } }
+{ \end   { minted } }
+
 % Def shell environment
 \NewDocumentEnvironment { shell } { }
 { \VerbatimEnvironment
-  \begin { minted } { text } }
+  \begin { minted } [ linenos=true ] { text } }
 { \end   { minted } }
 
 \NewDocumentEnvironment { myNotic } { m }
@@ -193,7 +199,7 @@
 
 \NewDocumentCommand { \myPart } { mmm }
 {
-\color{white}		
+\color{white}
 \section*{\zihao{2}{#1}\hspace{0.5cm}{#2}}
 \pagecolor{gray}
 \addcontentsline{toc}{section}{{#1}\hspace{0.5cm}{#2}}
