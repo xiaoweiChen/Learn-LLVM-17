@@ -1,8 +1,439 @@
 
+The parser we constructed in the previous section only checks the syntax of the input. The next step is to add the ability to perform semantic analysis. In the calc example in the previous chapter, the parser constructed an AST. In a separate phase, the semantic analyzer worked on this tree. This approach can always be used. In this section, we will use a slightly different approach and intertwine the parser and the semantic analyzer more.
+
+What does the semantic analyzer need to do? Let’s take a look:
+
+\begin{itemize}
+\item
+For each declaration, the names of variables, objects, and more must be checked to ensure they have not been declared elsewhere.
+
+\item
+For each occurrence of a name in an expression or statement, it must be checked that the name is declared and that the desired use fits the declaration.
+
+\item
+For each expression, the resulting type must be computed. It is also necessary to compute if the expression is constant and if so, which value it has.
+
+\item
+For assignment and parameter passing, we must check that the types are compatible. Further, we must check that the conditions in IF and WHILE statements are of the BOOLEAN type.
+\end{itemize}
+
+That’s already a lot to check for such a small subset of a programming language!
 
 \mySubsubsection{3.7.1.}{Handling the scope of names}
 
+Let’s have a look at the scope of names first. The scope of a name is the range where the name is visible. Like C, tinylang uses a declare-before-use model. For example, the B and X variables are declared at the module level to be of the INTEGER type:
+
+\begin{shell}
+VAR B, X: INTEGER;
+\end{shell}
+
+Before the declaration, the variables are not known and cannot be used. That’s only possible after the declaration. Inside a procedure, more variables can be declared:
+
+\begin{shell}
+PROCEDURE Proc;
+VAR B: BOOLEAN;
+BEGIN
+    (* Statements *)
+END Proc;
+\end{shell}
+
+Inside the procedure, at the point where the comment is, a use of B refers to the B local variable while a use of X refers to the X global variable. The scope of the local variable, B, is Proc. If a name cannot be found in the current scope, then the search continues in the enclosing scope. Therefore, the X variable can be used inside the procedure. In tinylang, only modules and procedures open a new scope. Other language constructs, such as structs and classes, usually also open a scope. Predefined entities such as the INTEGER type and the TRUE literal are declared in a global scope, enclosing the scope of the module.
+
+In tinylang, only the name is crucial. Therefore, a scope can be implemented as a mapping from a name to its declaration. A new name can only be inserted if it is not already present. For the lookup, the enclosing or parent scope must also be known. The interface (in the include/tinylang/ Sema/Scope.h file) looks as follows:
+
+\begin{cpp}
+#ifndef TINYLANG_SEMA_SCOPE_H
+#define TINYLANG_SEMA_SCOPE_H
+
+#include "tinylang/Basic/LLVM.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringRef.h"
+
+namespace tinylang {
+
+class Decl;
+
+class Scope {
+    Scope *Parent;
+    StringMap<Decl *> Symbols;
+
+    public:
+    Scope(Scope *Parent = nullptr) : Parent(Parent) {}
+
+    bool insert(Decl *Declaration);
+    Decl *lookup(StringRef Name);
+
+    Scope *getParent() { return Parent; }
+};
+} // namespace tinylang
+#endif
+\end{cpp}
+
+The implementation in the lib/Sema/Scope.cpp file looks as follows:
+
+\begin{cpp}
+#include "tinylang/Sema/Scope.h"
+#include "tinylang/AST/AST.h"
+
+using namespace tinylang;
+
+bool Scope::insert(Decl *Declaration) {
+    return Symbols
+        .insert(std::pair<StringRef, Decl *>(
+            Declaration->getName(), Declaration))
+        .second;
+}
+\end{cpp}
+
+Please note that the StringMap::insert() method does not override an existing entry. The second member of the resulting std::pair indicates if the table was updated. This information is returned to the caller.
+
+To implement the search for the declaration of a symbol, the lookup() method searches in the current scope and, if nothing is found, searches the scopes linked by the parent member:
+
+\begin{cpp}
+Decl *Scope::lookup(StringRef Name) {
+    Scope *S = this;
+    while (S) {
+        StringMap<Decl *>::const_iterator I =
+        S->Symbols.find(Name);
+        if (I != S->Symbols.end())
+        return I->second;
+        S = S->getParent();
+    }
+    return nullptr;
+}
+\end{cpp}
+
+The variable declaration is then processed as follows:
+
+\begin{itemize}
+\item
+The current scope is the module scope.
+
+\item
+The INTEGER type declaration is looked up. It’s an error if no declaration is found or if it is not a type declaration.
+
+\item
+A new AST node called VariableDeclaration is instantiated, with the important attributes being the name, B, and the type.
+
+\item
+The name, B, is inserted into the current scope, mapping to the declaration instance. If the name is already present in the scope, then this is an error. The content of the current scope is not changed in this case.
+
+\item
+The same is done for the X variable.
+\end{itemize}
+
+Two tasks are performed here. As in the calc example, AST nodes are constructed. At the same time, attributes of the node, such as the type, are computed. Why is this possible?
+
+The semantic analyzer can fall back on two different sets of attributes. The scope is inherited from the caller. The type declaration can be computed (or synthesized) by evaluating the name of the type declaration. The language is designed in such a way that these two sets of attributes are sufficient to compute all attributes of the AST node.
+
+An important aspect is the declare-before-use model. If a language allows the use of names before declaration, such as members inside a class in C++, then it is not possible to compute all attributes of an AST node at once. In such a case, the AST node must be constructed with only partially computed attributes or just with plain information (such as in the calc example).
+
+The AST must then be visited one or more times to determine the missing information. In the case of tinylang (and Modula-2), it would be possible to dispense with the AST construction – the AST is indirectly represented through the call hierarchy of the parseXXX() methods. Code generation from an AST is much more common, so we construct an AST here, too.
+
+Before we put the pieces together, we need to understand the LLVM style of using runtime type information (RTTI).
+
 \mySubsubsection{3.7.2.}{Using an LLVM-style RTTI for the AST}
 
+Naturally, the AST nodes are a part of a class hierarchy. A declaration always has a name. Other attributes depend on what is being declared. If a variable is declared, then a type is required. A constant declaration needs a type, a value, and so on. Of course, at runtime, you need to find out which kind of declaration you are working with. The dynamic\_cast<> C++ operator could be used for this. The problem is that the required RTTI is only available if the C++ class has a virtual table attached – that is, it uses virtual functions. Another disadvantage is that C++ RTTI is bloated. To avoid these disadvantages, the LLVM developers introduced a self-made RTTI style, which is used throughout the LLVM libraries.
+
+The (abstract) base class of our hierarchy is Decl. To implement the LLVM-style RTTI, a public enumeration containing a label for each subclass must be added. Also, a private member of this type and a public getter are required. The private member is usually called Kind. In our case, this looks as follows:
+
+\begin{cpp}
+class Decl {
+public:
+    enum DeclKind { DK_Module, DK_Const, DK_Type,
+        DK_Var, DK_Param, DK_Proc };
+private:
+    const DeclKind Kind;
+public:
+    DeclKind getKind() const { return Kind; }
+};
+\end{cpp}
+
+Each subclass now needs a special function member called classof. The purpose of this function is to determine if a given instance is of the requested type. For VariableDeclaration, it is implemented as follows:
+
+\begin{cpp}
+static bool classof(const Decl *D) {
+    return D->getKind() == DK_Var;
+}
+\end{cpp}
+
+Now, you can use the special templates, llvm::isa<>, to check if an object is of the requested type and llvm::dyn\_cast<> to dynamically cast the object. More templates exist, but these two are the most commonly used ones. For the other templates, see \url{https://llvm.org/docs/ ProgrammersManual.html#the-isa-cast-and-dyn-cast-templates} and for more information about the LLVM style, including more advanced uses, see \url{https://llvm.org/docs/HowToSetUpLLVMStyleRTTI.html}.
+
 \mySubsubsection{3.7.3.}{Creating the semantic analyzer}
+
+Equipped with this knowledge, we can now implement all the parts. First, we must create the definition of the AST node for a variable that’s stored in the include/llvm/tinylang/AST/AST.h file. Besides support for the LLVM-style RTTI, the base class stores the name of the declaration, the location of the name, and a pointer to the enclosing declaration. The latter is required during code generation of nested procedures. The Decl base class is declared as follows:
+
+\begin{cpp}
+class Decl {
+public:
+    enum DeclKind { DK_Module, DK_Const, DK_Type,
+                    DK_Var, DK_Param, DK_Proc };
+
+private:
+    const DeclKind Kind;
+
+protected:
+    Decl *EnclosingDecL;
+    SMLoc Loc;
+    StringRef Name;
+
+public:
+    Decl(DeclKind Kind, Decl *EnclosingDecL, SMLoc Loc,
+        StringRef Name)
+        : Kind(Kind), EnclosingDecL(EnclosingDecL), Loc(Loc),
+        Name(Name) {}
+
+    DeclKind getKind() const { return Kind; }
+    SMLoc getLocation() { return Loc; }
+    StringRef getName() { return Name; }
+    Decl *getEnclosingDecl() { return EnclosingDecL; }
+};
+\end{cpp}
+
+The declaration for a variable only adds a pointer to the type declaration:
+
+\begin{cpp}
+class TypeDeclaration;
+
+class VariableDeclaration : public Decl {
+    TypeDeclaration *Ty;
+
+public:
+    VariableDeclaration(Decl *EnclosingDecL, SMLoc Loc,
+                        StringRef Name, TypeDeclaration *Ty)
+        : Decl(DK_Var, EnclosingDecL, Loc, Name), Ty(Ty) {}
+
+    TypeDeclaration *getType() { return Ty; }
+
+    static bool classof(const Decl *D) {
+        return D->getKind() == DK_Var;
+    }
+};
+\end{cpp}
+
+The method in the parser needs to be extended with a semantic action and variables for collected information:
+
+\begin{cpp}
+bool Parser::parseVariableDeclaration(DeclList &Decls) {
+    auto _errorhandler = [this] {
+        while (!Tok.is(tok::semi)) {
+            advance();
+            if (Tok.is(tok::eof)) return true;
+        }
+        return false;
+    };
+
+    Decl *D = nullptr; IdentList Ids;
+    if (parseIdentList(Ids)) return _errorhandler();
+    if (consume(tok::colon)) return _errorhandler();
+    if (parseQualident(D)) return _errorhandler();
+    Actions.actOnVariableDeclaration(Decls, Ids, D);
+    return false;
+}
+\end{cpp}
+
+DeclList is a list of declarations, std::vector<Decl*>, and IdentList is a list of locations and identifiers, std::vector<std::pair<SMLoc, StringRef>{}>.
+
+The parseQualident() method returns a declaration, which in this case is expected to be a type declaration.
+
+The parser class knows an instance of the semantic analyzer class, Sema, that’s stored in the Actions member. A call to actOnVariableDeclaration() runs the semantic analyzer and the AST construction. The implementation is in the lib/Sema/Sema.cpp file:
+
+\begin{cpp}
+void Sema::actOnVariableDeclaration(DeclList &Decls,
+IdentList &Ids,
+Decl *D) {
+    if (TypeDeclaration *Ty = dyn_cast<TypeDeclaration>(D)) {
+        for (auto &[Loc, Name] : Ids) {
+            auto *Decl = new VariableDeclaration(CurrentDecl, Loc,
+            Name, Ty);
+            if (CurrentScope->insert(Decl))
+                Decls.push_back(Decl);
+            else
+                Diags.report(Loc, diag::err_symbold_declared, Name);
+        }
+    } else if (!Ids.empty()) {
+        SMLoc Loc = Ids.front().first;
+        Diags.report(Loc, diag::err_vardecl_requires_type);
+    }
+}
+\end{cpp}
+
+The type declaration is checked with llvm::dyn\_cast<TypeDeclaration>. If it is not a type declaration, then an error message is printed. Otherwise, for each name in the Ids list, VariableDeclaration is instantiated and added to the list of declarations. If adding the variable to the current scope fails because the name is already declared, then an error message is printed as well.
+
+Most of the other entities are constructed in the same way – the complexity of the semantic analysis is the only difference. More work is required for modules and procedures because they open a new scope. Opening a new scope is easy: only a new Scope object must be instantiated. As soon as the module or procedure has been parsed, the scope must be removed.
+
+This must be done reliably because we do not want to add names to the wrong scope in case of a syntax error. This is a classic use of the Resource Acquisition Is Initialization (RAII) idiom in C++. Another complication comes from the fact that a procedure can recursively call itself. Therefore, the name of the procedure must be added to the current scope before it can be used. The semantic analyzer has two methods to enter and leave a scope. The scope is associated with a declaration:
+
+\begin{cpp}
+void Sema::enterScope(Decl *D) {
+    CurrentScope = new Scope(CurrentScope);
+    CurrentDecl = D;
+}
+
+void Sema::leaveScope() {
+    Scope *Parent = CurrentScope->getParent();
+    delete CurrentScope;
+    CurrentScope = Parent;
+    CurrentDecl = CurrentDecl->getEnclosingDecl();
+}
+\end{cpp}
+
+A simple helper class is used to implement the RAII idiom:
+
+\begin{cpp}
+class EnterDeclScope {
+    Sema &Semantics;
+
+public:
+    EnterDeclScope(Sema &Semantics, Decl *D)
+    : Semantics(Semantics) {
+        Semantics.enterScope(D);
+    }
+    ~EnterDeclScope() { Semantics.leaveScope(); }
+};
+\end{cpp}
+
+When parsing a module or procedure, two interactions occur with the semantic analyzer. The first is after the name is parsed. Here, the (almost empty) AST node is constructed and a new scope is established:
+
+\begin{cpp}
+bool Parser::parseProcedureDeclaration(/* … */) {
+    /* … */
+    if (consume(tok::kw_PROCEDURE)) return _errorhandler();
+    if (expect(tok::identifier)) return _errorhandler();
+    ProcedureDeclaration *D =
+        Actions.actOnProcedureDeclaration(
+            Tok.getLocation(), Tok.getIdentifier());
+    EnterDeclScope S(Actions, D);
+    /* … */
+}
+\end{cpp}
+
+The semantic analyzer checks the name in the current scope and returns the AST node:
+
+\begin{cpp}
+ProcedureDeclaration *
+Sema::actOnProcedureDeclaration(SMLoc Loc, StringRef Name) {
+    ProcedureDeclaration *P =
+    new ProcedureDeclaration(CurrentDecl, Loc, Name);
+    if (!CurrentScope->insert(P))
+        Diags.report(Loc, diag::err_symbold_declared, Name);
+    return P;
+}
+\end{cpp}
+
+The real work is done after all the declarations and the procedure body have been parsed. You only need to check if the name at the end of the procedure declaration is equal to the name of the procedure and if the declaration used for the return type is a type declaration:
+
+\begin{cpp}
+void Sema::actOnProcedureDeclaration(
+        ProcedureDeclaration *ProcDecl, SMLoc Loc,
+        StringRef Name, FormalParamList &Params, Decl *RetType,
+        DeclList &Decls, StmtList &Stmts) {
+
+    if (Name != ProcDecl->getName()) {
+        Diags.report(Loc, diag::err_proc_identifier_not_equal);
+        Diags.report(ProcDecl->getLocation(),
+                     diag::note_proc_identifier_declaration);
+    }
+    ProcDecl->setDecls(Decls);
+    ProcDecl->setStmts(Stmts);
+
+    auto *RetTypeDecl =
+    dyn_cast_or_null<TypeDeclaration>(RetType);
+    if (!RetTypeDecl && RetType)
+        Diags.report(Loc, diag::err_returntype_must_be_type, Name);
+    else
+        ProcDecl->setRetType(RetTypeDecl);
+}
+\end{cpp}
+
+Some declarations are inherently present and cannot be defined by the developer. This includes the BOOLEAN and INTEGER types and the TRUE and FALSE literals. These declarations exist in the global scope and must be added programmatically. Modula-2 also predefines some procedures, such as INC or DEC, that can be added to the global scope. Given our classes, initializing the global scope is simple:
+
+\begin{cpp}
+void Sema::initialize() {
+    CurrentScope = new Scope();
+    CurrentDecl = nullptr;
+    IntegerType =
+        new TypeDeclaration(CurrentDecl, SMLoc(), "INTEGER");
+    BooleanType =
+        new TypeDeclaration(CurrentDecl, SMLoc(), "BOOLEAN");
+    TrueLiteral = new BooleanLiteral(true, BooleanType);
+    FalseLiteral = new BooleanLiteral(false, BooleanType);
+    TrueConst = new ConstantDeclaration(CurrentDecl, SMLoc(),
+                                        "TRUE", TrueLiteral);
+    FalseConst = new ConstantDeclaration(
+        CurrentDecl, SMLoc(), "FALSE", FalseLiteral);
+    CurrentScope->insert(IntegerType);
+    CurrentScope->insert(BooleanType);
+    CurrentScope->insert(TrueConst);
+    CurrentScope->insert(FalseConst);
+}
+\end{cpp}
+
+With this scheme, all required calculations for tinylang can be done. For example, let’s look at how to compute if an expression results in a constant value:
+
+\begin{itemize}
+\item
+We must ensure literal or a reference to a constant declaration is a constant
+
+\item
+If both sides of an expression are constant, then applying the operator also yields a constant
+\end{itemize}
+
+These rules are embedded into the semantic analyzer while creating the AST nodes for an expression.Likewise, the type and the constant value can be computed.
+
+It should be noted that not all kinds are computation can be done in this way. For example, to detect the use of uninitialized variables, a method called symbolic interpretation can be used. In its general form, the method requires a special walk order through the AST, which is not possible during construction time. The good news is that the presented approach creates a fully decorated AST that is ready for code generation. This AST can be used for further analysis, given that costly analysis can be turned on or off on demand.
+
+To play around with the frontend, you also need to update the driver. Since the code generation is missing, a correct tinylang program produces no output. Still, it can be used to explore error recovery and provoke semantic errors:
+
+\begin{cpp}
+#include "tinylang/Basic/Diagnostic.h"
+#include "tinylang/Basic/Version.h"
+#include "tinylang/Parser/Parser.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/raw_ostream.h"
+
+using namespace tinylang;
+
+int main(int argc_, const char **argv_) {
+    llvm::InitLLVM X(argc_, argv_);
+
+    llvm::SmallVector<const char *, 256> argv(argv_ + 1,
+                                              argv_ + argc_);
+    llvm::outs() << "Tinylang "
+                 << tinylang::getTinylangVersion() << "\n";
+
+    for (const char *F : argv) {
+        llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>>
+            FileOrErr = llvm::MemoryBuffer::getFile(F);
+        if (std::error_code BufferError =
+                FileOrErr.getError()) {
+            llvm::errs() << "Error reading " << F << ": "
+                         << BufferError.message() << "\n";
+            continue;
+        }
+
+        llvm::SourceMgr SrcMgr;
+        DiagnosticsEngine Diags(SrcMgr);
+        SrcMgr.AddNewSourceBuffer(std::move(*FileOrErr),
+                                  llvm::SMLoc());
+        auto TheLexer = Lexer(SrcMgr, Diags);
+        auto TheSema = Sema(Diags);
+        auto TheParser = Parser(TheLexer, TheSema);
+        TheParser.parse();
+    }
+}
+\end{cpp}
+
+Congratulations! You’ve finished implementing the frontend for tinylang! You can use the example program, Gcd.mod, provided in the Defining a real programming language section to run the frontend:
+
+\begin{shell}
+$ tinylang Gcd.mod
+\end{shell}
+
+Of course, this is a valid program, and it looks like nothing happens. Be sure to modify the file and provoke some error messages. We’ll continue with the fun in the next chapter by adding code generation.
+
+
+
+
 

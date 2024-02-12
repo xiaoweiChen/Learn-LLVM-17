@@ -20,60 +20,60 @@ To ask the user to provide a value for a variable and to print the result, two l
 \item
 The library functions must be declared, like in C. The syntax also resembles C. The type before the function name is the return type.   The type names surrounded by parenthesis are the argument types. The declaration can appear anywhere in the file:
 
-\begin{cpp}
+\begin{shell}
 declare i32 @calc_read(ptr)
 declare void @calc_write(i32)
-\end{cpp}
+\end{shell}
 
 \item
 The calc\_read() function takes the variable name as a parameter. The following construct defines a constant, holding a and the null byte used as a string terminator in C:
 
-\begin{cpp}
+\begin{shell}
 @a.str = private constant [2 x i8] c"a\00"
-\end{cpp}
+\end{shell}
 
 \item
 It follows the main() function. The parameter names are omitted because they are not used. Just as in C, the body of the function is enclosed in braces:
 
-\begin{cpp}
+\begin{shell}
 define i32 @main(i32, ptr) {
-\end{cpp}
+\end{shell}
 
 \item
 Each basic block must have a label. Because this is the first basic block of the function, we name it entry:
 
-\begin{cpp}
+\begin{shell}
 entry:
-\end{cpp}
+\end{shell}
 
 \item
 The calc\_read() function is called to read the value for the a variable. The nested getelemenptr instruction performs an index calculation to compute the pointer to the first element of the string constant. The function result is assigned to the unnamed \%2 variable.
 
-\begin{cpp}
+\begin{shell}
     %2 = call i32 @calc_read(ptr @a.str)
-\end{cpp}
+\end{shell}
 
 \item
 Next, the variable is multiplied by 3:
 
-\begin{cpp}
+\begin{shell}
     %3 = mul nsw i32 3, %2
-\end{cpp}
+\end{shell}
 
 \item
 The result is printed on the console via a call to the calc\_write() function:
 
-\begin{cpp}
+\begin{shell}
     call void @calc_write(i32 %3)
-\end{cpp}
+\end{shell}
 
 \item
 Last, the main() function returns 0 to indicate a successful execution:
 
-\begin{cpp}
+\begin{shell}
     ret i32 0
 }
-\end{cpp}
+\end{shell}
 
 \end{enumerate}
 

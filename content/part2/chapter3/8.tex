@@ -1,0 +1,5 @@
+In this chapter, you learned about the techniques that a real-world compiler uses in the frontend. Starting with the project layout, you created separate libraries for the lexer, the parser, and the semantic analyzer. To output messages to the user, you extended an existing LLVM class, allowing the messages to be stored centrally. The lexer is now separated into several interfaces.
+
+Then, you learned how to construct a recursive descent parser from a grammar description, looked at what pitfalls to avoid, and learned how to use generators to do the job. The semantic analyzer you constructed performs all the semantic checks required by the language while being intertwined with the parser and AST construction.
+
+The result of your coding effort is a fully decorated AST. You’ll use this in the next chapter to generate IR code and, finally, object code.s

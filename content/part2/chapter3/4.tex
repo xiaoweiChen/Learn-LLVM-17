@@ -1,0 +1,147 @@
+Only a centralized definition of messages is missing. In a large piece of software (such as a compiler), you do not want to sprinkle message strings all over the place. If there is a request to change messages or translate them into another language, then you better have them in a central place! A simple approach is that each message has an ID (an enum member), a severity level such as Error or Warning, and a string containing the messages. In your code, you only refer to the message ID.
+
+The severity level and message string are only used when the message is printed. These three items (the ID, the security level, and the message) must be managed consistently. The LLVM libraries use the preprocessor to solve this. The data is stored in a file with the .def suffix and is wrapped in a macro name. That file is usually included several times, with different definitions for the macro. The definition is in the include/tinylang/Basic/Diagnostic.def file path and looks as follows:
+
+\begin{cpp}
+#ifndef DIAG
+#define DIAG(ID, Level, Msg)
+#endif
+
+DIAG(err_sym_declared, Error, "symbol {0} already declared")
+
+#undef DIAG
+\end{cpp}
+
+The first macro parameter, ID, is the enumeration label, the second parameter, Level, is the severity, and the third parameter, Msg, is the message text. With this definition at hand, we can define a DiagnosticsEngine class to emit error messages. The interface is in the include/tinylang/ Basic/Diagnostic.h file:
+
+\begin{cpp}
+#ifndef TINYLANG_BASIC_DIAGNOSTIC_H
+#define TINYLANG_BASIC_DIAGNOSTIC_H
+
+#include "tinylang/Basic/LLVM.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/SMLoc.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/raw_ostream.h"
+#include <utility>
+
+namespace tinylang {
+\end{cpp}
+
+After including the necessary header files, Diagnostic.def can be used to define the enumeration.
+To not pollute the global namespace, a nested namespace called diag is used:
+
+\begin{cpp}
+namespace diag {
+enum {
+#define DIAG(ID, Level, Msg) ID,
+#include "tinylang/Basic/Diagnostic.def"
+};
+} // namespace diag
+\end{cpp}
+
+The DiagnosticsEngine class uses a SourceMgr instance to emit the messages via the report() method. Messages can have parameters. To implement this facility, the variadic-format support provided by LLVM is used. The message text and the severity level are retrieved with the help of the static method. As a bonus, the number of emitted error messages is also counted:
+
+\begin{cpp}
+class DiagnosticsEngine {
+    static const char *getDiagnosticText(unsigned DiagID);
+    static SourceMgr::DiagKind
+    getDiagnosticKind(unsigned DiagID);
+\end{cpp}
+
+
+The message string is returned by getDiagnosticText(), while the level is returned by getDiagnosticKind(). Both methods are later implemented in the .cpp file:
+
+\begin{cpp}
+SourceMgr &SrcMgr;
+unsigned NumErrors;
+
+public:
+    DiagnosticsEngine(SourceMgr &SrcMgr)
+        : SrcMgr(SrcMgr), NumErrors(0) {}
+    unsigned nunErrors() { return NumErrors; }
+\end{cpp}
+
+As messages can have a variable number of parameters, the solution in C++ is to use a variadic template.
+Of course, this is also used by the formatv() function provided by LLVM. To get the formatted message, we just need to forward the template parameters:
+
+\begin{cpp}
+    template <typename... Args>
+    void report(SMLoc Loc, unsigned DiagID,
+                Args &&... Arguments) {
+        std::string Msg =
+            llvm::formatv(getDiagnosticText(DiagID),
+        std::forward<Args>(Arguments)...)
+        .str();
+        SourceMgr::DiagKind Kind = getDiagnosticKind(DiagID);
+        SrcMgr.PrintMessage(Loc, Kind, Msg);
+        NumErrors += (Kind == SourceMgr::DK_Error);
+    }
+};
+
+} // namespace tinylang
+#endif
+\end{cpp}
+
+With that, we have implemented most of the class. Only getDiagnosticText() and getDiagnosticKind()are missing. They are defined in the lib/Basic/Diagnostic.
+cpp file and also make use of the Diagnostic.def file:
+
+\begin{cpp}
+#include "tinylang/Basic/Diagnostic.h"
+
+using namespace tinylang;
+
+namespace {
+const char *DiagnosticText[] = {
+    #define DIAG(ID, Level, Msg) Msg,
+    #include "tinylang/Basic/Diagnostic.def"
+};
+\end{cpp}
+
+As in the header file, the DIAG macro is defined to retrieve the desired part. Here, we define an array that holds the text messages. Therefore, the DIAG macro only returns the Msg part. We use the same approach for the level:
+
+\begin{cpp}
+SourceMgr::DiagKind DiagnosticKind[] = {
+#define DIAG(ID, Level, Msg) SourceMgr::DK_##Level,
+include "tinylang/Basic/Diagnostic.def"
+};
+} // namespace
+\end{cpp}
+
+Not surprisingly, both functions simply index the array to return the desired data:
+
+\begin{cpp}
+const char *
+DiagnosticsEngine::getDiagnosticText(unsigned DiagID) {
+    return DiagnosticText[DiagID];
+}
+
+SourceMgr::DiagKind
+DiagnosticsEngine::getDiagnosticKind(unsigned DiagID) {
+    return DiagnosticKind[DiagID];
+}
+\end{cpp}
+
+The combination of the SourceMgr and DiagnosticsEngine classes provides a good basis for the other components. We’ll use them in the lexer first!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

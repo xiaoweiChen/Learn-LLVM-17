@@ -111,7 +111,6 @@ Let’s dive into the implementation of the parser!
 \begin{enumerate}
 \item
 Our implementation in the Parser.cpp file and begins with the parse() method:
-
 \begin{cpp}
 #include "Parser.h"
 
@@ -198,12 +197,11 @@ With this call, the parsing of the rule is finished successfully. The collected 
     if (Vars.empty()) return E;
     else return new WithDecl(Vars, E);
 \end{cpp}
-
 \end{enumerate}
 
 Now only the error handling is missing. Detecting a syntax error is easy but recovering from it is surprisingly complicated. Here, a simple approach called panic mode is used.
 
-In panic mode, tokens are deleted from the token stream until one is found that the parser can use to continue its work. Most programming languages have symbols that denote an end, e.g., in C++, a ; (end of a statement) or a } (end of a block). Such tokens are good candidates to look for.
+In panic mode, tokens are deleted from the token stream until one is found that the parser can use to continue its work. Most programming languages have symbols that denote an end, e.g., in C++, a ; (end of a statement) or a \} (end of a block). Such tokens are good candidates to look for.
 
 On the other hand, the error can be that the symbol we are looking for is missing. In this case, probably a lot of tokens are deleted before the parser can continue. This is not as bad as it sounds. Today, it is more important that a compiler is fast. In the event of an error, the developer looks at the first error message, fixes it, and restarts the compiler. This is quite different from using punch cards, where it was important to get as many error messages as possible, as the next run of the compiler would possibly be only on the next day.
 

@@ -1,0 +1,172 @@
+As we know from the previous chapter, we need a Token class and a Lexer class. Additionally, a TokenKind enumeration is required to give each token class a unique number. Having an all-inone header and implementation file does not scale, so let’s move the items. TokenKind can be used universally and is placed in the Basic component. The Token and Lexer classes belong to the Lexer component but are placed in different headers and implementation files.
+
+There are three different classes of tokens: keywords, punctuators, and tokens, which represent sets of many values. Examples are the CONST keyword, the; delimiter, and the ident token, respectively, each of which represents identifiers in the source. Each token needs a member name for the enumeration. Keywords and punctuators have natural display names that can be used for messages.
+
+Like in many programming languages, the keywords are a subset of the identifiers. To classify a token as a keyword, we need a keyword filter, which checks if the found identifier is indeed a keyword. This is the same behavior as in C or C++, where keywords are also a subset of identifiers. Programming languages evolve and new keywords may be introduced. As an example, the original K\&R C language had no enumerations defined with the enum keyword. Due to this, a flag indicating the language level of a keyword should be present.
+
+We collected several pieces of information, all of which belong to a member of the TokenKind enumeration: the label for the enumeration member, the spelling of punctuators, and a flag for keywords. For the diagnostic messages, we centrally store the information in a .def file called include/tinylang/Basic/TokenKinds.def, which looks like this. One thing to note is that keywords are prefixed with kw\_:
+
+\begin{cpp}
+#ifndef TOK
+#define TOK(ID)
+#endif
+#ifndef PUNCTUATOR
+#define PUNCTUATOR(ID, SP) TOK(ID)
+#endif
+#ifndef KEYWORD
+#define KEYWORD(ID, FLAG) TOK(kw_ ## ID)
+#endif
+
+TOK(unknown)
+TOK(eof)
+TOK(identifier)
+TOK(integer_literal)
+
+PUNCTUATOR(plus, "+")
+PUNCTUATOR(minus, "-")
+// …
+
+KEYWORD(BEGIN , KEYALL)
+KEYWORD(CONST , KEYALL)
+// …
+
+#undef KEYWORD
+#undef PUNCTUATOR
+#undef TOK
+\end{cpp}
+
+With these centralized definitions, it’s easy to create the TokenKind enumeration in the include/ tinylang/Basic/TokenKinds.h file. Again, the enumeration is put into its own namespace, tok:
+
+\begin{cpp}
+#ifndef TINYLANG_BASIC_TOKENKINDS_H
+#define TINYLANG_BASIC_TOKENKINDS_H
+namespace tinylang {
+    namespace tok {
+        enum TokenKind : unsigned short {
+#define TOK(ID) ID,
+#include "TokenKinds.def"
+        NUM_TOKENS
+    };
+\end{cpp}
+
+The pattern to fill the array should be familiar by now. The TOK macro is defined to only return ID. As a useful addition, we also define NUM\_TOKENS as the last member of the enumeration, which denotes the number of defined tokens:
+
+\begin{cpp}
+        const char *getTokenName(TokenKind Kind);
+        const char *getPunctuatorSpelling(TokenKind Kind);
+        const char *getKeywordSpelling(TokenKind Kind);
+    }
+}
+
+#endif
+\end{cpp}
+
+The implementation file, lib/Basic/TokenKinds.cpp, also uses the .def file to retrieve the names:
+
+\begin{cpp}
+#include "tinylang/Basic/TokenKinds.h"
+#include "llvm/Support/ErrorHandling.h"
+
+using namespace tinylang;
+
+static const char * const TokNames[] = {
+    #define TOK(ID) #ID,
+    #define KEYWORD(ID, FLAG) #ID,
+    #include "tinylang/Basic/TokenKinds.def"
+    nullptr
+};
+\end{cpp}
+
+The textual name of a token is derived from its enumeration label, ID. There are two particularities:
+
+\begin{itemize}
+\item
+First, some operators share the same prefix – for example, < and <=. When the current character we look at is <, then we must check the next character before deciding which token we found. Remember that the input needs to end with a null byte. Therefore, the next character can always be used if the current character is valid:
+
+\begin{cpp}
+    case '<':
+        if (*(CurPtr + 1) == '=')
+            formTokenWithChars(token, CurPtr + 2,
+                               tok::lessequal);
+        else
+            formTokenWithChars(token, CurPtr + 1, tok::less);
+        break;
+\end{cpp}
+
+\item
+The other detail is that there are far more keywords now. How can we handle this? A simple and fast solution is to populate a hash table with the keywords, which are all stored in the TokenKinds.def file. This can be done during the instantiation of the Lexer class. With this approach, it is also possible to support different levels of the language as the keywords can be filtered with the attached flag. Here, this flexibility is not needed yet. In the header file, the keyword filter is defined as follows, using an instance of llvm::StringMap for the hash table:
+
+\begin{cpp}
+    class KeywordFilter {
+        llvm::StringMap<tok::TokenKind> HashTable;
+        void addKeyword(StringRef Keyword,
+                        tok::TokenKind TokenCode);
+    public:
+        void addKeywords();
+\end{cpp}
+
+The getKeyword() method returns the token kind of the given string, or a default value if the string does not represent a keyword:
+
+\begin{cpp}
+    tok::TokenKind getKeyword(
+            StringRef Name,
+            tok::TokenKind DefaultTokenCode = tok::unknown) {
+        auto Result = HashTable.find(Name);
+        if (Result != HashTable.end())
+            return Result->second;
+        return DefaultTokenCode;
+    }
+};
+\end{cpp}
+
+In the implementation file, the keyword table is filled:
+
+\begin{cpp}
+void KeywordFilter::addKeyword(StringRef Keyword,
+                               tok::TokenKind TokenCode) {
+    HashTable.insert(std::make_pair(Keyword, TokenCode));
+}
+
+void KeywordFilter::addKeywords() {
+#define KEYWORD(NAME, FLAGS) \
+    addKeyword(StringRef(#NAME), tok::kw_##NAME);
+#include "tinylang/Basic/TokenKinds.def"
+}
+\end{cpp}
+
+\end{itemize}
+
+With the techniques you’ve just learned about, it’s not difficult to write an efficient lexer class. As compilation speed matters, many compilers use a handwritten lexer, with one example being clang.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
