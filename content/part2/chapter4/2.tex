@@ -1,21 +1,461 @@
+
+To generate IR code in SSA form from the AST, we can use an approach called AST numbering. The basic idea is that for each basic block, we store the current value of local variables written in this basic block.
+
+\begin{myNotic}{Note}
+The implementation is based on the paper Simple and Efficient Construction of Static Single Assignment Form, by Braun et al., International Conference on CompilerConstruction 2013 (CC 2013), Springer (see \url{http://individual.utoronto.ca/dfr/ece467/braun13.pdf}). In its presented form, it only works for IR code that has a structured controlled flow. The paper also describes the necessary extensions if you need to support arbitrary control flow – for example, a goto statement.
+\end{myNotic}
+
+Although it is simple, we will still need several steps. We will introduce the required data structure first, and after that, we will learn how to read and write values local to a basic block. Then, we will handle values that are used in several basic blocks and conclude by optimizing the created phi instructions.
+
 \mySubsubsection{4.2.1.}{Defining the data structure to hold values}
+
+We use the BasicBlockDef struct to hold the information for a single block:
+
+\begin{cpp}
+struct BasicBlockDef {
+    llvm::DenseMap<Decl *, llvm::TrackingVH<llvm::Value>> Defs;
+    // ...
+};
+\end{cpp}
+
+The llvm::Value LLVN class represents a value in SSA form. The Value class acts like a label on the result of a computation. It is created once, usually through an IR instruction, and then used. Various changes can occur during optimizations. For example, if the optimizer detects that the \%1 and \%2 values are always the same, then it can replace the use of \%2 with \%1. This changes the label but not the computation.
+
+To be aware of such changes, we cannot use the Value class directly. Instead, we need a value handle. There are value handles with different functionality. To track replacement, we can use the llvm::TrackingVH<> class. As a result, the Defs member maps a declaration of the AST (a variable or a formal parameter) to its current value. Now, we need to store this information for each basic block:
+
+\begin{cpp}
+llvm::DenseMap<llvm::BasicBlock *, BasicBlockDef> CurrentDef;
+\end{cpp}
+
+With this data structure, we are now able to handle local values.
 
 \mySubsubsection{4.2.2.}{Defining the data structure to hold values}
 
+To store the current value of a local variable in a basic block, we will create an entry in the maps:
+
+\begin{cpp}
+void writeLocalVariable(llvm::BasicBlock *BB, Decl *Decl,
+                        llvm::Value *Val) {
+    CurrentDef[BB].Defs[Decl] = Val;
+}
+\end{cpp}
+
+The lookup of a variable’s value is a bit more complicated because the value might not be in the basic block. In this case, we need to extend the search to the predecessors using a possible recursive search:
+
+\begin{cpp}
+llvm::Value *
+readLocalVariable(llvm::BasicBlock *BB, Decl *Decl) {
+    auto Val = CurrentDef[BB].Defs.find(Decl);
+    if (Val != CurrentDef[BB].Defs.end())
+        return Val->second;
+    return readLocalVariableRecursive(BB, Decl);
+}
+\end{cpp}
+
+The real work is searching the predecessors, which we’ll implement in the next section.
+
 \mySubsubsection{4.2.3.}{Searching the predecessor blocks for a value}
+
+If the current basic block we are looking at has only one predecessor, then we search there for the value of the variable. If the basic block has several predecessors, then we need to search for the value in all these blocks and combine the results. To illustrate this situation, you can look at the basic block with the condition of a WHILE statement from the previous section.
+
+This basic block has two predecessors – the one resulting from the statement before the WHILE statement and the one resulting from the branch for the end of the body of the WHILE loop. A variable that’s used in the condition should have some initial value and will most likely be changed in the body of the loop. So, we need to collect these definitions and create a phi instruction from it. The basic blocks that are created from the WHILE statement contain a cycle.
+
+Because we recursively search the predecessor blocks, we must break this cycle. To do so, we can use a simple trick: we can insert an empty phi instruction and record this as the current value of the variable. If we see this basic block again in our search, then we’ll see that the variable has a value that we can use. The search stops at this point. Once we’ve collected all the values, we must update the phi instruction.
+
+However, we will still face a problem. At the time of the lookup, not all predecessors of a basic block may be known. How can this happen? Look at the creation of the basic blocks for the WHILE statement. The IR for the condition of the loop is generated first. However, the branch from the end of the body that goes back to the basic block, which contains the condition, can only be added after the IR for the body is generated. This is because this basic block is not known earlier. If we need to read the value of a variable in the condition, then we are stuck, because not all predecessors are known.
+
+To solve this situation, we must do a little more:
+
+\begin{enumerate}
+\item
+First, we must attach a Sealed flag to the basic block.
+
+\item
+Then, we must define a basic block as sealed if we know all the predecessors of the basic block. If the basic block is not sealed and we need to look up the value of the variable not yet defined in this basic block, then we must insert an empty phi instruction and use it as the value.
+
+\item
+We also need to remember this instruction. If the block is later sealed, then we need to update the instruction with the real values. To implement this, we must add two more members to struct BasicBlockDef: the IncompletePhis map, which records the phi instructions we need later to update, and the Sealed flag, which indicates if the basic block is sealed:
+
+\begin{cpp}
+llvm::DenseMap<llvm::PHINode *, Decl *> IncompletePhis;
+unsigned Sealed : 1;
+\end{cpp}
+
+\item
+Then, the method can be implemented, as discussed at the beginning of this section:
+
+\begin{cpp}
+llvm::Value *CGProcedure::readLocalVariableRecursive(
+        llvm::BasicBlock *BB, Decl *Decl) {
+    llvm::Value *Val = nullptr;
+    if (!CurrentDef[BB].Sealed) {
+        llvm::PHINode *Phi = addEmptyPhi(BB, Decl);
+        CurrentDef[BB].IncompletePhis[Phi] = Decl;
+        Val = Phi;
+    } else if (auto *PredBB = BB->getSinglePredecessor()) {
+        Val = readLocalVariable(PredBB, Decl);
+    } else {
+        llvm::PHINode *Phi = addEmptyPhi(BB, Decl);
+        writeLocalVariable(BB, Decl, Phi);
+        Val = addPhiOperands(BB, Decl, Phi);
+    }
+    writeLocalVariable(BB, Decl, Val);
+    return Val;
+}
+\end{cpp}
+
+\item
+The addEmptyPhi() method inserts an empty phi instruction at the beginning of the basic block:
+
+\begin{cpp}
+llvm::PHINode *
+CGProcedure::addEmptyPhi(llvm::BasicBlock *BB,
+        Decl *Decl) {
+    return BB->empty()
+        ? llvm::PHINode::Create(mapType(Decl), 0,
+                                "", BB)
+        : llvm::PHINode::Create(mapType(Decl), 0,
+                                "", &BB->front());
+}
+\end{cpp}
+
+\item
+To add the missing operands to the phi instruction, first, we must search all the predecessors of the basic block and add the operand pair value and basic block to the phi instruction. Then, we must try to optimize the instruction:
+
+\begin{cpp}
+llvm::Value *
+CGProcedure::addPhiOperands(llvm::BasicBlock *BB,
+                            Decl *Decl,
+                            llvm::PHINode *Phi) {
+    for (auto *PredBB : llvm::predecessors(BB))
+        Phi->addIncoming(readLocalVariable(PredBB, Decl),
+                         PredBB);
+    return optimizePhi(Phi);
+}
+\end{cpp}
+
+\end{enumerate}
+
+This algorithm can generate unneeded phi instructions. One approach to optimize these will be implemented in the next section.
 
 \mySubsubsection{4.2.4.}{Optimizing the generated phi instructions}
 
+How can we optimize a phi instruction and why should we do it? Although the SSA form is advantageous for many optimizations, the phi instruction is often not interpreted by the algorithms and thus hinders the optimization in general. Therefore, the fewer phi instructions we generate, the better. Let’s take a closer look:
+
+\begin{enumerate}
+\item
+If the instruction has only one operand or all operands have the same value, then we replace the instruction with this value. If the instruction has no operand, then we replace the instruction with the special Undef value. Only if the instruction has two or more distinct operands do we have to keep the instruction:
+
+\begin{cpp}
+llvm::Value *
+CGProcedure::optimizePhi(llvm::PHINode *Phi) {
+    llvm::Value *Same = nullptr;
+    for (llvm::Value *V : Phi->incoming_values()) {
+        if (V == Same || V == Phi)
+            continue;
+        if (Same && V != Same)
+            return Phi;
+        Same = V;
+    }
+    if (Same == nullptr)
+        Same = llvm::UndefValue::get(Phi->getType());
+\end{cpp}
+
+
+\item
+Removing a phi instruction may lead to optimization opportunities in other phi instructions.
+Fortunately, LLVM keeps track of the users and the use of values (which is the use-def chain mentioned in the definition of SSA). We must search for all uses of the value in other phi instructions and try to optimize these instructions too:
+
+\begin{cpp}
+    llvm::SmallVector<llvm::PHINode *, 8> CandidatePhis;
+    for (llvm::Use &U : Phi->uses()) {
+        if (auto *P =
+                llvm::dyn_cast<llvm::PHINode>(U.getUser()))
+        if (P != Phi)
+            CandidatePhis.push_back(P);
+    }
+    Phi->replaceAllUsesWith(Same);
+    Phi->eraseFromParent();
+    for (auto *P : CandidatePhis)
+        optimizePhi(P);
+    return Same;
+}
+\end{cpp}
+
+\end{enumerate}
+
+If we want, we can improve this algorithm even further. Instead of always iterating the list of values for each phi instruction, we can pick and remember two distinct values. Then, in the optimizePhi function, we can check if these two values are still in the list of the phi instruction. If that is the case, then we know that there is nothing to optimize. But even without this optimization, this algorithm runs very fast, so we are not going to implement this now.
+
+We are almost done. The only thing we haven’t done is implement the operation to seal a basic block. We will do this in the next section.
+
 \mySubsubsection{4.2.5.}{Sealing a block}
+
+As soon as we know that all the predecessors of a block are known, we can seal the block. If the source language contains only structured statements such as tinylang, then it is easy to determine where a block can be sealed. Take another look at the basic blocks that are generated for the WHILE statement.
+
+The basic block that contains the condition can be sealed after the branch from the end of the body is added because this was the last missing predecessor. To seal a block, we can simply add the missing operands to the incomplete phi instructions and set the flag:
+
+\begin{cpp}
+void CGProcedure::sealBlock(llvm::BasicBlock *BB) {
+    for (auto PhiDecl : CurrentDef[BB].IncompletePhis) {
+        addPhiOperands(BB, PhiDecl.second, PhiDecl.first);
+    }
+    CurrentDef[BB].IncompletePhis.clear();
+    CurrentDef[BB].Sealed = true;
+}
+\end{cpp}
+
+With these methods, we are now ready to generate the IR code for expressions.
 
 \mySubsubsection{4.2.6.}{Creating the IR code for expressions}
 
+In general, you translate expressions, as shown in Chapter 2, The Structure of a Compiler. The only interesting part is how to access variables. The previous section treated local variables, but there are other kinds of variables we can consider. Let’s discuss what we need to do:
+
+\begin{itemize}
+\item
+For a local variable of the procedure, we use the readLocalVariable() and writeLocalVariable() methods from the previous section.
+
+\item
+For a local variable in an enclosing procedure, we need a pointer to the frame of the enclosing procedure. This will be handled later in this chapter.
+
+\item
+For a global variable, we generate load and store instructions.
+
+\item
+For a formal parameter, we have to differentiate between passing by value and passing by reference (the VAR parameter in tinylang). A parameter that’s passed by value is treated as a local variable, and a parameter passed by reference is treated as a global variable.
+\end{itemize}
+
+Putting it all together, we get the following code for reading a variable or formal parameter:
+
+\begin{cpp}
+llvm::Value *CGProcedure::readVariable(llvm::BasicBlock *BB,
+Decl *D) {
+    if (auto *V = llvm::dyn_cast<VariableDeclaration>(D)) {
+        if (V->getEnclosingDecl() == Proc)
+            return readLocalVariable(BB, D);
+        else if (V->getEnclosingDecl() == CGM.getModuleDeclaration()) {
+            return Builder.CreateLoad(mapType(D),
+            CGM.getGlobal(D));
+        } else
+        llvm::report_fatal_error("Nested procedures not yet supported");
+    } else if (auto *FP = llvm::dyn_cast<FormalParameterDeclaration>(D)) {
+        if (FP->isVar()) {
+            return Builder.CreateLoad(mapType(FP, false),
+            FormalParams[FP]);
+        } else
+        return readLocalVariable(BB, D);
+    } else
+        llvm::report_fatal_error("Unsupported declaration");
+}
+\end{cpp}
+
+Writing to a variable or formal parameter is symmetrical – we just need to exchange the method to read with the one to write and use a store instruction instead of a load instruction.
+
+Next, these functions are applied while generating the IR code for the functions.
+
 \mySubsubsection{4.2.7.}{Emitting the IR code for a function}
+
+Most of the IR code will live in a function. A function in IR code resembles a function in C. It specifies in the name, the types of parameters, the return value, and other attributes. To call a function in a different compilation unit, you need to declare the function. This is similar to a prototype in C. If you add basic blocks to the function, then you define the function. We will do all this in the next few sections, but first, we will discuss the visibility of symbol names.
+
 
 \mySubsubsection{4.2.8.}{Controlling visibility with linkage and name mangling}
 
+Functions (and also global variables) have a linkage style attached. With the linkage style, we define the visibility of a symbol name and what should happen if more than one symbol has the same name. The most basic linkage styles are private and external. A symbol with private linkage is only visible in the current compilation unit, while a symbol with external linkage is globally available.
+
+For a language without a proper module concept, such as C, this is adequate. With modules, we need to do more. Let’s assume that we have a module called Square that provides a Root() function and a Cube module, which also provides a Root() function. If the functions are private, then there is no problem. The function gets the name Root and private linkage. The situation is different if the function is exported so that it can be called from other modules. Using the function name alone is not enough, because this name is not unique.
+
+The solution is to tweak the name to make it globally unique. This is called name mangling. How this is done depends on the requirements and characteristics of the language. In our case, the base idea is to use a combination of the module and the function name to create a globally unique name. Using Square.Root as the name looks like an obvious solution, but it may lead to problems with assemblers as the dot may have a special meaning. Instead of using a delimiter between the name components, we can get a similar effect by prefixing the name components with their length: 6Square4Root. This is no legal identifier for LLVM, but we can fix this by prefixing the whole name with \_t (with t for tinylang): \_t6Square4Root. In this way, we can create unique names for exported symbols:
+
+\begin{cpp}
+std::string CGModule::mangleName(Decl *D) {
+    std::string Mangled("_t");
+    llvm::SmallVector<llvm::StringRef, 4> List;
+    for (; D; D = D->getEnclosingDecl())
+        List.push_back(D->getName());
+    while (!List.empty()) {
+        llvm::StringRef Name = List.pop_back_val();
+        Mangled.append(llvm::Twine(Name.size()).concat(Name).str());
+    }
+    return Mangled;
+}
+\end{cpp}
+
+If your source language supports type overloading, then you need to extend this scheme with type names. For example, to distinguish between the int root(int) and double root(double) C++ functions, the type of the parameter and the return value must be added to the function name.
+You also need to think about the length of the generated name since some linkers place restrictions on the length. With nested namespaces and classes in C++, the mangled names can be rather long.
+
+There, C++ defines a compression scheme to avoid repeating name components over and over again.
+
+Next, we’ll look at how to treat parameters.
+
+
 \mySubsubsection{4.2.9.}{Converting a type from an AST description into LLVM types}
+
+The parameters of a function also need some consideration. First, we need to map the types of the source language to an LLVM type. As tinylang currently has only two types, this is easy:
+
+\begin{cpp}
+llvm::Type *CGModule::convertType(TypeDeclaration *Ty) {
+    if (Ty->getName() == "INTEGER")
+        return Int64Ty;
+    if (Ty->getName() == "BOOLEAN")
+        return Int1Ty;
+    llvm::report_fatal_error("Unsupported type");
+}
+\end{cpp}
+
+Int64Ty, Int1Ty, and VoidTy are class members that hold the type representation of the i64, i1, and void LLVM types.
+
+For a formal parameter passed by reference, this is not enough. The LLVM type of this parameter is a pointer. However, when we want to use the value of the formal parameter, we need to know the underlying type. This is controlled by the HonorReference flag, which has a default value of true. We generalize the function and take the formal parameter into account:
+
+\begin{cpp}
+llvm::Type *CGProcedure::mapType(Decl *Decl,
+                                 bool HonorReference) {
+    if (auto *FP = llvm::dyn_cast<FormalParameterDeclaration>(
+    Decl)) {
+        if (FP->isVar() && HonorReference)
+        return llvm::PointerType::get(CGM.getLLVMCtx(),
+        /*AddressSpace=*/0);
+        return CGM.convertType(FP->getType());
+    }
+    if (auto *V = llvm::dyn_cast<VariableDeclaration>(Decl))
+        return CGM.convertType(V->getType());
+    return CGM.convertType(llvm::cast<TypeDeclaration>(Decl));
+}
+\end{cpp}
+
+With these helpers at hand, we can create the LLVM IR function.
 
 \mySubsubsection{4.2.10.}{Creating the LLVM IR function}
 
+To emit a function in LLVM IR, a function type is needed, which is similar to a prototype in C. Creating the function type involves mapping the types and then calling the factory method to create the function type:
+
+\begin{cpp}
+llvm::FunctionType *CGProcedure::createFunctionType(
+ProcedureDeclaration *Proc) {
+    llvm::Type *ResultTy = CGM.VoidTy;
+    if (Proc->getRetType()) {
+        ResultTy = mapType(Proc->getRetType());
+    }
+    auto FormalParams = Proc->getFormalParams();
+    llvm::SmallVector<llvm::Type *, 8> ParamTypes;
+    for (auto FP : FormalParams) {
+        llvm::Type *Ty = mapType(FP);
+        ParamTypes.push_back(Ty);
+    }
+    return llvm::FunctionType::get(ResultTy, ParamTypes,
+                                    /*IsVarArgs=*/false);
+}
+\end{cpp}
+
+Based on the function type, we also create the LLVM function. This associates the function type with the linkage and the mangled name:
+
+\begin{cpp}
+llvm::Function *
+CGProcedure::createFunction(ProcedureDeclaration *Proc,
+                            llvm::FunctionType *FTy) {
+    llvm::Function *Fn = llvm::Function::Create(
+        Fty, llvm::GlobalValue::ExternalLinkage,
+        CGM.mangleName(Proc), CGM.getModule());
+\end{cpp}
+
+The getModule() method returns the current LLVM module, which we’ll set up a bit later.
+
+With the function created, we can add some more information about it:
+
+\begin{itemize}
+\item
+First, we can give the parameter’s names. This makes the IR more readable.
+
+\item
+Second, we can add attributes to the function and to the parameters to specify some characteristics. As an example, we will do this for parameters passed by reference.
+\end{itemize}
+
+At the LLVM level, these parameters are pointers. But from the source language design, these are very restricted pointers. Analogous to references in C++, we always need to specify a variable for a VAR parameter. So, by design, we know that this pointer will never be null and that it is always dereferenceable, meaning that we can read the value that’s being pointed to without risking a general protection fault. Also, by design, this pointer cannot be passed around – in particular, there are no copies of the pointer that outlive the call to the function. Therefore, the pointer is said to not be captured.
+
+The llvm::AttributeBuilder class is used to build the set of attributes for a formal parameter.
+To get the storage size of a parameter type, we can simply query the data layout object:
+
+\begin{cpp}
+    for (auto [Idx, Arg] : llvm::enumerate(Fn->args())) {
+        FormalParameterDeclaration *FP =
+            Proc->getFormalParams()[Idx];
+        if (FP->isVar()) {
+            llvm::AttrBuilder Attr(CGM.getLLVMCtx());
+            llvm::TypeSize Sz =
+                CGM.getModule()->getDataLayout().getTypeStoreSize(
+                    CGM.convertType(FP->getType()));
+            Attr.addDereferenceableAttr(Sz);
+            Attr.addAttribute(llvm::Attribute::NoCapture);
+            Arg.addAttrs(Attr);
+        }
+        Arg.setName(FP->getName());
+    }
+    return Fn;
+}
+\end{cpp}
+
+With that, we have created the IR function. In the next section, we’ll add the basic blocks of the function body to the function.
+
 \mySubsubsection{4.2.11.}{Emitting the function body}
+
+We are almost done with emitting the IR code for a function! We only need to put the pieces together to emit a function, including its body:
+
+\begin{enumerate}
+\item
+Given a procedure declaration from tinylang, first, we will create the function type and the function:
+
+\begin{cpp}
+void CGProcedure::run(ProcedureDeclaration *Proc) {
+    this->Proc = Proc;
+    Fty = createFunctionType(Proc);
+    Fn = createFunction(Proc, Fty);
+\end{cpp}
+
+\item
+Next, we will create the first basic block of the function and make it the current one:
+
+\begin{cpp}
+    llvm::BasicBlock *BB = llvm::BasicBlock::Create(
+        CGM.getLLVMCtx(), "entry", Fn);
+    setCurr(BB);
+\end{cpp}
+
+\item
+Then, we must step through all formal parameters. To handle VAR parameters correctly, we need to initialize the FormalParams member (used in readVariable()). In contrast to local variables, formal parameters have a value in the first basic block, so we must make these values known:
+
+\begin{cpp}
+    for (auto [Idx, Arg] : llvm::enumerate(Fn->args())) {
+        FormalParameterDeclaration *FP =
+            Proc->getFormalParams()[Idx];
+        FormalParams[FP] = &Arg;
+        writeLocalVariable(Curr, FP, &Arg);
+    }
+\end{cpp}
+
+\item
+After this setup, we can call the emit() method to start generating the IR code for statements:
+
+\begin{cpp}
+    auto Block = Proc->getStmts();
+    emit(Proc->getStmts());
+\end{cpp}
+
+\item
+The last block after generating the IR code may not be sealed yet, so we must call sealBlock() now. A procedure in tinylang may have an implicit return, so we must also check if the last basic block has a proper terminator, and add one if not:
+
+\begin{cpp}
+    if (!Curr->getTerminator()) {
+        Builder.CreateRetVoid();
+    }
+    sealBlock(Curr);
+}
+\end{cpp}
+
+\end{enumerate}
+
+With that, we’ve finished generating IR code for functions. However, we still need to create the LLVM module, which holds all the IR code together. We’ll do this in the next section.
+
+
+
+
+
+
+
+

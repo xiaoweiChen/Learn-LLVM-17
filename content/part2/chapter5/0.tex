@@ -1,0 +1,52 @@
+
+High-level languages today usually make use of aggregate data types and object-oriented programming (OOP) constructs. LLVM IR has some support for aggregate data types, and OOP constructs such as classes must be implemented on their own. Adding aggregate types raises the question of how the parameters of an aggregate type are passed. Different platforms have different rules, and this is also reflected in the IR. Complying with the calling convention also ensures that system functions can be called.
+
+In this chapter, you will learn how to translate aggregate data types and pointers to LLVM IR and how to pass parameters to a function in a system-compliant way. You will also learn how to implement classes and virtual functions in LLVM IR.
+
+This chapter will cover the following topics:
+
+\begin{itemize}
+\item
+Working with arrays, structs, and pointers
+
+\item
+Getting the application binary interface (ABI) right
+
+\item
+Creating IR code for classes and virtual functions
+\end{itemize}
+
+By the end of the chapter, you will have acquired the knowledge to create LLVM IR for aggregate data types and OOP constructs. You will also know how to pass aggregate data types according to the rules of the platform.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

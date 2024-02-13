@@ -116,6 +116,180 @@ An in-depth treatment of SSA can be found in the book SSA-based Compiler Design,
 
 The next basic block is the body of the while loop:
 
+\begin{shell}
+while.body:
+    %b.loop = phi i32 [ %rem, %while.body ],
+                        [ %b, %entry ]
+    %a.loop = phi i32 [ %b.loop, %while.body ],
+                        [ %a, %entry ]
+    %rem = urem i32 %a.loop, %b.loop
+    %cmp1 = icmp eq i32 %rem, 0
+    br i1 %cmp1, label %return, label %while.body
+\end{shell}
+
+Inside the loop of gcd, the a and b parameters are assigned new values. If a register can be only written once, then this is not possible. The solution is to use the special phi instruction. The phi instruction has a list of basic blocks and values as parameters. A basic block presents the incoming edge from that basic block, and the value is the value from that basic block. At runtime, the phi instruction compares the label of the previously executed basic block with the labels in the parameter list.
+
+The value of the instruction is the value that’s associated with the label. For the first phi instruction, the value is the \%rem register if the previously executed basic block was while.body. The value is \%b if entry was the previously executed basic block. The values are the ones at the start of the basic block. The \%b.loop register gets a value from the first phi instruction. The same register is used in the parameter list of the second phi instruction, but the value is assumed to be the one before it is changed through the first phi instruction.
+
+After the loop’s body, the return value must be chosen:
+
+\begin{shell}
+return:
+    %retval = phi i32 [ %a, %entry ],
+                      [ %b.loop, %while.body ]
+    ret i32 %retval
+}
+\end{shell}
+
+Again, a phi instruction is used to select the desired value. The ret instruction not only ends this basic block but also denotes the end of this function at runtime. It has the return value as a parameter.
+
+There are some restrictions on the use of phi instructions. They must be the first instructions of a basic block. The first basic block is special: it has no previously executed block. Therefore, it cannot begin with a phi instruction.
+
+\begin{myTip}{LLVM IR reference}
+We’ve only touched the very basics of the LLVM IR. Please visit the LLVM Language Reference Manual at \url{https://llvm.org/docs/LangRef.html} to look up all the details.
+\end{myTip}
+
+The IR code itself looks a lot like a mix of C and assembly language. Despite this familiar style, it is not clear how we can easily generate the IR code from an AST. The phi instruction in particular looks difficult to generate. But don’t be scared – in the next section, we’ll implement a simple algorithm to just do that!
+
 \mySubsubsection{4.1.2.}{Learning about the load-and-store approach}
 
+All local optimizations in LLVM are based on the SSA form shown here. For global variables, memory references are used. The IR language knows load and store instructions, which are used to fetch and store those values. You can use this for local variables too. These instructions do not belong to the SSA form, and LLVM knows how to convert them into the required SSA form. Therefore, you can allocate memory slots for each local variable and use load and store instructions to change their value. All you need to remember is the pointer to the memory slot where a variable is stored. The clang compiler uses this approach.
+
+Let’s look at the IR code for load and store. Compile gcd.c again, but this time without enabling optimization:
+
+\begin{shell}
+$ clang --target=aarch64-linux-gnu -S -emit-llvm gcd.c
+\end{shell}
+
+The gcd function now looks different. This is the first basic block:
+
+\begin{shell}
+define i32 @gcd(i32, i32) {
+    %3 = alloca i32, align 4
+    %4 = alloca i32, align 4
+    %5 = alloca i32, align 4
+    %6 = alloca i32, align 4
+    store i32 %0, ptr %4, align 4
+    store i32 %1, ptr %5, align 4
+    %7 = load i32, ptr %5, align 4
+    %8 = icmp eq i32 %7, 0
+    br i1 %8, label %9, label %11
+\end{shell}
+
+The IR code now relies on the automatic numbering of registers and labels. The names of the parameters are not specified. Implicitly, they are \%0 and \%1. The basic block has no label, so 2 is assigned. The first few instructions allocate memory for the four 32-bit values. After that, the \%0 and \%1 parameters are stored in the memory slots pointed to by registers \%4 and \%5. To compare \%1 to 0, the value is explicitly loaded from the memory slot. With this approach, you do not need to use the phi instruction! Instead, you load a value from a memory slot, perform a calculation on it, and store the new value back in the memory slot. The next time you read the memory slot, you get the last computed value. All the other basic blocks for the gcd function follow this pattern.
+
+The advantage of using load and store instructions in this way is that it is fairly easy to generate the IR code. The disadvantage is that you generate a lot of IR instructions that LLVM will remove with the mem2reg pass in the very first optimization step, after converting the basic block into SSA form.
+
+Therefore, we generate the IR code in SSA form directly.
+We’ll start developing IR code generation by mapping the control flow to basic blocks.
+
 \mySubsubsection{4.1.3.}{Mapping the control flow to basic blocks}
+
+The conceptual idea of a basic block is that it is a linear sequence of instructions that are executed in that order. A basic block has exactly one entry at the beginning, and it ends with a terminator instruction, which is an instruction that transfers the control flow to another basic block, such as a branch instruction, a switch instruction, or a return instruction. See \url{https://llvm.org/docs/LangRef.html#terminator-instructions} for a complete list of terminator instructions. A basic block can begin with phi instructions, but inside a basic block, neither phi nor branch instructions are allowed. In other words, you can only enter a basic block at the first instruction, and you can only leave a basic block at the last instruction, which is the terminator instruction. It is not possible to branch to an instruction inside a basic block or to branch to another basic block from the middle of a basic block. Please note that a simple function call with the call instruction can occur inside a basic block. Each basic block has exactly one label, marking the first instruction of the basic block. Labels are the targets of branch instructions. You can view branches as directed edges between two basic blocks, resulting in the control flow graph (CFG). A basic block can have predecessors and successors. The first basic block of a function is special in the sense that no predecessors are allowed.
+
+As a consequence of these restrictions, control statements of the source language, such as WHILE and IF, produce several basic blocks. Let’s look at the WHILE statement. The condition of the WHILE statement controls if the loop body or the next statement is executed. The condition must be generated in a basic block of its own because there are two predecessors:
+
+\begin{itemize}
+\item
+The basic block resulting from the statement before WHILE
+
+\item
+The branch from the end of the loop body back to the condition
+\end{itemize}
+
+There are also two successors:
+
+\begin{itemize}
+\item
+The beginning of the loop body
+
+\item
+The basic block resulting from the statement following WHILE
+\end{itemize}
+
+The loop body itself has at least one basic block:
+
+\myGraphic{0.5}{content/part2/chapter4/images/1.png}{Figure 4.1 – The basic blocks of a WHILE statement}
+
+The IR code generation follows this structure. We store a pointer to the current basic block in the CGProcedure class and use an instance of llvm::IRBuilder<> to insert instructions into the basic block. First, we create the basic blocks:
+
+\begin{cpp}
+void emitStmt(WhileStatement *Stmt) {
+    llvm::BasicBlock *WhileCondBB = llvm::BasicBlock::Create(
+        CGM.getLLVMCtx(), "while.cond", Fn);
+    llvm::BasicBlock *WhileBodyBB = llvm::BasicBlock::Create(
+        CGM.getLLVMCtx(), "while.body", Fn);
+    llvm::BasicBlock *AfterWhileBB = llvm::BasicBlock::Create(
+        CGM.getLLVMCtx(), "after.while", Fn);
+\end{cpp}
+
+The Fn variable denotes the current function and getLLVMCtx() returns the LLVM context. Both are set later. We end the current basic block with a branch to the basic block, which will hold the condition:
+
+\begin{cpp}
+    Builder.CreateBr(WhileCondBB);
+\end{cpp}
+
+The basic block for the condition becomes the new current basic block. We generate the condition and end the block with a conditional branch:
+
+\begin{cpp}
+    setCurr(WhileCondBB);
+    llvm::Value *Cond = emitExpr(Stmt->getCond());
+    Builder.CreateCondBr(Cond, WhileBodyBB, AfterWhileBB);
+\end{cpp}
+
+Next, we generate the loop body. Finally, we add a branch back to the basic block of the condition:
+
+\begin{cpp}
+    setCurr(WhileBodyBB);
+    emit(Stmt->getWhileStmts());
+    Builder.CreateBr(WhileCondBB);
+\end{cpp}
+
+With that, we have generated the WHILE statement. Now that we’ve generated the WhileCondBB and Curr blocks, we can seal them:
+
+\begin{cpp}
+    sealBlock(WhileCondBB);
+    sealBlock(Curr);
+\end{cpp}
+
+The empty basic block for statements following WHILE becomes the new current basic block:
+
+\begin{cpp}
+    setCurr(AfterWhileBB);
+}
+\end{cpp}
+
+Following this schema, you can create an emit() method for each statement of the source language.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
