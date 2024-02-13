@@ -1,6 +1,266 @@
 
+Many modern programming languages support object orientation using classes. A class is a high-level language construct, and in this section, we will explore how we can map a class construct into LLVM IR.
+
 \mySubsubsection{5.4.1.}{Implementing single inheritance}
+
+A class is a collection of data and methods. A class can inherit from another class, potentially adding more data fields and methods, or overriding existing virtual methods. Let’s illustrate this with classes in Oberon-2, which is also a good model for tinylang. A Shape class defines an abstract shape with a color and an area:
+
+\begin{shell}
+TYPE Shape = RECORD
+                color: INTEGER;
+                PROCEDURE (VAR s: Shape) GetColor(): INTEGER;
+                PROCEDURE (VAR s: Shape) Area(): REAL;
+             END;
+\end{shell}
+
+The GetColor method only returns the color number:
+
+\begin{shell}
+PROCEDURE (VAR s: Shape) GetColor(): INTEGER;
+BEGIN RETURN s.color; END GetColor;
+\end{shell}
+
+The area of an abstract shape cannot be calculated, so this is an abstract method:
+
+\begin{shell}
+PROCEDURE (VAR s: Shape) Area(): REAL;
+BEGIN HALT; END;
+\end{shell}
+
+The Shape type can be extended to represent a Circle class:
+
+\begin{shell}
+TYPE Circle = RECORD (Shape)
+                radius: REAL;
+                PROCEDURE (VAR s: Circle) Area(): REAL;
+              END;
+\end{shell}
+
+For a circle, the area can be calculated:
+
+\begin{shell}
+PROCEDURE (VAR s: Circle) Area(): REAL;
+BEGIN RETURN 2 * radius * radius; END;
+\end{shell}
+
+The type can also be queried at runtime. If the shape is a variable of type Shape, then we can formulate a type test in this way:
+
+\begin{shell}
+IF shape IS Circle THEN (* … *) END;
+\end{shell}
+
+The different syntax aside, this works much like it does in C++. One notable difference to C++ is that the Oberon-2 syntax makes the implicit this pointer explicit, calling it the receiver of a method.
+
+The basic problems to solve are how to lay out a class in memory and how to implement the dynamic call of methods and run time-type checking. For the memory layout, this is quite easy. The Shape class has only one data member, and we can map it to a corresponding LLVM structure type:
+
+\begin{shell}
+@Shape = type { i64 }
+\end{shell}
+
+The Circle class adds another data member. The solution is to append the new data member at the end:
+
+\begin{shell}
+@Circle = type { i64, float }
+\end{shell}
+
+
+The reason is that a class can have many sub-classes. With this strategy, the data member of the common base class always has the same memory offset and also uses the same index to access the field via the getelementptr instruction.
+
+To implement the dynamic call of a method, we must further extend the LLVM structure. If the Area() function is called on a Shape object, then the abstract method is called, causing the application to halt. If it is called on a Circle object, then the corresponding method to calculate the area of a circle is called. On the other hand, the GetColor() function can be called for objects of both classes.
+
+The basic idea to implement this is to associate a table with function pointers with each object. Here, a table would have two entries: one for the GetColor() method and one for the Area() function. The Shape class and the Circle class each have such a table. The tables differ in the entry for the Area() function, which calls different code depending on the type of the object. This table is called the virtual method table, often abbreviated as vtable.
+
+The vtable alone is not useful. We must connect it with an object. To do so, we always add a pointer to the vtable as the first data member to the structure. At the LLVM level, this is what becomes of the @Shape type:
+
+\begin{shell}
+@Shape = type { ptr, i64 }
+\end{shell}
+
+The @Circle type is similarly extended.
+
+The resulting memory structure is shown in Figure 5.1:
+
+\myGraphic{0.7}{content/part2/chapter5/images/1.png}{Figure 5.1 – Memory layout of the classes and the virtual method tables}
+
+In terms of LLVM IR, the vtable for the Shape class can be visualized as the following, where the two pointers correspond to the GetColor() and GetArea() methods, as represented in Figure 5.1:
+
+\begin{shell}
+@ShapeVTable = constant { ptr, ptr } { GetColor(), Area() }
+\end{shell}
+
+
+Furthermore, LLVM does not have void pointers. Pointers to bytes are used instead. With the introduction of the hidden vtable field, there is now also the need to have a way to initialize it. In C++, this is part of calling the constructor. In Oberon-2, the field is initialized automatically when the memory is allocated.
+
+A dynamic call to a method is then executed with the following steps:
+
+\begin{enumerate}
+\item
+Calculate the offset of the vtable pointer via the getelementptr instruction.
+
+\item
+Load the pointer to the vtable.
+
+\item
+Calculate the offset of the function in the vtable.
+
+\item
+Load the function pointer.
+
+\item
+Indirectly call the function via the pointer with the call instruction.
+\end{enumerate}
+
+We can visualize the dynamic call to a virtual method, such as Area(), within LLVM IR, as well. First, we load a pointer from the corresponding designated location of the Shape class. The following load represents loading the pointer to the actual vtable for Shape:
+
+\begin{shell}
+// Load a pointer from the corresponding location.
+%ptrToShapeObj = load ptr, ...
+// Load the first element of the Shape class.
+%vtable = load ptr, ptr %ptrToShapeObj, align 8
+\end{shell}
+
+Following this, a getelementptr gets to the offset to call the Area() method:
+
+\begin{shell}
+%offsetToArea = getelementptr inbounds ptr, ptr %vtable, i64 1
+\end{shell}
+
+Then, we load the function pointer to Area():
+
+\begin{shell}
+%ptrToAreaFunction = load ptr, ptr %offsetToArea, align 8
+\end{shell}
+
+Finally, the Area() function is called through the pointer with the call, similar to the general steps that are highlighted previously:
+
+\begin{shell}
+%funcCall = call noundef float %ptrToAreaFunction(ptr noundef
+  nonnull align 8 dereferenceable(12) %ptrToShapeObj)
+\end{shell}
+
+As we can see, even in the case of a single inheritance, the LLVM IR that is generated can appear to be very verbose. Although the general procedure of generating a dynamic call to a method does not sound very efficient, most CPU architectures can perform this dynamic call with just two instructions.
+
+Moreover, to turn a function into a method, a reference to the object’s data is required. This is implemented by passing the pointer to the data as the first parameter of the method. In Oberon-2, this is the explicit receiver. In languages similar to C++, it is the implicit this pointer.
+
+With the vtable, we have a unique address in memory for each class. Does this help with the runtimetype test, too? The answer is that it helps only in a limited way. To illustrate the problem, let’s extend the class hierarchy with an Ellipse class, which inherits from the Circle class. This is not the classical is-a relationship in the mathematical sense.
+
+If we have a shape variable of the Shape type, then we could implement the shape IS Circle type test as a comparison of the vtable pointer stored in the shape variable with the vtable pointer of the Circle class. This comparison only results in true if shape has the exact Circle type.
+However, if shape is indeed of the Ellipse type, then the comparison returns false, even if an object of the Ellipse type can be used in all places where only an object of the Circle type is required.
+
+Clearly, we need to do more. The solution is to extend the virtual method table with runtime-type information. How much information you need to store depends on the source language. To support the runtime-type check, it is enough to store a pointer to the vtable of the base class, which then looks like in Figure 5.2:
+
+\myGraphic{0.7}{content/part2/chapter5/images/2.png}{Figure 5.2 – Class and vtable layout supporting simple type tests}
+
+If the test fails as described earlier, then the test is repeated with the pointer to the vtable of the base class. This is repeated until the test yields true or, if there is no base class, false. In contrast to calling a dynamic function, the type test is a costly operation because, in the worst-case scenario, the inheritance hierarchy is walked up to the root class.
+
+If you know the whole class hierarchy, then an efficient approach is possible: you number each member of the class hierarchy in a depth-first order. Then, the type test becomes compare-against-a-number or an interval, which can be done in constant time. In fact, that is the approach of LLVM’s own runtimetype test, which we learned about in the previous chapter.
+
+To couple runtime-type information with the vtable is a design decision, either mandated by the source language or just as an implementation detail. For example, if you need detailed runtime-type information because the source language supports reflection at runtime, and you have data types without a vtable, then coupling both is not a good idea. In C++, the coupling results in the fact that a class with virtual functions (and therefore no vtable) has no runtime-type data attached to it.
+
+Often, programming languages support interfaces which are a collection of virtual methods. Interfaces are important because they add a useful abstraction. We will look at possible implementations of interfaces in the next section.
 
 \mySubsubsection{5.4.2.}{Extending single inheritance with interfaces}
 
+Languages such as Java support interfaces. An interface is a collection of abstract methods, comparable to a base class with no data members and only abstract methods defined. Interfaces pose an interesting problem because each class implementing an interface can have the corresponding method at a different position in the vtable. The reason is simply that the order of function pointers in the vtable is derived from the order of the functions in the class definition in the source language. The definition of the interface is independent of this, and different orders are the norm.
+
+Because the methods defined in an interface can have a different order, we attach a table for each implemented interface to the class. For each method of the interface, this table can specify either the index of the method in the vtable or a copy of the function pointer stored in the vtable. If a method is called on the interface, then the corresponding vtable of the interface is searched, the pointer to the function is fetched, and the method is called. Adding two I1 and I2 interfaces to the Shape class results in the following layout:
+
+\myGraphic{0.7}{content/part2/chapter5/images/3.png}{Figure 5.3 – Layout of vtables for interfaces}
+
+The caveat lies in the fact that we have to find the right vtable. We can use an approach similar to the runtime-type test: we can perform a linear search through the list of interface vtables. We can assign a unique number to each interface (for example, a memory address) and identify this vtable using this number. The disadvantage of this scheme is obvious: calling a method through an interface takes much more time than calling the same method on the class. There is no easy mitigation for this problem.
+
+A good approach is to replace the linear search with a hash table. At compilation time, the interface that a class implements is known. Therefore, we can construct a perfect hash function, which maps the interface number to the vtable for the interface. A known unique number identifying an interface may be needed for the construction, so memory does not help, but there are other ways to compute a unique number. If the symbol names in the source are unique, then it is always possible to compute a cryptographic hash such as MD5 of the symbol, and use the hash as the number. The calculation occurs at compile time and therefore has no runtime cost.
+
+The result is much faster than the linear search and only takes constant time. Still, it involves several arithmetic operations on a number and is slower than the method call of a class type.
+
+Usually, interfaces also take part in runtime-type tests, making the list search even longer. Of course, if the hash-table approach is implemented, then it can also be used for the runtime-type test.
+
+Some languages allow for more than one parent class. This has some interesting challenges for the implementation, and we will master this in the next section.
+
 \mySubsubsection{5.4.3.}{Adding support for multiple inheritance}
+
+Multiple inheritance adds another challenge. If a class inherits from two or more base classes, then we need to combine the data members in such a way that they are still accessible from the methods. Like in the single inheritance case, the solution is to append all data members, including the hidden vtable pointers.
+
+The Circle class is not only a geometric shape but also a graphic object. To model this, we let the Circle class inherit from the Shape class and the GraphicObj class. In the class layout, the fields from the Shape class come first. Then, we append all fields of the GraphicObj class, including the hidden vtable pointer. After that, we add the new data members of the Circle class, resulting in the overall structure shown in Figure 5.4:
+
+\myGraphic{0.7}{content/part2/chapter5/images/4.png}{Figure 5.4 - Layout of classes and vtables with multiple inheritance}
+
+This approach has several implications. There can now be several pointers to the object. A pointer to the Shape or Circle class points to the top of the object, while a pointer to a GraphicObj class points to inside this object, the beginning of the embedded GraphicObj object. This has to be taken into account when comparing pointers.
+
+Calling a virtual method is also affected. If a method is defined in the GraphicObj class, then this method expects the class layout of the GraphicObj class. If this method is not overridden in the Circle class, then there a two possibilities. The easy case is if the method call is done with a pointer to a GraphicObj instance: in this case, you look up the address of the method in the vtable of the GraphicObj class and call the function. The more complicated case is if you call the method with a pointer to the Circle class. Again, you can look up the address of the method in the vtable of the Circle class. The called method expects a this pointer to be an instance of the GraphicObj class, so we have to adjust that pointer, too. We can do this because we know the offset of the GraphicObj class inside the Circle class.
+
+If a GrapicObj method is overridden in the Circle class, then nothing special needs to be done if the method is called through a pointer to the Circle class. However, if the method is called through a pointer to a GraphicObj instance, then we need to make another adjustment because the method needs a this pointer pointing to a Circle instance. At compilation time, we cannot compute this adjustment because we do not know whether or not this GraphicObj instance is part of a multiple inheritance hierarchy. To solve this, we store the adjustment we need to make to the this pointer before calling the method together with each function pointer in the vtable, as in Figure 5.5:
+
+\myGraphic{0.7}{content/part2/chapter5/images/5.png}{Figure 5.5 – vtable with adjustments to the this pointer}
+
+A method call now becomes the following:
+
+\begin{enumerate}
+\item
+Look up the function pointer in the vtable.
+
+\item
+Adjust the this pointer.
+
+\item
+Call the method.
+\end{enumerate}
+
+This approach can also be used for implementing interfaces. As an interface only has methods, each implemented interface adds a new vtable pointer to the object. This is easier to implement and most likely faster, but it adds overhead to each object instance.
+
+In the worst case, if your class has a single 64-bit data field but implements 10 interfaces, then your object requires 96 bytes in memory: eight bytes for the vtable pointer of the class itself, eight bytes for the data member, and 10 * 8 bytes for the vtable pointers of each interface.
+
+To support meaningful comparisons to objects and to perform runtime-type tests, we need to normalize a pointer to an object first. If we add an additional field to the vtable, containing an offset to the top of the object, then we can always adjust the pointer to point to the real object. In the vtable of the Circle class, this offset is 0, but not in the vtable of the embedded GraphicObj class. Of course, whether this needs to be implemented depends on the semantics of the source language.
+
+LLVM itself does not favor a special implementation of object-oriented features. As seen in this section, we can implement all approaches with the available LLVM data types. Additionally, as we have seen an example of LLVM IR with single inheritance, it is also worth noting that the IR can become more verbose when multiple inheritance is involved. If you want to try a new approach, then a good way is to do a prototype in C first. The required pointer manipulations are quickly translated to LLVM IR, but reasoning about the functionality is easier in a higher-level language.
+
+With the knowledge acquired in this section, you can implement the lowering of all OOP constructs commonly found in programming languages into LLVM IR in your own code generator. You have recipes on how to represent single inheritance, single inheritance with interface, or multiple inheritance in memory, and also how to implement type tests and how to look up virtual functions, which are the core concepts of OOP languages.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

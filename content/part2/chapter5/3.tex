@@ -1,0 +1,119 @@
+With the addition of arrays and records to the code generator, you can note that sometimes, the generated code does not execute as expected. The reason is that we have ignored the calling conventions of the platform so far. Each platform defines its own rules on how one function can call another function in the same program or library. These rules are summarized in the ABI documentation. Typical information includes the following:
+
+\begin{itemize}
+\item
+Are machine registers used for parameter passing? If yes, which ones?
+
+\item
+How are aggregates such as arrays and structs passed to a function?
+
+\item
+How are return values handled?
+\end{itemize}
+
+There is a wide variety in use. On some platforms, aggregates are always passed indirectly, meaning that a copy of the aggregate is placed on the stack and only a pointer to the copy is passed as a parameter. On other platforms, a small aggregate (say 128 or 256 bit wide) is passed in registers, and only above that threshold is indirect parameter passing used. Some platforms also use floating-point and vector registers for parameter passing, while others demand that floating-point values be passed in integer registers.
+
+Of course, this is all interesting low-level stuff. Unfortunately, it leaks into LLVM IR. At first, this is surprising. After all, we define the types of all parameters of a function in LLVM IR! It turns out that this is not enough. To understand this, let’s consider complex numbers. Some languages have built-in data types for complex numbers. For example, C99 has float \_Complex (among others). Older versions of C do not have complex number types, but you can easily define struct Complex \{ float re, im; \} and create arithmetic operations on this type. Both types can be mapped to the \{ float, float \} LLVM IR type.
+
+If the ABI now states that values of a built-in, complex-number type are passed in two floatingpoint registers, but user-defined aggregates are always passed indirectly, then the information given with the function is not enough for LLVM to decide how to pass this particular parameter. The unfortunate consequence is that we need to provide more information to LLVM, and this information is highly ABI-specific.
+
+There are two ways to specify this information to LLVM: parameter attributes and type rewriting.
+What you need to use depends on the target platform and the code generator. The most commonly used parameter attributes are the following:
+
+\begin{itemize}
+\item
+inreg specifies that the parameter is passed in a register
+
+\item
+byval specifies that the parameter is passed by value. The parameter must be a pointer type.
+A hidden copy is made of the pointed-to data, and this pointer is passed to the called function.
+
+\item
+zeroext and signext specify that the passed integer value should be zero or sign extended.
+
+\item
+sret specifies that this parameter holds a pointer to memory which is used to return an aggregate type from the function.
+\end{itemize}
+
+While all code generators support zeroext, signext, and sret attributes, only some support inreg and byval. An attribute can be added to the argument of a function with the addAttr() method. For example, to set the inreg attribute on argument Arg, you call the following:
+
+\begin{cpp}
+Arg->addAttr(llvm::Attribute::InReg);
+\end{cpp}
+
+To set multiple attributes, you can use the llvm::AttrBuilder class.
+
+The other way to provide additional information is to use type rewriting. With this approach, you disguise the original types. You can do the following:
+
+\begin{enumerate}
+\item
+Split the parameter. For example, instead of passing one complex argument, you can pass two floating-point arguments.
+
+\item
+Cast the parameter into a different representation, such as passing a floating-point value through an integer register.
+\end{enumerate}
+
+To cast between types without changing the bits of the value, you use the bitcast instruction. The bitcast instruction can operate on simple data types such as integers and floating-point values. When floating-point values are passed via an integer register, the floating-point value must be cast to an integer. In LLVM, a 32-bit floating-point value is expressed as float, and a 32-bit bit integer is expressed as i32. The floating point value can be bitcasted to an integer in the following way:
+
+\begin{shell}
+%intconv = bitcast float %fp to i32
+\end{shell}
+
+Additionally, the bitcast instruction requires that both types have the same size.
+Adding attributes to an argument or changing the type is not complicated. But how do you know what you need to implement? First of all, you should get an overview of the calling convention used on your target platform. For example, the ELF ABI on Linux is documented for each supported CPU platform, so you can look up the document and make yourself comfortable with it.
+
+There is also documentation about the requirements of the LLVM code generators. The source of information is the clang implementation, which you can find at \url{https://github.com/llvm/llvm-project/blob/main/clang/lib/CodeGen/TargetInfo.cpp}. This single file contains the ABI-specific actions for all supported platforms, and it is also where all information is collected.
+
+In this section, you learned to generate the IR for function calls to be compliant with the ABI of your platform. The next section covers the different ways to create IR for classes and virtual functions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

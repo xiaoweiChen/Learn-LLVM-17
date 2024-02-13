@@ -1,0 +1,153 @@
+For almost all applications, basic types such as INTEGER are not sufficient. For example, to represent mathematical objects such as a matrix or a complex number, you must construct new data types based on existing ones. These new data types are generally known as aggregate or composite.
+
+Arrays are a sequence of elements of the same type. In LLVM, arrays are always static, which means that the number of elements is constant. The tinylang type ARRAY [10] OF INTEGER or the C type long[10] is expressed in IR as follows:
+
+\begin{shell}
+[10 x i64]
+\end{shell}
+
+Structures are composites of different types. In programming languages, they are often expressed with named members. For example, in tinylang, a structure is written as RECORD x: REAL; color: INTEGER; y: REAL; END; and the same structure in C is struct { float x; long color; float y; };. In LLVM IR, only the type names are listed:
+
+\begin{shell}
+{ float, i64, float }
+\end{shell}
+
+To access a member, a numerical index is used. Like arrays, the first element has an index number of 0.
+
+The members of this structure are arranged in memory according to the specification in the data layout string. For more information regarding the data layout string within LLVM, Chapter 4, Basics of IR Code Generation, describes these details.
+
+Furthermore, if necessary, unused padding bytes are inserted. If you need to take control of the memory layout, then you can use a packed structure in which all elements have a 1-byte alignment. Within C, we utilize the \_\_packed\_\_ attribute in the struct in the following way:
+
+\begin{cpp}
+struct __attribute__((__packed__)) { float x; long long color; float y; }
+\end{cpp}
+
+Likewise, the syntax within LLVM IR is slightly different and looks like the following:
+
+\begin{shell}
+<{ float, i64, float }>
+\end{shell}
+
+Loaded into a register, arrays, and structs are treated as a unit. It is not possible to refer to a single element of array-valued register \%x as \%x[3], for example. This is due to the SSA form because it is not possible to tell if \%x[i] and \%x[j] refer to the same element or not. Instead, we need special instructions to extract and insert single-element values into an array. To read the second element, we use the following:
+
+\begin{shell}
+%el2 = extractvalue [10 x i64] %x, 1
+\end{shell}
+
+We can also update an element such as the first one:
+
+\begin{shell}
+%xnew = insertvalue [10 x i64] %x, i64 %el2, 0
+\end{shell}
+
+Both instructions work on structures, too. For example, to access the color member from register
+\%pt, you write the following:
+
+\begin{shell}
+%color = extractvalue { float, float, i64 } %pt, 2
+\end{shell}
+
+There exists an important limitation on both instructions: the index must be a constant. For structures, this is easily explainable. The index number is only a substitute for the name, and languages such as C have no notion of dynamically computing the name of a struct member. For arrays, it is simply that it can’t be implemented efficiently. Both instructions have value in specific cases when the number of elements is small and known. For example, a complex number could be modeled as an array of two floating-point numbers. It’s reasonable to pass this array around, and it is always clear which part of the array must be accessed during a computation.
+
+For general use in the front end, we have to resort to pointers to memory. All global values in LLVM are expressed as pointers. Let’s declare a @arr global variable as an array of eight i64 elements. This is the equivalent of the long arr[8] C declaration:
+
+\begin{shell}
+define i64 @second() {
+    %1 = load i64, ptr getelementptr inbounds ([8 x i64], ptr @arr, i64
+    0, i64 1)
+    ret i64 %1
+}
+\end{shell}
+
+The getelementptr instruction is the workhorse for address calculations. As such, it needs some more explanation. The first operand, [8 x i64], is the base type the instruction is operating on. The second operand, ptr @arr, specifies the base pointer. Please note the subtle difference here: we declared an array of eight elements, but because all global values are treated as pointers, we have a pointer to the array. In C syntax, we really work with long (*arr)[8]! The consequence is that we first have to dereference the pointer before we can index the element, such as arr[0][1] in C. The third operand, i64 0, dereferences the pointer, and the fourth operand, i64 1, is the element index. The result of this computation is the address of the indexed element. Please note that no memory is touched by this instruction.
+
+Except for structs, the index parameters do not need to be constant. Therefore, the getelementptr instruction can be used in a loop to retrieve the elements of an array. Structs are treated differently here: only constants can be used, and the type must be i32.
+
+With this knowledge, arrays are easily integrated into the code generator from Chapter 4, Basics of IR Code Generation. The convertType() method must be extended to create the type. If the Arr variable holds the type denoter of an array, and assuming the number of elements within an array is an integer literal, we then can add the following to the convertType() method to handle arrays:
+
+\begin{cpp}
+if (auto *ArrayTy =
+            llvm::dyn_cast<ArrayTypeDeclaration>(Ty)) {
+    llvm::Type *Component =
+        convertType(ArrayTy->getType());
+    Expr *Nums = ArrayTy->getNums();
+    uint64_t NumElements =
+        llvm::cast<IntegerLiteral>(Nums)
+            ->getValue()
+            .getZExtValue();
+    llvm::Type *T =
+        llvm::ArrayType::get(Component, NumElements);
+    // TypeCache is a mapping between the original
+    // TypeDeclaration (Ty) and the current Type (T).
+    return TypeCache[Ty] = T;
+}
+\end{cpp}
+
+This type can be used to declare global variables. For local variables, we need to allocate memory for the array. We do this in the first basic block of the procedure:
+
+\begin{cpp}
+for (auto *D : Proc->getDecls()) {
+    if (auto *Var =
+            llvm::dyn_cast<VariableDeclaration>(D)) {
+        llvm::Type *Ty = mapType(Var);
+        if (Ty->isAggregateType()) {
+            llvm::Value *Val = Builder.CreateAlloca(Ty);
+            // The following method requires a BasicBlock (Curr),
+            // a VariableDeclation (Var), and an llvm::Value (Val)
+            writeLocalVariable(Curr, Var, Val);
+        }
+    }
+}
+\end{cpp}
+
+To read and write an element, we have to generate the getelementptr instruction. This is added to the emitExpr() (reading a value) and emitStmt() (writing a value) methods. To read an element of an array, the value of the variable is read first. Then, the selectors of the variable are processed. For each index, the expression is evaluated and the value is stored. Based on this list, the address of the referenced element is calculated and the value is loaded:
+
+\begin{cpp}
+auto &Selectors = Var->getSelectors();
+for (auto I = Selectors.begin(), E = Selectors.end();
+        I != E; ) {
+    if (auto *IdxSel =
+            llvm::dyn_cast<IndexSelector>(*I)) {
+        llvm::SmallVector<llvm::Value *, 4> IdxList;
+        while (I != E) {
+            if (auto *Sel =
+                    llvm::dyn_cast<IndexSelector>(*I)) {
+                IdxList.push_back(emitExpr(Sel->getIndex()));
+                ++I;
+            } else
+                break;
+        }
+        Val = Builder.CreateInBoundsGEP(Val->getType(), Val, IdxList);
+        Val = Builder.CreateLoad(
+            Val->getType(), Val);
+    }
+    // . . . Check for additional selectors and handle
+    // appropriately by generating getelementptr and load.
+    else {
+        llvm::report_fatal_error("Unsupported selector");
+    }
+}
+\end{cpp}
+
+Writing to an array element uses the same code, with the exception that you do not generate a load instruction. Instead, you use the pointer as the target in a store instruction. For records, you use a similar approach. The selector for a record member contains the constant field index, named Idx. You convert this constant into a constant LLVM value:
+
+\begin{cpp}
+llvm::Value *FieldIdx = llvm::ConstantInt::get(Int32Ty, Idx);
+\end{cpp}
+
+Then you can use value in the Builder.CreateGEP() methods as in for arrays.
+
+Now, you should know how to translate aggregate data types to LLVM IR. Passing values of those types in a system-compliant way requires some care, and you will learn to implement it correctly in the next section.
+
+
+
+
+
+
+
+
+
+
+
+
+
