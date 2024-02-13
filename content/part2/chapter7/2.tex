@@ -1,0 +1,49 @@
+The LLVM core libraries optimize the IR that your compiler creates and turn it into object code. This giant task is broken down into separate steps called passes. These passes need to be executed in the right order, which is the objective of the pass manager.
+
+Why not hard-code the order of the passes? The user of your compiler usually expects your compiler to provide a different level of optimization. Developers prefer fast compilation speed over optimization during development time. The final application should run as fast as possible, and your compiler should be able to perform sophisticated optimizations, with longer a compilation time being accepted. A different level of optimization means a different number of optimization passes that need to be executed. Thus, as a compiler writer, you may want to provide your own passes to take advantage of your knowledge of your source language. For example, you may want to replace well-known library functions with inlined IR or even with the precomputed result. For C, such a pass is part of the LLVM libraries, but for other languages, you will need to provide it yourself. After introducing your own passes, you may need to re-order or add some passes. For example, if you know that the operation of your pass leaves some IR code unreachable, then you want to run the dead code removal pass additionally after your pass. The pass manager helps organize these requirements.
+
+A pass is often categorized by the scope on which it works:
+
+\begin{itemize}
+\item
+A module pass takes a whole module as input. Such a pass performs its work on the given module and can be used for intra-procedure operations inside this module.
+
+\item
+A call graph pass operates on the strongly connected components (SCCs) of a call graph. It traverses the components in bottom-up order.
+
+\item
+A function pass takes a single function as input and performs its work on this function only.
+
+\item
+A loop pass works on a loop inside a function.
+\end{itemize}
+
+Besides the IR code, a pass may also require, update, or invalidate some analysis results. A lot of different analyses are performed, for example, alias analysis or the construction of a dominator tree. If a pass requires such analyses, then it can request it from an analyses manager. If the information is already computed, then the cached result will be returned. Otherwise, the information will be computed. If a pass changes the IR code, then it needs to announce which analysis results are preserved so that the cached analysis information can be invalidated if necessary.
+
+Under the hood, the pass manager ensures the following:
+
+\begin{itemize}
+\item
+Analysis results are shared among passes. This requires keeping track of which pass requires which analysis and the state of each analysis. The goal is to avoid needless precomputation of analysis and to free up memory held by analysis results as soon as possible.
+
+\item
+The passes are executed in a pipeline fashion. For example, if several function passes should be executed in sequence, then the pass manager runs each of these function passes on the first function. Then, it will run all function passes on the second function, and so on. The underlying idea here is to improve the cache behavior as the compiler only performs transformations on a limited set of data (one IR function) and then moves on to the next limited set of data.
+\end{itemize}
+
+Let’s implement a new IR transformation pass and explore how to add it to the optimization pipeline.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

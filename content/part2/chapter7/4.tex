@@ -1,0 +1,305 @@
+Recall the ppprofiler pass that we developed as a plugin out of the LLVM tree in the Developing the ppprofiler pass as a plugin section. Here, we’ll learn how to use this pass with LLVM tools, such as opt and clang, as they can load plugins.
+
+Let’s look at opt first.
+
+\mySamllsection{Run the pass plugin in opt}
+
+To play around with the new plugin, you need a file containing LLVM IR. The easiest way to do this is to translate a C program, such as a basic “Hello World” style program:
+
+\begin{cpp}
+#include <stdio.h>
+
+int main(int argc, char *argv[]) {
+    puts("Hello");
+    return 0;
+}
+\end{cpp}
+
+Compile this file, hello.c, with clang:
+
+\begin{shell}
+$ clang -S -emit-llvm -O1 hello.c
+\end{shell}
+
+You will get a very simple IR file called hello.ll that contains the following code:
+
+\begin{shell}
+$ cat hello.ll
+@.str = private unnamed_addr constant [6 x i8] c"Hello\00",
+        align 1
+
+define dso_local i32 @main(
+            i32 noundef %0, ptr nocapture noundef readnone %1) {
+    %3 = tail call i32 @puts(
+                    ptr noundef nonnull dereferenceable(1) @.str)
+    ret i32 0
+}
+\end{shell}
+
+This is enough to test the pass.
+
+To run the pass, you have to provide a couple of arguments. First, you need to tell opt to load the shared library via the -{}-load-pass-plugin option. To run a single pass, you must specify the -{}-passes option. Using the hello.ll file as input, you can run the following:
+
+\begin{shell}
+$ opt --load-pass-plugin=./PPProfile.so \
+      --passes="ppprofiler" --stats hello.ll -o hello_inst.bc
+\end{shell}
+
+If statistic generation is enabled, you will see the following output:
+
+\begin{shell}
+===--------------------------------------------------------===
+... Statistics Collected ...
+===--------------------------------------------------------===
+
+1 ppprofiler - Number of instrumented functions.
+\end{shell}
+
+Otherwise, you will be informed that statistic collection is not enabled:
+
+\begin{shell}
+Statistics are disabled. Build with asserts or with
+-DLLVM_FORCE_ENABLE_STATS
+\end{shell}
+
+The bitcode file, hello\_inst.bc, is the result. You can turn this file into readable IR with the llvm-dis tool. As expected, you will see the calls to the \_\_ppp\_enter() and \_\_ppp\_exit() functions and a new constant for the name of the function:
+
+\begin{shell}
+$ llvm-dis hello_inst.bc -o –
+@.str = private unnamed_addr constant [6 x i8] c"Hello\00",
+        align 1
+@0 = private unnamed_addr constant [5 x i8] c"main\00",
+     align 1
+define dso_local i32 @main(i32 noundef %0,
+                            ptr nocapture noundef readnone %1) {
+    call void @__ppp_enter(ptr @0)
+    %3 = tail call i32 @puts(
+                    ptr noundef nonnull dereferenceable(1) @.str)
+    call void @__ppp_exit(ptr @0)
+    ret i32 0
+}
+\end{shell}
+
+This already looks good! It would be even better if we could turn this IR into an executable and run it. For this, you need to provide implementations for the called functions.
+
+Often, the runtime support for a feature is more complicated than adding that feature to the compiler itself. This is also true in this case. When the \_\_ppp\_enter() and \_\_ppp\_exit() functions are called, you can view this as an event. To analyze the data later, it is necessary to save the events. The basic data you would like to get is the event of the type, the name of the function and its address, and a timestamp. Without tricks, this is not as easy as it seems. Let’s give it a try.
+
+Create a file called runtime.c with the following content:
+
+\begin{enumerate}
+\item
+You need the file I/O, standard functions, and time support. This is provided by the following includes:
+
+\begin{cpp}
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+\end{cpp}
+
+\item
+For the file, a file descriptor is needed. Moreover, when the program finishes, that file descriptor should be closed properly:
+
+\begin{cpp}
+static FILE *FileFD = NULL;
+
+static void cleanup() {
+    if (FileFD == NULL) {
+        fclose(FileFD);
+        FileFD = NULL;
+    }
+}
+\end{cpp}
+
+\item
+To simplify the runtime, only a fixed name for the output is used. If the file is not open, then open the file and register the cleanup function:
+
+\begin{cpp}
+static void init() {
+    if (FileFD == NULL) {
+        FileFD = fopen("ppprofile.csv", "w");
+        atexit(&cleanup);
+    }
+}
+\end{cpp}
+
+\item
+You can call the clock\_gettime() function to get a timestamp. The CLOCK\_PROCESS\_CPUTIME\_ID parameter returns the time consumed by this process. Please note that not all systems support this parameter. You can use one of the other clocks, such as CLOCK\_REALTIME, if necessary:
+
+\begin{cpp}
+typedef unsigned long long Time;
+
+static Time get_time() {
+    struct timespec ts;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
+    return 1000000000L * ts.tv_sec + ts.tv_nsec;
+}
+\end{cpp}
+
+\item
+Now, it is easy to define the \_\_ppp\_enter() function. Just make sure the file is open, get the timestamp, and write the event:
+
+\begin{cpp}
+void __ppp_enter(const char *FnName) {
+    init();
+    Time T = get_time();
+    void *Frame = __builtin_frame_address(1);
+    fprintf(FileFD,
+            // "enter|name|clock|frame"
+            "enter|%s|%llu|%p\n", FnName, T, Frame);
+}
+\end{cpp}
+
+\item
+The \_\_ppp\_exit() function only differs in terms of the event type:
+
+\begin{cpp}
+void __ppp_exit(const char *FnName) {
+    init();
+    Time T = get_time();
+    void *Frame = __builtin_frame_address(1);
+    fprintf(FileFD,
+    // "exit|name|clock|frame"
+    "exit|%s|%llu|%p\n", FnName, T, Frame);
+}
+\end{cpp}
+
+\end{enumerate}
+
+That concludes a very simple implementation for runtime support. Before we try it, some remarks should be made about the implementation as it should be obvious that there are several problematic parts.
+
+First of all, the implementation is not thread-safe since there is only one file descriptor, and access to it is not protected. Trying to use this runtime implementation with a multithreaded program will most likely lead to disturbed data in the output file.
+
+In addition, we omitted checking the return value of the I/O-related functions, which can result in data loss.
+
+But most importantly, the timestamp of the event is not precise. Calling a function already adds overhead, but performing I/O operations in that function makes it even worse. In principle, you can match the enter and exit events for a function and calculate the runtime of the function. However, this value is inherently flawed because it may include the time required for I/O. In summary, do not trust the times recorded here.
+
+Despite all the flaws, this small runtime file allows us to produce some output. Compile the bitcode of the instrumented file together with the file containing the runtime code and run the resulting executable:
+
+\begin{shell}
+$ clang hello_inst.bc runtime.c
+$ ./a.out
+\end{shell}
+
+This results in a new file called ppprofile.csv in the directory that contains the following content:
+
+\begin{shell}
+$ cat ppprofile.csv
+enter|main|3300868|0x1
+exit|main|3760638|0x1
+\end{shell}
+
+Cool – the new pass and the runtime seem to work!
+
+\begin{myTip}{Specifying a pass pipeline}
+With the -{}-passes option, you can not only name a single pass but you can also describe a whole pipeline. For example, the default pipeline for optimization level 2 is named default<O2>. You can run the ppprofile pass before the default pipeline with the -{}-passes="ppprofile,default<O2>" argument. Please note that the pass names in such a pipeline description must be of the same type.
+\end{myTip}
+
+Now, let’s turn to using the new pass with clang.
+
+\mySamllsection{Plugging the new pass into clang}
+
+In the previous section, you learned how you can run a single pass using opt. This is useful if you need to debug a pass but for a real compiler, the steps should not be that involved.
+To achieve the best result, a compiler needs to run the optimization passes in a certain order. The LLVM pass manager has a default order for pass execution. This is also called the default pass pipeline.
+
+Using opt, you can specify a different pass pipeline with the –passes option. This is flexible but also complicated for the user. It also turns out that most of the time, you just want to add a new pass at very specific points, such as before optimization passes are run or at the end of the loop optimization processes. These points are called extension points. The PassBuilder class allows you to register a pass at an extension point. For example, you can call the registerPipelineStartEPCallback() method to add a pass to the beginning of the optimization pipeline. This is exactly the place we need for the ppprofiler pass. During optimization, functions may be inlined, and the pass will miss those inline functions. Instead, running the pass before the optimization passes guarantees that all functions are instrumented.
+
+To use this approach, you need to extend the RegisterCB() function in the pass plugin. Add the following code to the function:
+
+\begin{cpp}
+PB.registerPipelineStartEPCallback(
+    [](ModulePassManager &PM, OptimizationLevel Level) {
+        PM.addPass(PPProfilerIRPass());
+    });
+\end{cpp}
+
+Whenever the pass manager populates the default pass pipeline, it calls all the callbacks for the extension points. We simply add the new pass here.
+
+To load the plugin into clang, you can use the -fpass-plugin option. Creating the instrumented executable of the hello.c file now becomes almost trivial:
+
+\begin{shell}
+$ clang -fpass-plugin=./PPProfiler.so hello.c runtime.c
+\end{shell}
+
+Please run the executable and verify that the run creates the ppprofiler.csv file.
+
+\begin{myNotic}{Note}
+The runtime.c file is not instrumented because the pass checks that the special functions are not yet declared in a module.
+\end{myNotic}
+
+This already looks better, but does it scale to larger programs? Let’s assume you want to build an instrumented binary of the tinylang compiler for Chapter 5. How would you do this? You can pass compiler and linker flags on the CMake command line, which is exactly what we need.
+
+The flags for the C++ compiler are given in the CMAKE\_CXX\_FLAGS variable. Thus, specifying the following on the CMake command line adds the new pass to all compiler runs:
+
+\begin{shell}
+-DCMAKE_CXX_FLAGS="-fpass-plugin=<PluginPath>/PPProfiler.so"
+\end{shell}
+
+Please replace <PluginPath> with the absolute path to the shared library.
+
+Similarly, specifying the following adds the runtime.o file to each linker invocation. Again, please replace <RuntimePath> with the absolute path to a compiled version of runtime.c:
+
+\begin{shell}
+-DCMAKE_EXE_LINKER_FLAGS="<RuntimePath>/runtime.o"
+\end{shell}
+
+Of course, this requires clang as the build compiler. The fastest way to make sure clang is used as the build compiler is to set the CC and CXX environment variables accordingly:
+
+\begin{shell}
+export CC=clang
+export CXX=clang++
+\end{shell}
+
+With these additional options, the CMake configuration from Chapter 5 should run as usual.
+
+After building the tinylang executable, you can run it with the example Gcd.mod file. The ppprofile.csv file will also be written, this time with more than 44,000 lines! Of course, having such a dataset raises the question of if you can get something useful out of it. For example, getting a list of the 10 most often called functions, together with the call count and the time spent in the function, would be useful information. Luckily, on a Unix system, you have a couple of tools that can help. Let’s build a short pipeline that matches enter events with exit events, counts the functions, and displays the top 10 functions. The awk Unix tool helps with most of these steps.
+
+To match an enter event with an exit event, the enter event must be stored in the record associative map. When an exit event is matched, the stored enter event is looked up, and the new record is written. The emitted line contains the timestamp from the enter event, the timestamp from the exit event, and the difference between both. We must put this into the join.awk file:
+
+\begin{shell}
+BEGIN { FS = "|"; OFS = "|" }
+/enter/ { record[$2] = $0 }
+/exit/ { split(record[$2],val,"|")
+         print val[2], val[3], $3, $3-val[3], val[4] }
+\end{shell}
+
+To count the function calls and the execution, two associative maps, count and sum, are used. In count, the function calls are counted, while in sum, the execution time is added. In the end, the maps are dumped. You can put this into the avg.awk file:
+
+\begin{shell}
+BEGIN { FS = "|"; count[""] = 0; sum[""] = 0 }
+{ count[$1]++; sum[$1] += $4 }
+END { for (i in count) {
+        if (i != "") {
+            print count[i], sum[i], sum[i]/count[i], I }
+} }
+\end{shell}
+
+After running these two scripts, the result can be sorted in descending order, and then the top 10 lines can be taken from the file. However, we can still improve the function names, \_\_ppp\_enter() and \_\_ppp\_exit(), which are mangled and are therefore difficult to read. Using the llvm-cxxfilt tool, the names can be demangled. The demangle.awk script is as follows:
+
+\begin{shell}
+{ cmd = "llvm-cxxfilt " $4
+    (cmd) | getline name
+    close(cmd); $4 = name; print }
+\end{shell}
+
+To get the top 10 function calls, you can run the following:
+
+\begin{shell}
+$ cat ppprofile.csv | awk -f join.awk | awk -f avg.awk |\
+  sort -nr | head -15 | awk -f demangle.awk
+\end{shell}
+
+Here are some sample lines from the output:
+
+\begin{shell}
+446 1545581 3465.43 charinfo::isASCII(char)
+409 826261 2020.2 llvm::StringRef::StringRef()
+382 899471 2354.64
+            tinylang::Token::is(tinylang::tok::TokenKind) const
+171 1561532 9131.77 charinfo::isIdentifierHead(char)
+\end{shell}
+
+The first number is the call count of the function, the second is the cumulated execution time, and the third number is the average execution time. As explained previously, do not trust the time values, though the call counts should be accurate.
+
+So far, we’ve implemented a new instrumentation pass, either as a plugin or as an addition to LLVM, and we used it in some real-world scenarios. In the next section, we’ll explore how to set up an optimization pipeline in our compiler.
+
+

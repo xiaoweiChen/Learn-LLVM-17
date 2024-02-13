@@ -1,3 +1,379 @@
+
+A pass can perform arbitrary complex transformations on the LLVM IR. To illustrate the mechanics of adding a new pass, we add a pass that performs a simple instrumentation.
+
+To investigate the performance of a program, it is interesting to know how often functions are called, and how long they run. One way to collect this data is to insert counters into each function. This process is called instrumentation. We will write a simple instrumentation pass that inserts a special function call at the entry of each function and each exit point. These functions collect the timing information and write it into a file. As a result, we can create a very basic profiler that we’ll name the poor person’s profiler, or in short, ppprofiler. We will develop the new pass so that it can be used as a standalone plugin or added as a plugin to the LLVM source tree. After that, we’ll look at how the passes that come with LLVM are integrated into the framework.
+
 \mySubsubsection{7.3.1.}{Developing the ppprofiler pass as a plugin}
 
+In this section, we’ll look at creating a new pass as a plugin out of the LLVM tree. The goal of the new pass is to insert a call to the \_\_ppp\_enter() function at the entry of a function, and a call to the \_\_ppp\_exit() function before each return instruction. Only the name of the current function is passed as a parameter. The implementation of these functions can then count the number of calls and measure the elapsed time. We will implement this runtime support at the end of this chapter. We’ll examine how to develop the pass.
+
+We’ll store the source in the PPProfiler.cpp file. Follow these steps:
+
+\begin{enumerate}
+\item
+First, let’s include some files:
+
+\begin{cpp}
+#include "llvm/ADT/Statistic.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
+#include "llvm/Support/Debug.h"
+\end{cpp}
+
+\item
+To shorten the source, we’ll tell the compiler that we’re using the llvm namespace:
+
+\begin{cpp}
+using namespace llvm;
+\end{cpp}
+
+\item
+The built-in debug infrastructure of LLVM requires that we define a debug type, which is a string. This string is later shown in the printed statistic:
+
+\begin{cpp}
+#define DEBUG_TYPE "ppprofiler"
+\end{cpp}
+
+\item
+Next, we’ll define one counter variable with the ALWAYS\_ENABLED\_STATISTIC macro. The first parameter is the name of the counter variable, while the second parameter is the text that will be printed in the statistic:
+
+\begin{cpp}
+ALWAYS_ENABLED_STATISTIC(
+    NumOfFunc, "Number of instrumented functions.");
+\end{cpp}
+
+\begin{myNotic}{Note}
+Two macros can be used to define a counter variable. If you use the STATISTIC macro, then the statistic value will only be collected in a debug build if assertions are enabled, or if LLVM\_FORCE\_ENABLE\_STATS is set to ON on the CMake command line. If you use the ALWAYS\_ENABLED\_STATISTIC macro instead, then the statistic value is always collected. However, printing the statistics using the–stats command-line option only works with the former methods. If needed, you can print the collected statistics by calling the llvm::PrintStatistics(llvm::raw\_ostream) function.
+\end{myNotic}
+
+\item
+Next, we must declare the pass class in an anonymous namespace. The class inherits from the PassInfoMixin template. This template only adds some boilerplate code, such as a name() method. It is not used to determine the type of the pass. The run() method is called by LLVM when the pass is executed. We also need a helper method called instrument():
+
+\begin{cpp}
+namespace {
+class PPProfilerIRPass
+: public llvm::PassInfoMixin<PPProfilerIRPass> {
+public:
+    llvm::PreservedAnalyses
+    run(llvm::Module &M, llvm::ModuleAnalysisManager &AM);
+
+private:
+    void instrument(llvm::Function &F,
+                    llvm::Function *EnterFn,
+                    llvm::Function *ExitFn);
+};
+}
+\end{cpp}
+
+\item
+Now, let’s define how a function is instrumented. Besides the function to instrument, the functions to call are passed:
+
+\begin{cpp}
+void PPProfilerIRPass::instrument(llvm::Function &F,
+                                  Function *EnterFn,
+                                  Function *ExitFn) {
+\end{cpp}
+
+\item
+Inside the function, we update the statistic counter:
+
+\begin{cpp}
+    ++NumOfFunc;
+\end{cpp}
+
+\item
+To easily insert IR code, we need an instance of the IRBuilder class. We will set it to the first basic block, which is the entry block of the function:
+
+\begin{cpp}
+    IRBuilder<> Builder(&*F.getEntryBlock().begin());
+\end{cpp}
+
+\item
+Now that we have the builder, we can insert a global constant that holds the name of the function we wish to instrument:
+
+\begin{cpp}
+    GlobalVariable *FnName =
+        Builder.CreateGlobalString(F.getName());
+\end{cpp}
+
+\item
+Next, we will insert a call to the \_\_ppp\_enter() function, passing the name as an argument:
+
+\begin{cpp}
+    Builder.CreateCall(EnterFn->getFunctionType(), EnterFn,
+                        {FnName});
+\end{cpp}
+
+\item
+To call the \_\_ppp\_exit() function, we have to locate all return instructions. Conveniently, the insertion point that’s set by the calling SetInsertionPoint() function is before the instruction that’s passed as a parameter, so we can just insert the call at that point:
+
+\begin{cpp}
+    for (BasicBlock &BB : F) {
+        for (Instruction &Inst : BB) {
+            if (Inst.getOpcode() == Instruction::Ret) {
+                Builder.SetInsertPoint(&Inst);
+                Builder.CreateCall(ExitFn->getFunctionType(),
+                                   ExitFn, {FnName});
+            }
+        }
+    }
+}
+\end{cpp}
+
+\item
+Next, we will implement the run() method. LLVM passes in the module our pass works on and an analysis manager from which we can request analysis results if needed:
+
+\begin{cpp}
+PreservedAnalyses
+PPProfilerIRPass::run(Module &M,
+                      ModuleAnalysisManager &AM) {
+\end{cpp}
+
+\item
+There is a slight annoyance here: if the runtime module that contains the implementation of the \_\_ppp\_enter() and \_\_ppp\_exit() functions are instrumented, then we run into trouble because we create an infinite recursion. To avoid this, we must simply do nothing if one of those functions is defined:
+
+\begin{cpp}
+    if (M.getFunction("__ppp_enter") ||
+        M.getFunction("__ppp_exit")) {
+            return PreservedAnalyses::all();
+    }
+\end{cpp}
+
+\item
+Now, we are ready to declare the functions. There is nothing unusual here: first, the function type is created, followed by the functions:
+
+\begin{cpp}
+    Type *VoidTy = Type::getVoidTy(M.getContext());
+    PointerType *PtrTy =
+        PointerType::getUnqual(M.getContext());
+    FunctionType *EnterExitFty =
+        FunctionType::get(VoidTy, {PtrTy}, false);
+    Function *EnterFn = Function::Create(
+        EnterExitFty, GlobalValue::ExternalLinkage,
+        "__ppp_enter", M);
+    Function *ExitFn = Function::Create(
+        EnterExitFty, GlobalValue::ExternalLinkage,
+        "__ppp_exit", M);
+\end{cpp}
+
+\item
+All we need to do now is loop over all the functions of the module and instrument the found functions by calling our instrument() method. Of course, we need to ignore function declarations, which are just prototypes. There can also be functions without a name, which does not work well with our approach. We’ll filter out those functions too:
+
+\begin{cpp}
+    for (auto &F : M.functions()) {
+        if (!F.isDeclaration() && F.hasName())
+            instrument(F, EnterFn, ExitFn);
+    }
+\end{cpp}
+
+\item
+Lastly, we must declare that we did not preserve any analysis. This is most likely too pessimistic but we are on the safe side by doing so:
+
+\begin{cpp}
+    return PreservedAnalyses::none();
+}
+\end{cpp}
+
+The functionality of our new pass is now implemented. To be able to use our pass, we need to register it with the PassBuilder object. This can happen in two ways: statically or dynamically. If the plugin is statically linked, then it needs to provide a function called get<PluginName>PluginInfo(). To use dynamic linking, the llvmGetPassPluginInfo() function needs to be provided. In both cases, an instance of the PassPluginLibraryInfo struct is returned, which provides some basic information about a plugin. Most importantly, this structure contains a pointer to the function that registers the pass. Let’s add this to our source.
+
+\item
+In the RegisterCB() function, we register a Lambda function that is called when a pass pipeline string is parsed. If the name of the pass is ppprofiler, then we add our pass to the module pass manager. These callbacks will be expanded upon in the next section:
+
+\begin{cpp}
+void RegisterCB(PassBuilder &PB) {
+    PB.registerPipelineParsingCallback(
+        [](StringRef Name, ModulePassManager &MPM,
+           ArrayRef<PassBuilder::PipelineElement>) {
+            if (Name == "ppprofiler") {
+                MPM.addPass(PPProfilerIRPass());
+                return true;
+            }
+            return false;
+        });
+}
+\end{cpp}
+
+\item
+The getPPProfilerPluginInfo() function is called when the plugin is statically linked.
+It returns some basic information about the plugin:
+
+\begin{cpp}
+llvm::PassPluginLibraryInfo getPPProfilerPluginInfo() {
+    return {LLVM_PLUGIN_API_VERSION, "PPProfiler", "v0.1",
+        RegisterCB};
+}
+\end{cpp}
+
+\item
+Finally, if the plugin is dynamically linked, then the llvmGetPassPluginInfo() function is called when the plugin is loaded. However, when linking this code statically into a tool, you might end up with linker errors because that function could be defined in several source files.
+The solution is to guard the function with a macro:
+
+\begin{cpp}
+#ifndef LLVM_PPPROFILER_LINK_INTO_TOOLS
+extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
+llvmGetPassPluginInfo() {
+    return getPPProfilerPluginInfo();
+}
+#endif
+\end{cpp}
+
+\end{enumerate}
+
+With that, we’ve implemented the pass plugin. Before we look at how to use the new plugin, let’s examine what needs to be changed if we want to add the pass plugin to the LLVM source tree.
+
 \mySubsubsection{7.3.2.}{Adding the pass to the LLVM source tree}
+
+Implementing a new pass as a plugin is useful if you plan to use it with a precompiled clang, for example. On the other hand, if you write your own compiler, then there can be good reasons to add your new passes directly to the LLVM source tree. There are two different ways you can do this – as a plugin and as a fully integrated pass. The plugin approach requires fewer changes.
+
+\mySamllsection{Utilizing the plugin mechanisms inside the LLVM source tree}
+
+The source of passes that perform transformations on LLVM IR is located in the llvm-project/ llvm/lib/Transforms directory. Inside this directory, create a new directory called PPProfiler and copy the source file, PPProfiler.cpp, into it. You do not need to make any source changes!
+
+To integrate the new plugin into the build system, create a file called CMakeLists.txt with the following content:
+
+\begin{cmake}
+add_llvm_pass_plugin(PPProfiler PPProfiler.cpp)
+\end{cmake}
+
+Finally, in the CmakeLists.txt file in the parent directory, you need to include the new source directory by adding the following line:
+
+\begin{cmake}
+add_subdirectory(PPProfiler)
+\end{cmake}
+
+You are now ready to build LLVM with PPProfiler added. Change into the build directory of LLVM and manually run Ninja:
+
+\begin{shell}
+$ ninja install
+\end{shell}
+
+CMake will detect a change in the build description and rerun the configuration step. You will see an additional line:
+
+\begin{shell}
+-- Registering PPProfiler as a pass plugin (static build: OFF)
+\end{shell}
+
+This tells you that the plugin was detected and has been built as a shared library. After the installation step, you will find that shared library, PPProfiler.so, in the <install directory>/ lib directory.
+
+So far, the only difference to the pass plugin from the previous section is that the shared library is installed as part of LLVM. But you can also statically link the new plugin to the LLVM tools. To do this, you need to rerun the CMake configuration and add the -DLLVM\_PPPROFILER\_LINK\_INTO\_TOOLS=ON option on the command line. Look for this information from CMake to confirm the changed build option:
+
+\begin{shell}
+-- Registering PPProfiler as a pass plugin (static build: ON)
+\end{shell}
+
+After compiling and installing LLVM again, the following has changed:
+
+\begin{itemize}
+\item
+The plugin is compiled into the static library, libPPProfiler.a, and that library is installed in the <install directory>/lib directory.
+
+\item
+The LLVM tools, such as opt, are linked against that library.
+
+\item
+The plugin is registered as an extension. You can check that the <install directory>/ include/llvm/Support/Extension.def file now contains the following line:
+
+\begin{shell}
+HANDLE_EXTENSION(PPProfiler)
+\end{shell}
+\end{itemize}
+
+In addition, all tools that support this extension mechanism pick up the new pass. In the Creating an optimization pipeline section, you will learn how to do this in your compiler.
+
+This approach works well because the new source files reside in a separate directory, and only one existing file was changed. This minimizes the probability of merge conflicts if you try to keep your modified LLVM source tree in sync with the main repository.
+
+There are also situations where adding the new pass as a plugin is not the best way. The passes that LLVM provides use a different way for registration. If you develop a new pass and propose to add it to LLVM, and the LLVM community accepts your contribution, then you will want to use the same registration mechanism.
+
+\mySamllsection{Fully integrating the pass into the pass registry}
+
+To fully integrate the new pass into LLVM, the source of the plugin needs to be structured slightly differently. The main reason for this is that the constructor of the pass class is called from the pass registry, which requires the class interface to be put into a header file.
+
+Like before, you must put the new pass into the Transforms component of LLVM. Begin the implementation by creating the llvm-project/llvm/include/llvm/Transforms/ PPProfiler/PPProfiler.h header file. The content of that file is the class definition; put it into the llvm namespace. No other changes are required:
+
+\begin{cpp}
+#ifndef LLVM_TRANSFORMS_PPPROFILER_PPPROFILER_H
+#define LLVM_TRANSFORMS_PPPROFILER_PPPROFILER_H
+
+#include "llvm/IR/PassManager.h"
+
+namespace llvm {
+class PPProfilerIRPass
+    : public llvm::PassInfoMixin<PPProfilerIRPass> {
+public:
+    llvm::PreservedAnalyses
+    run(llvm::Module &M, llvm::ModuleAnalysisManager &AM);
+private:
+    void instrument(llvm::Function &F,
+                    llvm::Function *EnterFn,
+                    llvm::Function *ExitFn);
+};
+} // namespace llvm
+#endif
+\end{cpp}
+
+Next, copy the source file of the pass plugin, PPProfiler.cpp, into the new directory, llvmproject/llvm/lib/Transforms/PPProfiler. This file needs to be updated in the following way:
+
+\begin{enumerate}
+\item
+Since the class definition is now in a header file, you must remove the class definition from this file. At the top, add the \#include directive for the header file:
+
+\begin{cpp}
+#include "llvm/Transforms/PPProfiler/PPProfiler.h"
+\end{cpp}
+
+\item
+The llvmGetPassPluginInfo() function must be removed because the pass wasn’t built into a shared library of its own.
+\end{enumerate}
+
+As before, you also need to provide a CMakeLists.txt file for the build. You must declare the new pass as a new component:
+
+\begin{cmake}
+add_llvm_component_library(LLVMPPProfiler
+    PPProfiler.cpp
+
+    LINK_COMPONENTS
+    Core
+    Support
+)
+\end{cmake}
+
+After, like in the previous section, you need to include the new source directory by adding the following line to the CMakeLists.txt file in the parent directory:
+
+\begin{cmake}
+add_subdirectory(PPProfiler)
+\end{cmake}
+
+Inside LLVM, the available passes are kept in the llvm/lib/Passes/PassRegistry.def database file. You need to update this file. The new pass is a module pass, so we need to search inside the file for the section in which module passes are defined, for example, by searching for the MODULE\_PASS macro. Inside this section, add the following line:
+
+\begin{shell}
+MODULE_PASS("ppprofiler", PPProfilerIRPass())
+\end{shell}
+
+This database file is used in the llvm/lib/Passes/PassBuilder.cpp class. This file needs to include your new header file:
+
+\begin{cpp}
+#include "llvm/Transforms/PPProfiler/PPProfiler.h"
+\end{cpp}
+
+These are all required source changes based on the plugin version of the new pass.
+
+Since you created a new LLVM component, it is also necessary to add a link dependency in the llvm/ lib/Passes/CMakeLists.txt file. Under the LINK\_COMPONENTS keyword, you need to add a line with the name of the new component:
+
+\begin{shell}
+PPProfiler
+\end{shell}
+
+Et voilà – you are ready to build and install LLVM. The new pass, ppprofiler, is now available to all LLVM tools. It has been compiled into the libLLVMPPProfiler.a library and available in the build system as the PPProfiler component.
+
+So far, we have talked about how to create a new pass. In the next section, we will examine how to use the ppprofiler pass.
+
+
+
+
+
+
+
+
+

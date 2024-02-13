@@ -1,0 +1,75 @@
+LLVM comes with its own domain-specific language (DSL) called TableGen. It is used to generate C++ code for a wide range of use cases, thus reducing the amount of code a developer has to produce. The TableGen language is not a full-fledged programming language. It is only used to define records, which is a fancy word for a collection of names and values. To understand why such a restricted language is useful, let’s examine two examples.
+
+Typical data you need to define one machine instruction of a CPU is:
+
+\begin{itemize}
+\item
+The mnemonic of the instruction
+
+\item
+The bit pattern
+
+\item
+The number and types of operands
+
+\item
+Possible restrictions or side effects
+\end{itemize}
+
+It is easy to see that this data can be represented as a record. For example, a field named asmstring could hold the value of the mnemonic; say, "add". Also, a field named opcode could hold the binary representation of the instruction. Together, the record would describe an additional instruction. Each LLVM backend describes the instruction set in this way.
+
+Records are such a general concept that you can describe a wide variety of data with them. Another example is the definition of command-line options. A command-line option:
+
+\begin{itemize}
+\item
+Has a name
+
+\item
+May have an optional argument
+
+\item
+Has a help text
+
+\item
+May belong to a group of options
+\end{itemize}
+
+Again, this data can be easily seen as a record. Clang uses this approach for the command-line options of the Clang driver.
+
+\begin{myTip}{The TableGen language}
+In LLVM, the TableGen language is used for a variety of tasks. Large parts of a backend are written in the TableGen language; for example, the definition of a register file, all instructions with mnemonic and binary encoding, calling conventions, patterns for instruction selection, and scheduling models for instruction scheduling. Other uses of LLVM are the definition of intrinsic functions, the definition of attributes, and the definition of command-line options.
+
+You’ll find the Programmer’s Reference at \url{https://llvm.org/docs/TableGen/ProgRef.html} and the Backend Developer’s Guide at \url{https://llvm.org/docs/TableGen/BackGuide.html}.
+\end{myTip}
+
+To achieve this flexibility, the parsing and the semantics of the TableGen language are implemented in a library. To generate C++ code from the records, you need to create a tool that takes the parsed records and generates C++ code from it. In LLVM, that tool is called llvm-tblgen, and in Clang, it is called clang-tblgen. Those tools contain the code generators required by the project. But they can also be used to learn more about the TableGen language, which is what we’ll do in the next section.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
