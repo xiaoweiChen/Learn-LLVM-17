@@ -1,0 +1,40 @@
+
+With IR generation introduced in the previous chapters, you can already implement most of the functionality required in a compiler. In this chapter, we will look at some advanced topics that often arise in real-world compilers. For example, many modern languages make use of exception handling, so we’ll look at how to translate this into LLVM IR.
+
+To support the LLVM optimizer so that it can produce better code in certain situations, we must add additional type metadata to the IR code. Moreover, attaching debug metadata enables the compiler’s user to take advantage of source-level debug tools.
+
+In this chapter, we will cover the following topics:
+
+\begin{itemize}
+\item
+Throwing and catching exceptions: Here, you will learn how to implement exception handling in your compiler
+
+\item
+Generating metadata for type-based alias analysis: Here, you will attach additional metadata to LLVM IR, which helps LLVM to better optimize the code
+
+\item
+Adding debug metadata: Here, you will implement the support classes needed to add debug information to the generated IR code
+\end{itemize}
+
+By the end of this chapter, you will have learned about exception handling, as well as metadata for type-based alias analysis and debug information.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

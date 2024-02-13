@@ -88,7 +88,6 @@ In terms of LLVM IR, the vtable for the Shape class can be visualized as the fol
 @ShapeVTable = constant { ptr, ptr } { GetColor(), Area() }
 \end{shell}
 
-
 Furthermore, LLVM does not have void pointers. Pointers to bytes are used instead. With the introduction of the hidden vtable field, there is now also the need to have a way to initialize it. In C++, this is part of calling the constructor. In Oberon-2, the field is initialized automatically when the memory is allocated.
 
 A dynamic call to a method is then executed with the following steps:
