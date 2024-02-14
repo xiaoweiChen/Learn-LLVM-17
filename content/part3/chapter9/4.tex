@@ -1,5 +1,513 @@
+
+The lli tool is nothing more than a thin wrapper around LLVM APIs. In the first section, we learned that the ORC engine uses a layered approach. The ExecutionSession class represents a running JIT program. Besides other items, this class holds information such as used JITDylib instances. A JITDylib instance is a symbol table that maps symbol names to addresses. For example, these can be symbols defined in an LLVM IR file or the symbols of a loaded shared library.
+
+For executing LLVM IR, we do not need to create a JIT stack on our own, as the LLJIT class provides this functionality. You can also make use of this class when migrating from the older MCJIT implementation, as this class essentially provides the same functionality.
+
+To illustrate the functions of the LLJIT utility, we will be creating an interactive calculator application while incorporating JIT functionality. The main source code of our JIT calculator will be extended from the calc example from Chapter 2, The Structure of a Compiler.
+
+The primary idea behind our interactive JIT calculator will be as follows:
+
+\begin{enumerate}
+\item
+Allow the user to input a function definition, such as def $f(x) = x*2$.
+
+\item
+The function inputted by the user is then compiled by the LLJIT utility into a function – in
+this case, f.
+
+\item
+Allow the user to call the function they have defined with a numerical value: $f(3)$.
+
+\item
+Evaluate the function with the provided argument, and print the result to the console: 6.
+\end{enumerate}
+
+Before we discuss incorporating JIT functionality into the calculator source code, there are a few main differences to point out with respect to the original calculator example:
+
+\begin{itemize}
+\item
+Firstly, we previously only input and parsed functions beginning with the with keyword, rather than the def keyword described previously. For this chapter, we instead only accept function definitions beginning with def, and this is represented as a particular node in our abstract syntax tree (AST) class, known as DefDecl. The DefDecl class is aware of the arguments and their names it is defined with, and the function name is also stored within this class.
+
+\item
+Secondly, we also need our AST to be aware of function calls, to represent the functions that the LLJIT utility has consumed or JIT’ted. Whenever a user inputs the name of a function, followed by arguments enclosed in parentheses, the AST recognizes these as FuncCallFromDef nodes. This class essentially is aware of the same information as the DefDecl class.
+\end{itemize}
+
+Due to the addition of these two AST classes, it is obvious to expect that the semantic analysis, parser, and code generation classes will be adapted accordingly to handle the changes in our AST. One additional thing to note is the addition of a new data structure, called JITtedFunctions, which all these classes are aware of. This data structure is a map with the defined function names as keys, and the number of arguments a function is defined with is stored as values within the map. We will see later how this data structure will be utilized in our JIT calculator.
+
+For more details on the changes we have made to the calc example, the full source containing the changes from calc and this section’s JIT implementation can be found within the lljit source directory.
+
 \mySubsubsection{9.4.1.}{Integrating the LLJIT engine into the calculator}
+
+Firstly, let’s discuss how to set up the JIT engine in our interactive calculator. All of the implementation pertaining to the JIT engine exists within Calc.cpp, and this file has one main() loop for the execution of the program:
+
+\begin{enumerate}
+\item
+We must include several header files, aside from the headers including our code generation, semantic analyzer, and parser implementation. The LLJIT.h header defines the LLJIT class and the core classes of the ORC API. Next, the InitLLVM.h header is needed for the basic initialization of the tool, and the TargetSelect.h header is needed for the initialization of the native target. Finally, we also include the <iostream> C++ header to allow for user input into our calculator application:
+
+\begin{cpp}
+#include "CodeGen.h"
+#include "Parser.h"
+#include "Sema.h"
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/TargetSelect.h"
+#include <iostream>
+\end{cpp}
+
+\item
+Next, we add the llvm and llvm::orc namespaces to the current scope:
+
+\begin{cpp}
+using namespace llvm;
+using namespace llvm::orc;
+\end{cpp}
+
+\item
+Many of the calls from our LLJIT instance that we will be creating return an error type, Error. The ExitOnError class allows us to discard Error values that are returned by the calls from the LLJIT instance while logging to stderr and exiting the application. We declare a global ExitOnError variable as follows:
+
+\begin{cpp}
+ExitOnError ExitOnErr;
+\end{cpp}
+
+\item
+Then, we add the main() function, which initializes the tool and the native target:
+
+\begin{cpp}
+int main(int argc, const char **argv{
+    InitLLVM X(argc, argv);
+    InitializeNativeTarget();
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
+\end{cpp}
+
+\item
+We use the LLJITBuilder class to create an LLJIT instance, wrapped in the previously declared ExitOnErr variable in case an error occurs. A possible source of error would be that the platform does not yet support JIT compilation:
+
+\begin{cpp}
+auto JIT = ExitOnErr(LLJITBuilder().create());
+\end{cpp}
+
+\item
+Next, we declare our JITtedFunctions map that keeps track of the function definitions, as we have previously described:
+
+\begin{cpp}
+StringMap<size_t> JITtedFunctions;
+\end{cpp}
+
+\item
+To facilitate an environment that waits for user input, we add a while() loop and allow the user to type in an expression, saving the line that the user typed within a string called calcExp:
+
+\begin{cpp}
+    while (true) {
+        outs() << "JIT calc > ";
+        std::string calcExp;
+        std::getline(std::cin, calcExp);
+\end{cpp}
+
+\item
+Afterward, the LLVM context class is initialized, along with a new LLVM module. The module’s data layout is also set accordingly, and we also declare a code generator, which will be used to generate IR for the function that the user has defined on the command line:
+
+\begin{cpp}
+    std::unique_ptr<LLVMContext> Ctx = std::make_unique<LLVMContext>();
+    std::unique_ptr<Module> M = std::make_unique<Module>("JIT calc.expr", *Ctx);
+    M->setDataLayout(JIT->getDataLayout());
+    CodeGen CodeGenerator;
+\end{cpp}
+
+\item
+We must interpret the line that was entered by the user to determine if the user is defining a new function or calling a previous function that they have defined with an argument. A Lexer class is defined while taking in the line of input that the user has given. We will see that there are two main cases that the lexer cares about:.
+
+\begin{cpp}
+    Lexer Lex(calcExp);
+    Token::TokenKind CalcTok = Lex.peek();
+\end{cpp}
+
+\item
+The lexer can check the first token of the user input. If the user is defining a new function (represented by the def keyword, or the Token::KW\_def token), then we parse it and check its semantics. If the parser or the semantic analyzer detects any issues with the user-defined function, errors will be emitted accordingly, and the calculator program will halt. If no errors are detected from either the parser or the semantic analyzer, this means we have a valid AST data structure, DefDecl:
+
+\begin{cpp}
+    if (CalcTok == Token::KW_def) {
+        Parser Parser(Lex);
+        AST *Tree = Parser.parse();
+        if (!Tree || Parser.hasError()) {
+            llvm::errs() << "Syntax errors occured\n";
+            return 1;
+        }
+        Sema Semantic;
+        if (Semantic.semantic(Tree, JITtedFunctions)) {
+            llvm::errs() << "Semantic errors occured\n";
+            return 1;
+        }
+\end{cpp}
+
+\item
+We then can pass our newly constructed AST into our code generator to compile the IR for the function that the user has defined. The specifics of IR generation will be discussed afterward, but this function that compiles to the IR needs to be aware of the module and our JITtedFunctions map. After generating the IR, we can add this information to our LLJIT instance by calling addIRModule() and wrapping our module and context in a ThreadSafeModule class, to prevent these from being accessed by other concurrent threads:
+
+\begin{cpp}
+        CodeGenerator.compileToIR(Tree, M.get(), JITtedFunctions); ExitOnErr( JIT->addIRModule(ThreadSafeModule(std::move(M), std::move(Ctx))));
+\end{cpp}
+
+\item
+Instead, if the user is calling a function with parameters, which is represented by the Token::ident token, we also need to parse and semantically check if the user input is valid prior to converting the input into a valid AST. The parsing and checking here are slightly different compared to before, as it can include checks such as ensuring the number of parameters that the user has supplied to the function call matches the number of parameters that the function was originally defined with:
+
+\begin{cpp}
+    } else if (CalcTok == Token::ident) {
+        outs() << "Attempting to evaluate expression:\n";
+        Parser Parser(Lex);
+        AST *Tree = Parser.parse();
+        if (!Tree || Parser.hasError()) {
+            llvm::errs() << "Syntax errors occured\n";
+            return 1;
+        }
+        Sema Semantic;
+        if (Semantic.semantic(Tree, JITtedFunctions)) {
+            llvm::errs() << "Semantic errors occured\n";
+            return 1;
+        }
+\end{cpp}
+
+\item
+Once a valid AST is constructed for a function call, FuncCallFromDef, we get the name of the function from the AST, and then the code generator prepares to generate the call to the function that was previously added to the LLJIT instance. What occurs under the cover is that the user-defined function is regenerated as an LLVM call within a separate function that will be created that does the actual evaluation of the original function. This step requires the AST, the module, the function call name, and our map of function definitions:
+
+\begin{cpp}
+        llvm::StringRef FuncCallName = Tree->getFnName();
+        CodeGenerator.prepareCalculationCallFunc(Tree, M.get(), FuncCallName, JITtedFunctions);
+\end{cpp}
+
+\item
+After the code generator has completed its work to regenerate the original function and to create a separate evaluation function, we must add this information to the LLJIT instance. We create a ResourceTracker instance to track the memory that is allocated to the functions that have been added to LLJIT, as well as another ThreadSafeModule instance of the module and context. These two instances are then added to the JIT as an IR module:
+
+\begin{cpp}
+        auto RT = JIT->getMainJITDylib().createResourceTracker();
+        auto TSM = ThreadSafeModule(std::move(M), std::move(Ctx));
+        ExitOnErr(JIT->addIRModule(RT, std::move(TSM)));
+\end{cpp}
+
+\item
+The separate evaluation function is then queried for within our LLJIT instance through the lookup() method, by supplying the name of our evaluation function, calc\_expr\_func, into the function. If the query is successful, the address for the calc\_expr\_func function is cast to the appropriate type, which is a function that takes no arguments and returns a single integer. Once the function’s address is acquired, we call the function to generate the result of the user-defined function with the parameters they have supplied and then print the result to the console:
+
+\begin{cpp}
+        auto CalcExprCall = ExitOnErr(JIT->lookup("calc_expr_func"));
+        int (*UserFnCall)() = CalcExprCall.toPtr<int (*)()>();
+        outs() << "User defined function evaluated to:" << UserFnCall() << "\n";
+\end{cpp}
+
+\item
+After the function call is completed, the memory that was previously associated with our functions is then freed by ResourceTracker:
+
+\begin{cpp}
+ExitOnErr(RT->remove());
+\end{cpp}
+\end{enumerate}
+
 
 \mySubsubsection{9.4.2.}{Code generation changes to support JIT compilation via LLJIT}
 
+Now, let’s take a brief look at some of the changes we have made within CodeGen.cpp to support our JIT-based calculator:
+
+\begin{itemize}
+\item
+As previously mentioned, the code generation class has two important methods: one to compile the user-defined function into LLVM IR and print the IR to the console, and another to prepare the calculation evaluation function, calc\_expr\_func, which contains a call to the original user-defined function for evaluation. This second function also prints the resulting IR to the user:
+
+\begin{cpp}
+void CodeGen::compileToIR(AST *Tree, Module *M,
+                    StringMap<size_t> &JITtedFunctions) {
+    ToIRVisitor ToIR(M, JITtedFunctions);
+    ToIR.run(Tree);
+    M->print(outs(), nullptr);
+}
+
+void CodeGen::prepareCalculationCallFunc(AST *FuncCall,
+        Module *M, llvm::StringRef FnName,
+        StringMap<size_t> &JITtedFunctions) {
+    ToIRVisitor ToIR(M, JITtedFunctions);
+    ToIR.genFuncEvaluationCall(FuncCall);
+    M->print(outs(), nullptr);
+}
+\end{cpp}
+
+\item
+As noted in the preceding source, these code generation functions define a ToIRVisitor instance that takes in our module and a JITtedFunctions map to be used in its constructor upon initialization:
+
+\begin{cpp}
+class ToIRVisitor : public ASTVisitor {
+    Module *M;
+    IRBuilder<> Builder;
+    StringMap<size_t> &JITtedFunctionsMap;
+. . .
+
+public:
+    ToIRVisitor(Module *M,
+                StringMap<size_t> &JITtedFunctions)
+        : M(M), Builder(M->getContext()),
+        JITtedFunctionsMap(JITtedFunctions) {
+\end{cpp}
+
+\item
+Ultimately, this information is used to either generate IR or evaluate the function that the IR was previously generated for. When generating the IR, the code generator expects to see a DefDecl node, which represents defining a new function. The function name, along with the number of arguments it is defined with, is stored within the function definitions map:
+
+\begin{cpp}
+virtual void visit(DefDecl &Node) override {
+    llvm::StringRef FnName = Node.getFnName();
+    llvm::SmallVector<llvm::StringRef, 8> FunctionVars =
+    Node.getVars();
+    (JITtedFunctionsMap)[FnName] = FunctionVars.size();
+\end{cpp}
+
+\item
+Afterward, the actual function definition is created by the genUserDefinedFunction() call:
+
+\begin{cpp}
+    Function *DefFunc = genUserDefinedFunction(FnName);
+\end{cpp}
+
+\item
+Within genUserDefinedFunction(), the first step is to check if the function exists within the module. If it does not, we ensure that the function prototype exists within our map data structure. Then, we use the name and the number of arguments to construct a function that has the number of arguments that were defined by the user, and make the function return a single integer value:
+
+\begin{cpp}
+Function *genUserDefinedFunction(llvm::StringRef Name) {
+    if (Function *F = M->getFunction(Name))
+        return F;
+
+    Function *UserDefinedFunction = nullptr;
+    auto FnNameToArgCount = JITtedFunctionsMap.find(Name);
+    if (FnNameToArgCount != JITtedFunctionsMap.end()) {
+        std::vector<Type *> IntArgs(FnNameToArgCount->second,
+        Int32Ty);
+        FunctionType *FuncType = FunctionType::get(Int32Ty,
+        IntArgs, false);
+        UserDefinedFunction =
+            Function::Create(FuncType,
+            GlobalValue::ExternalLinkage, Name, M);
+    }
+    return UserDefinedFunction;
+}
+\end{cpp}
+
+\item
+After generating the user-defined function, a new basic block is created, and we insert our function into the basic block. Each function argument is also associated with a name that is defined by the user, so we also set the names for all function arguments accordingly, as well as generate mathematical operations that operate on the arguments within the function:
+
+\begin{cpp}
+    BasicBlock *BB = BasicBlock::Create(M->getContext(),
+    "entry", DefFunc);
+    Builder.SetInsertPoint(BB);
+    unsigned FIdx = 0;
+    for (auto &FArg : DefFunc->args()) {
+        nameMap[FunctionVars[FIdx]] = &FArg;
+        FArg.setName(FunctionVars[FIdx++]);
+    }
+    Node.getExpr()->accept(*this);
+};
+\end{cpp}
+
+\item
+When evaluating the user-defined function, the AST that is expected in our example is called a FuncCallFromDef node. First, we define the evaluation function and name it calc\_expr\_func (taking in zero arguments and returning one result):
+
+\begin{cpp}
+virtual void visit(FuncCallFromDef &Node) override {
+    llvm::StringRef CalcExprFunName = "calc_expr_func";
+    FunctionType *CalcExprFunTy = FunctionType::get(Int32Ty, {},
+    false);
+    Function *CalcExprFun = Function::Create(
+        CalcExprFunTy, GlobalValue::ExternalLinkage,
+        CalcExprFunName, M);
+\end{cpp}
+
+\item
+Next, we create a new basic block to insert calc\_expr\_func into:
+
+\begin{cpp}
+    BasicBlock *BB = BasicBlock::Create(M->getContext(),
+    "entry", CalcExprFun);
+    Builder.SetInsertPoint(BB);
+\end{cpp}
+
+\item
+Similar to before, the user-defined function is retrieved by genUserDefinedFunction(), and we pass the numerical parameters of the function call into the original function that we have just regenerated:
+
+\begin{cpp}
+    llvm::StringRef CalleeFnName = Node.getFnName();
+    Function *CalleeFn = genUserDefinedFunction(CalleeFnName);
+\end{cpp}
+
+\item
+Once we have the actual llvm::Function instance available, we utilize IRBuilder to create a call to the defined function and also return the result so that it is accessible when the result is printed to the user in the end:
+
+\begin{cpp}
+    auto CalleeFnVars = Node.getArgs();
+    llvm::SmallVector<Value *> IntParams;
+    for (unsigned i = 0, end = CalleeFnVars.size(); i != end;
+    ++i) {
+        int ArgsToIntType;
+        CalleeFnVars[i].getAsInteger(10, ArgsToIntType);
+        Value *IntParam = ConstantInt::get(Int32Ty, ArgsToIntType,
+        true);
+        IntParams.push_back(IntParam);
+    }
+    Builder.CreateRet(Builder.CreateCall(CalleeFn, IntParams,
+    "calc_expr_res"));
+};
+\end{cpp}
+\end{itemize}
+
 \mySubsubsection{9.4.3.}{Building an LLJIT-based calculator}
+
+Finally, to compile our JIT calculator source, we also need to create a CMakeLists.txt file with the build description, saved beside Calc.cpp and our other source files:
+
+\begin{enumerate}
+\item
+We set the minimal required CMake version to the number required by LLVM and give the project a name:
+
+\begin{cmake}
+cmake_minimum_required (VERSION 3.20.0)
+project ("jit")
+\end{cmake}
+
+\item
+The LLVM package needs to be loaded, and we add the directory of the CMake modules provided by LLVM to the search path. Then, we include the DetermineGCCCompatible and ChooseMSVCCRT modules, which check if the compiler has GCC-compatible commandline syntax and ensure that the same C runtime is used as by LLVM, respectively:
+
+\begin{cmake}
+find_package(LLVM REQUIRED CONFIG)
+list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR})
+include(DetermineGCCCompatible)
+include(ChooseMSVCCRT)
+\end{cmake}
+
+\item
+We also need to add definitions and the include path from LLVM. The used LLVM components are mapped to the library names with a function call:
+
+\begin{cmake}
+add_definitions(${LLVM_DEFINITIONS})
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+llvm_map_components_to_libnames(llvm_libs Core OrcJIT
+                                          Support native)
+\end{cmake}
+
+\item
+Afterward, if it is determined that the compiler has GCC-compatible command-line syntax, we also check if runtime type information and exception handling are enabled. If they are not enabled, C++ flags to turn off these features are added to our compilation accordingly:
+
+\begin{cmake}
+if(LLVM_COMPILER_IS_GCC_COMPATIBLE)
+    if(NOT LLVM_ENABLE_RTTI)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
+    endif()
+    if(NOT LLVM_ENABLE_EH)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
+    endif()
+endif()
+\end{cmake}
+
+\item
+Lastly, we define the name of the executable, the source files to compile, and the library to link against:
+
+\begin{cmake}
+add_executable (calc
+    Calc.cpp CodeGen.cpp Lexer.cpp Parser.cpp Sema.cpp)
+target_link_libraries(calc PRIVATE ${llvm_libs})
+\end{cmake}
+\end{enumerate}
+
+The preceding steps are all that is required for our JIT-based interactive calculator tool. Next, create and change into a build directory, and then run the following command to create and compile the application:
+
+\begin{shell}
+$ cmake –G Ninja <path to source directory>
+$ ninja
+\end{shell}
+
+This compiles the calc tool. We can then launch the calculator, start defining functions, and see how our calculator is able to evaluate the functions that we define.
+
+The following example invocations show the IR of the function that is first defined, and then the calc\_expr\_func function that is created to generate a call to our originally defined function in order to evaluate the function with whichever parameter passed into it:
+
+\begin{shell}
+$ ./calc
+JIT calc > def f(x) = x*2
+define i32 @f(i32 %x) {
+    entry:
+    %0 = mul nsw i32 %x, 2
+    ret i32 %0
+}
+
+JIT calc > f(20)
+Attempting to evaluate expression:
+define i32 @calc_expr_func() {
+entry:
+    %calc_expr_res = call i32 @f(i32 20)
+    ret i32 %calc_expr_res
+}
+
+declare i32 @f(i32)
+User defined function evaluated to: 40
+
+JIT calc > def g(x,y) = x*y+100
+define i32 @g(i32 %x, i32 %y) {
+entry:
+    %0 = mul nsw i32 %x, %y
+    %1 = add nsw i32 %0, 100
+    ret i32 %1
+}
+
+JIT calc > g(8,9)
+Attempting to evaluate expression:
+define i32 @calc_expr_func() {
+entry:
+    %calc_expr_res = call i32 @g(i32 8, i32 9)
+    ret i32 %calc_expr_res
+}
+
+declare i32 @g(i32, i32)
+User defined function evaluated to: 172
+\end{shell}
+
+That’s it! We have just created a JIT-based calculator application!
+
+As our JIT calculator is meant to be a simple example that describes how to incorporate LLJIT into our projects, it is worth noting that there are some limitations:
+
+\begin{itemize}
+\item
+This calculator does not accept negatives of decimal values
+
+\item
+ We cannot redefine the same function more than once
+\end{itemize}
+
+For the second limitation, this occurs by design, and so is expected and enforced by the ORC API itself:
+
+\begin{shell}
+$ ./calc
+JIT calc > def f(x) = x*2
+define i32 @f(i32 %x) {
+    entry:
+    %0 = mul nsw i32 %x, 2
+    ret i32 %0
+}
+JIT calc > def f(x,y) = x+y
+define i32 @f(i32 %x, i32 %y) {
+    entry:
+    %0 = add nsw i32 %x, %y
+    ret i32 %0
+}
+Duplicate definition of symbol '_f'
+\end{shell}
+
+Keep in mind that there are numerous other possibilities to expose names, besides exposing the symbols for the current process or from a shared library. For example, the StaticLibraryDefinitionGenerator class exposes the symbols found in a static archive and can be used in the DynamicLibrarySearchGenerator class.
+
+Furthermore, the LLJIT class has also an addObjectFile() method to expose the symbols of an object file. You can also provide your own DefinitionGenerator implementation if the existing implementations do not fit your needs.
+
+As we can see, using the predefined LLJIT class is convenient, but it can limit our flexibility. In the next section, we’ll look at how to implement a JIT compiler using the layers provided by the ORC API.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

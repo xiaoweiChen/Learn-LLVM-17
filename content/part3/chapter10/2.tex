@@ -1,5 +1,105 @@
+
+LLVM comes with a couple of sanitizers. These are passes that instrument the intermediate representation (IR) to check for certain misbehavior of an application. Usually, they require library support, which is part of the compiler-rt project. The sanitizers can be enabled in clang, which makes them very comfortable to use. To build the compiler-rt project, we can simply add the -DLLVM\_ENABLE\_RUNTIMES=compiler-rt CMake variable to the initial CMake configuration step when building LLVM.
+
+In the following sections, we will look at the address, memory, and thread sanitizers. First, we’ll look at the address sanitizer
+
 \mySubsubsection{10.2.1.}{Detecting memory access problems with the address sanitizer}
+
+You can use the address sanitizer to detect different types of memory access bugs within an application. This includes common errors such as using dynamically allocated memory after freeing it or writing to dynamically allocated memory outside the boundaries of the allocated memory.
+
+When enabled, the address sanitizer replaces calls to the malloc() and free() functions with its own version and instruments all memory accesses with a checking guard. Of course, this adds a lot of overhead to the application, and you will only use the address sanitizer during the testing phase of the application. If you are interested in the implementation details, then you can find the source of the pass in the llvm/lib/Transforms/Instrumentation/AddressSanitzer. cpp file and a description of the implemented algorithm at \url{https://github.com/google/sanitizers/wiki/AddressSanitizerAlgorithm}.
+
+Let’s run a short example to show the capabilities of the address sanitizer!
+
+The following example application, outofbounds.c, allocates 12 bytes of memory, but initializes 14 bytes:
+
+\begin{cpp}
+#include <stdlib.h>
+#include <string.h>
+
+int main(int argc, char *argv[]) {
+    char *p = malloc(12);
+    memset(p, 0, 14);
+    return (int)*p;
+}
+\end{cpp}
+
+You can compile and run this application without noticing a problem as this behavior is typical for this kind of error. Even in larger applications, such kinds of bugs can go unnoticed for a long time. However, if you enable the address sanitizer with the -fsanitize=address option, then the application stops after detecting the error.
+
+It is also useful to enable debug symbols with the –g options because it helps identify the location of the error in the source. The following code is an example of how to compile the source file with the address sanitizer and debug symbols enabled:
+
+\begin{shell}
+$ clang -fsanitize=address -g outofbounds.c -o outofbounds
+\end{shell}
+
+Now, you get a lengthy error report when running the application:
+
+\begin{shell}
+$ ./outofbounds
+==============================================================
+==1067==ERROR: AddressSanitizer: heap-buffer-overflow on address
+0x60200000001c at pc 0x00000023a6ef bp 0x7fffffffeb10 sp
+0x7fffffffe2d8
+WRITE of size 14 at 0x60200000001c thread T0
+    #0 0x23a6ee in __asan_memset /usr/src/contrib/llvm-project/
+compiler-rt/lib/asan/asan_interceptors_memintrinsics.cpp:26:3
+    #1 0x2b2a03 in main /home/kai/sanitizers/outofbounds.c:6:3
+    #2 0x23331f in _start /usr/src/lib/csu/amd64/crt1.c:76:7
+\end{shell}
+
+The report also contains detailed information about the memory content. The important information is the type of the error – heap buffer overflow, in this case – and the offending source line. To find the source line, you must look at the stack trace at location \#1, which is the last location before the address sanitizer intercepts the execution of the application. It shows line 6 in the outofbounds.c file, which is the line containing the call to memset(). This is the exact place where the buffer overflow happens.
+
+If you replace the line containing memset(p, 0, 14); in the outofbounds.c file with the following code, then you can introduce access to memory once you’ve freed the memory. You’ll need to store the source in the useafterfree.c file:
+
+\begin{cpp}
+memset(p, 0, 12);
+free(p);
+\end{cpp}
+
+Again, if you compile and run it, the sanitizer detects the use of the pointer after the memory is freed:
+
+\begin{shell}
+$ clang -fsanitize=address -g useafterfree.c -o useafterfree
+$ ./useafterfree
+==============================================================
+==1118==ERROR: AddressSanitizer: heap-use-after-free on address
+0x602000000010 at pc 0x0000002b2a5c bp 0x7fffffffeb00 sp
+0x7fffffffeaf8
+READ of size 1 at 0x602000000010 thread T0
+    #0 0x2b2a5b in main /home/kai/sanitizers/useafterfree.c:8:15
+    #1 0x23331f in _start /usr/src/lib/csu/amd64/crt1.c:76:7
+\end{shell}
+
+This time, the report points to line 8, which contains dereferencing of the p pointer.
+
+On x86\_64 Linux and macOS, you can also enable a leak detector. If you set the ASAN\_OPTIONS environment variable to detect\_leaks=1 before running the application, then you also get a report about memory leaks.
+
+On the command line, you can do this as follows:
+
+\begin{shell}
+$ ASAN_OPTIONS=detect_leaks=1 ./useafterfree
+\end{shell}
+
+The address sanitizer is very useful because it catches a category of bugs that are otherwise difficult to detect. The memory sanitizer does a similar task. We’ll examine its use cases in the next section.
 
 \mySubsubsection{10.2.2.}{Finding uninitialized memory accesses with the memory sanitizer}
 
+
+
+
+
+
 \mySubsubsection{10.2.3.}{Pointing out data races with the thread sanitizer}
+
+
+
+
+
+
+
+
+
+
+
+
+

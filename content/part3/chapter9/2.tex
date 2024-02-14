@@ -1,0 +1,65 @@
+
+So far, we have only looked at ahead-of-time (AOT) compilers. These compilers compile the whole application. The application can only run after the compilation is finished. If the compilation is performed at the runtime of the application, then the compiler is a JIT compiler. A JIT compiler has interesting use cases:
+
+\begin{itemize}
+\item
+Implementation of a virtual machine: A programming language can be translated to byte code with an AOT compiler. At runtime, a JIT compiler is used to compile the byte code to machine code. The advantage of this approach is that the byte code is hardware-independent, and thanks to the JIT compiler, there is no performance penalty compared to an AOT compiler. Java and C\# use this model today, but this is not a new idea: the USCD Pascal compiler from 1977 already used a similar approach.
+
+\item
+Expression evaluation: A spreadsheet application can compile often-executed expressions with a JIT compiler. For example, this can speed up financial simulations. The lldb LLVM debugger uses this approach to evaluate source expressions at debug time.
+
+\item
+Database queries: A database creates an execution plan from a database query. The execution plan describes operations on tables and columns, which leads to a query answer when executed. A JIT compiler can be used to translate the execution plan into machine code, which speeds up the execution of the query.
+\end{itemize}
+
+The static compilation model of LLVM is not as far away from the JIT model as one may think. The llc LLVM static compiler compiles LLVM IR into machine code and saves the result as an object file on disk. If the object file is not stored on disk but in memory, would the code be executable? Not directly, as references to global functions and global data use relocations instead of absolute addresses. Conceptually, a relocation describes how to calculate the address – for example, as an offset to a known address. If we resolve relocations into addresses, as the linker and the dynamic loader do, then we can execute the object code. Running the static compiler to compile IR code into an object file in memory, performing a link step on the in-memory object file, and running the code gives us a JIT compiler.
+
+The JIT implementation in the LLVM core libraries is based on this idea.
+During the development history of LLVM, there were several JIT implementations, with different feature sets. The latest JIT API is the On-Request Compilation (ORC) engine. In case you were curious about the acronym, it was the lead developer’s intention to invent yet another acronym based on Tolkien’s universe, after Executable and Linking Format (ELF) and Debugging Standard (DWARF) were already present.
+
+The ORC engine builds on and extends the idea of using the static compiler and a dynamic linker on the in-memory object file. The implementation uses a layered approach. The two basic levels are the compile layer and the link layer. On top of this sits a layer providing support for lazy compilation. A transformation layer can be stacked on top or below the lazy compilation layer, allowing the developer to add arbitrary transformations or simply to be notified of certain events. Moreover, this layered approach has the advantage that the JIT engine is customizable for diverse requirements. For example, a high-performance virtual machine may choose to compile everything upfront and make no use of the lazy compilation layer. On the other hand, other virtual machines will emphasize startup time and responsiveness to the user and will achieve this with the help of the lazy compilation layer.
+
+The older MCJIT engine is still available, and its API is derived from an even older, already-removed JIT engine. Over time, this API gradually became bloated, and it lacks the flexibility of the ORC API.
+
+The goal is to remove this implementation, as the ORC engine now provides all the functionality of the MCJIT engine, and new developments should use the ORC API.
+In the next section, we look at lli, the LLVM interpreter, and the dynamic compiler, before we dive into implementing a JIT compiler.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

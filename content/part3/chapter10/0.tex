@@ -1,0 +1,24 @@
+LLVM comes with a set of tools that helps you identify certain errors in your application. All these tools make use of the LLVM and clang libraries.
+
+In this chapter, you will learn how to instrument an application with sanitizers, as well as how to use the most common sanitizer to identify a wide range of bugs, after which you’ll implement fuzz testing for your application. This will help you identify bugs that are usually not found with unit testing. You will also learn how to identify performance bottlenecks in your application, run the static analyzer to identify problems normally not found by the compiler, and create your own clang-based tool, in which you can extend clang with new functionality.
+
+This chapter will cover the following topics:
+
+\begin{itemize}
+\item
+Instrumenting an application with sanitizers
+
+\item
+Finding bugs with libFuzzer
+
+\item
+Performance profiling with XRay
+
+\item
+Checking the source with the Clang Static Analyzer
+
+\item
+Creating your own clang-based tool
+\end{itemize}
+
+By the end of this chapter, you will know how to use the various LLVM and clang tools to identify a large category of errors in an application. You will also acquire the knowledge to extend clang with new functionality, for example, to enforce naming conventions or to add new source analysis.

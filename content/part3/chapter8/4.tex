@@ -1,3 +1,615 @@
+
+In the previous section, you defined records in the TableGen language. To make use of those records, you need to write your own TableGen backend that can produce C++ source code or do other things using the records as input.
+
+In Chapter 3, Turning the Source File into an Abstract Syntax Tree, the implementation of the Lexer class uses a database file to define tokens and keywords. Various query functions make use of that database file. Besides that, the database file is used to implement a keyword filter. The keyword filter is a hash map, implemented using the llvm::StringMap class. Whenever an identifier is found, the keyword filter is called to find out if the identifier is actually a keyword. If you take a closer look at the implementation using the ppprofiler pass from Chapter 6, Advanced IR Generation, then you will see that this function is called quite often. Therefore, it may be useful to experiment with different implementations to make that functionality as fast as possible.
+
+However, this is not as easy as it seems. For example, you can try to replace the lookup in the hash map with a binary search. This requires that the keywords in the database file are sorted. Currently, this seems to be the case, but during development, a new keyword might be added in the wrong place undetected. The only way to make sure that the keywords are in the right order is to add some code that checks the order at runtime.
+
+You can speed up the standard binary search by changing the memory layout. For example, instead of sorting the keywords, you can use the Eytzinger layout, which enumerates the search tree in breadthfirst order. This layout increases the cache locality of the data and therefore speeds up the search. Personally speaking, maintaining the keywords in breadth-first order manually in the database file is not possible.
+
+Another popular approach for searching is the generation of minimal perfect hash functions. If you insert a new key into a dynamic hash table such as llvm::StringMap, then that key might be mapped to an already occupied slot. This is called a key collision. Key collisions are unavoidable, and many strategies have been developed to mitigate that problem. However, if you know all the keys, then you can construct hash functions without key collisions. Such hash functions are called perfect. In case they do not require more slots than keys, then they are called minimal. Perfect hash functions can be generated efficiently – for example, with the gperf GNU tool.
+
+In summary, there is some incentive to be able to generate a lookup function from keywords. So, let’s move the database file to TableGen!
+
 \mySubsubsection{8.4.1.}{Defining data in the TableGen language}
 
+The TokenKinds.def database file defines three different macros. The TOK macro is used for tokens that do not have a fixed spelling – for example, for integer literals. The PUNCTUATOR macro is used for all kinds of punctuation marks and includes a preferred spelling. Lastly, the KEYWORD macro defines a keyword that is made up of a literal and a flag, which is used to indicate at which language level this literal is a keyword. For example, the thread\_local keyword was added to C++11.
+
+One way to express this in the TableGen language is to create a Token class that holds all the data. You can then add subclasses of that class to make the usage more comfortable. You also need a Flag class for flags defined together with a keyword. And last, you need a class to define a keyword filter. These classes define the basic data structure and can be potentially reused in other projects. Therefore, you create a Keyword.td file for it. Here are the steps:
+
+\begin{enumerate}
+\item
+A flag is modeled as a name and an associated value. This makes it easy to generate an enumeration from this data:
+
+\begin{shell}
+class Flag<string name, int val> {
+    string Name = name;
+    int Val = val;
+}
+\end{shell}
+
+\item
+The Token class is used as the base class. It just carries a name. Please note that this class has no parameters:
+
+\begin{shell}
+class Token {
+    string Name;
+}
+\end{shell}
+
+\item
+The Tok class has the same function as the corresponding TOK macro from the database file. it represents a token without fixed spellings. It derives from the base class, Token, and just adds initialization for the name:
+
+\begin{shell}
+class Tok<string name> : Token {
+    let Name = name;
+}
+\end{shell}
+
+\item
+In the same way, the Punctuator class resembles the PUNCTUATOR macro. It adds a field for the spelling of the token:
+
+\begin{shell}
+class Punctuator<string name, string spelling> : Token {
+    let Name = name;
+    string Spelling = spelling;
+}
+\end{shell}
+
+\item
+And last, the Keyword class needs a list of flags:
+
+\begin{shell}
+class Keyword<string name, list<Flag> flags> : Token {
+    let Name = name;
+    list<Flag> Flags = flags;
+}
+\end{shell}
+
+\item
+With these definitions in place, you can now define a class for the keyword filter, called TokenFilter. It takes a list of tokens as a parameter:
+
+\begin{shell}
+class TokenFilter<list<Token> tokens> {
+    string FunctionName;
+    list<Token> Tokens = tokens;
+}
+\end{shell}
+\end{enumerate}
+
+With these class definitions, you are certainly able to capture all the data from the TokenKinds. def database file. The TinyLang language does not utilize the flags, since there is only this version of the language. Real-world languages such as C and C++ have undergone a couple of revisions, and they usually require flags. Therefore, we use keywords from C and C++ as an example. Let’s create a KeywordC.td file, as follows:
+
+\begin{enumerate}
+\item
+First, you include the class definitions created earlier:
+
+\begin{shell}
+Include "Keyword.td"
+\end{shell}
+
+\item
+Next, you define flags. The value is the binary value of the flag. Note how the !or operator is used to create a value for the KEYALL flag:
+
+\begin{shell}
+def KEYC99 : Flag<"KEYC99", 0x1>;
+def KEYCXX : Flag<"KEYCXX", 0x2>;
+def KEYCXX11: Flag<"KEYCXX11", 0x4>;
+def KEYGNU : Flag<"KEYGNU", 0x8>;
+def KEYALL : Flag<"KEYALL",
+                    !or(KEYC99.Val, KEYCXX.Val,
+                        KEYCXX11.Val , KEYGNU.Val)>;
+\end{shell}
+
+\item
+There are tokens without a fixed spelling – for example, a comment:
+
+\begin{shell}
+def : Tok<"comment">;
+\end{shell}
+
+\item
+Operators are defined using the Punctuator class, as in this example:
+
+\begin{shell}
+def : Punctuator<"plus", "+">;
+def : Punctuator<"minus", "-">;
+\end{shell}
+
+\item
+Keywords need to use different flags:
+
+\begin{shell}
+def kw_auto: Keyword<"auto", [KEYALL]>;
+def kw_inline: Keyword<"inline", [KEYC99,KEYCXX,KEYGNU]>;
+def kw_restrict: Keyword<"restrict", [KEYC99]>;
+\end{shell}
+
+\item
+And last, here’s the definition of the keyword filter:
+
+\begin{shell}
+def : TokenFilter<[kw_auto, kw_inline, kw_restrict]>;
+\end{shell}
+\end{enumerate}
+
+Of course, this file does not include all tokens from C and C++. However, it demonstrates all possible usages of the defined TableGen classes.
+
+Based on these TableGen files, you’ll implement a TableGen backend in the next section.
+
 \mySubsubsection{8.4.2.}{Implementing a TableGen backend}
+
+Since parsing and creation of records are done through an LLVM library, you only need to care about the backend implementation, which consists mostly of generating C++ source code fragments based on the information in the records. First, you need to be clear about what source code to generate before you can put it into the backend.
+
+\mySamllsection{Sketching the source code to be generated}
+
+The output of the TableGen tool is a single file containing C++ fragments. The fragments are guarded by macros. The goal is to replace the TokenKinds.def database file. Based on the information in the TableGen file, you can generate the following:
+
+\begin{enumerate}
+\item
+The enumeration members used to define flags. The developer is free to name the type; however, it should be based on the unsigned type. If the generated file is named TokenKinds.inc, then the intended use is this:
+
+\begin{cpp}
+enum Flags : unsigned {
+    #define GET_TOKEN_FLAGS
+    #include "TokenKinds.inc"
+}
+\end{cpp}
+
+\item
+The TokenKind enumeration, and the prototypes and definitions of the getTokenName(), getPunctuatorSpelling(), and getKeywordSpelling() functions. This code replaces the TokenKinds.def database file, most of the TokenKinds.h include file and the TokenKinds.cpp. source file.
+
+\item
+A new lookupKeyword() function that can be used instead of the current implementation using the llvm::StringMap. type. This is the function you want to optimize.
+\end{enumerate}
+
+Knowing what you want to generate, you can now turn to implementing the backend.
+
+\mySamllsection{Creating a new TableGen tool}
+
+A simple structure for your new tool is to have a driver that evaluates the command-line options and calls the generation functions and the actual generator functions in a different file. Let’s call the driver file TableGen.cpp and the file containing the generator TokenEmitter.cpp. You also need a TableGenBackends.h header file. Let’s begin the implementation with the generation of the C++ code in the TokenEmitter.cpp file:
+
+\begin{enumerate}
+\item
+As usual, the file begins with including the required headers. The most important one is llvm/ TableGen/Record.h, which defines a Record class, used to hold records generated by parsing the .td file:
+
+\begin{cpp}
+#include "TableGenBackends.h"
+#include "llvm/Support/Format.h"
+#include "llvm/TableGen/Record.h"
+#include "llvm/TableGen/TableGenBackend.h"
+#include <algorithm>
+\end{cpp}
+
+\item
+To simplify coding, the llvm namespace is imported:
+
+\begin{cpp}
+using namespace llvm;
+\end{cpp}
+
+\item
+The TokenAndKeywordFilterEmitter class is responsible for generating the C++ source code. The emitFlagsFragment(), emitTokenKind(), and emitKeywordFilter() methods emit the source code, as described in the previous section, Sketching the source code to be generated. The only public method, run(), calls all the code-emitting methods. The records are held in an instance of RecordKeeper, which is passed as a parameter to the constructor. The class is inside an anonymous namespace:
+
+\begin{cpp}
+namespace {
+class TokenAndKeywordFilterEmitter {
+    RecordKeeper &Records;
+
+public:
+    explicit TokenAndKeywordFilterEmitter(RecordKeeper &R)
+        : Records(R) {}
+
+    void run(raw_ostream &OS);
+
+private:
+    void emitFlagsFragment(raw_ostream &OS);
+    void emitTokenKind(raw_ostream &OS);
+    void emitKeywordFilter(raw_ostream &OS);
+};
+} // End anonymous namespace
+\end{cpp}
+
+\item
+The run() method calls all the emitting methods. It also times the length of each phase. You specify the -{}-time-phases option, and then the timing is shown after all code is generated:
+
+\begin{cpp}
+void TokenAndKeywordFilterEmitter::run(raw_ostream &OS) {
+    // Emit Flag fragments.
+    Records.startTimer("Emit flags");
+    emitFlagsFragment(OS);
+
+    // Emit token kind enum and functions.
+    Records.startTimer("Emit token kind");
+    emitTokenKind(OS);
+
+    // Emit keyword filter code.
+    Records.startTimer("Emit keyword filter");
+    emitKeywordFilter(OS);
+    Records.stopTimer();
+}
+\end{cpp}
+
+\item
+The emitFlagsFragment() method shows the typical structure of a function emitting C++ source code. The generated code is guarded by the GET\_TOKEN\_FLAGS macro. To emit the C++ source fragment, you loop over all records that are derived from the Flag class in the TableGen file. Having such a record, it is easy to query the record for the name and the value. Please note that the names Flag, Name, and Val must be written exactly as in the TableGen file. If you rename Val to Value in the TableGen file, then you also need to change the string in this function. All the generated source code is written to the provided stream, OS:
+
+\begin{cpp}
+void TokenAndKeywordFilterEmitter::emitFlagsFragment(
+raw_ostream &OS) {
+    OS << "#ifdef GET_TOKEN_FLAGS\n";
+    OS << "#undef GET_TOKEN_FLAGS\n";
+    for (Record *CC :
+            Records.getAllDerivedDefinitions("Flag")) {
+        StringRef Name = CC->getValueAsString("Name");
+        int64_t Val = CC->getValueAsInt("Val");
+        OS << Name << " = " << format_hex(Val, 2) << ",\n";
+    }
+    OS << "#endif\n";
+}
+\end{cpp}
+
+\item
+The emitTokenKind() method emits a declaration and definition of token classification functions. Let’s have a look at emitting the declarations first. The overall structure is the same as the previous method – only more C++ source code is emitted. The generated source fragment is guarded by the GET\_TOKEN\_KIND\_DECLARATION macro. Please note that this method tries to generate nicely formatted C++ code, using new lines and indentation as a human developer would do. In case the emitted source code is not correct, and you need to examine it to find the error, this will be tremendously helpful. It is also easy to make such errors: after all, you are writing a C++ function that emits C++ source code.
+
+First, the TokenKind enumeration is emitted. The name for a keyword should be prefixed with a kw\_ string. The loop goes over all records of the Token class, and you can query the records if they are also a subclass of the Keyword class, which enables you to emit the prefix:
+
+\begin{cpp}
+    OS << "#ifdef GET_TOKEN_KIND_DECLARATION\n"
+        << "#undef GET_TOKEN_KIND_DECLARATION\n"
+        << "namespace tok {\n"
+        << " enum TokenKind : unsigned short {\n";
+    for (Record *CC :
+            Records.getAllDerivedDefinitions("Token")) {
+        StringRef Name = CC->getValueAsString("Name");
+        OS << " ";
+        if (CC->isSubClassOf("Keyword"))
+        OS << "kw_";
+        OS << Name << ",\n";
+    }
+    OS << " NUM_TOKENS\n"
+       << " };\n";
+\end{cpp}
+
+\item
+Next, the function declarations are emitted. This is only a constant string, so nothing exciting happens. This finishes emitting the declarations:
+
+\begin{cpp}
+    OS << " const char *getTokenName(TokenKind Kind) "
+            "LLVM_READNONE;\n"
+        << " const char *getPunctuatorSpelling(TokenKind "
+            "Kind) LLVM_READNONE;\n"
+        << " const char *getKeywordSpelling(TokenKind "
+            "Kind) "
+            "LLVM_READNONE;\n"
+        << "}\n"
+        << "#endif\n";
+\end{cpp}
+
+\item
+Now, let’s turn to emitting the definitions. Again, this generated code is guarded by a macro called GET\_TOKEN\_KIND\_DEFINITION. First, the token names are emitted into a TokNames array, and the getTokenName() function uses that array to retrieve the name. Please note that the quote symbol must be escaped as \verb|\|" when used inside a string:
+
+\begin{cpp}
+    OS << "#ifdef GET_TOKEN_KIND_DEFINITION\n";
+    OS << "#undef GET_TOKEN_KIND_DEFINITION\n";
+    OS << "static const char * const TokNames[] = {\n";
+    for (Record *CC :
+        Records.getAllDerivedDefinitions("Token")) {
+        OS << " \"" << CC->getValueAsString("Name")
+           << "\",\n";
+    }
+    OS << "};\n\n";
+    OS << "const char *tok::getTokenName(TokenKind Kind) "
+          "{\n"
+       << " if (Kind <= tok::NUM_TOKENS)\n"
+       << " return TokNames[Kind];\n"
+       << " llvm_unreachable(\"unknown TokenKind\");\n"
+       << " return nullptr;\n"
+       << "};\n\n";
+\end{cpp}
+
+\item
+Next, the getPunctuatorSpelling() function is emitted. The only notable difference to the other parts is that the loop goes over all records derived from the Punctuator class.
+Also, a switch statement is generated instead of an array:
+
+\begin{cpp}
+    OS << "const char "
+          "*tok::getPunctuatorSpelling(TokenKind "
+          "Kind) {\n"
+       << " switch (Kind) {\n";
+    for (Record *CC :
+            Records.getAllDerivedDefinitions("Punctuator")) {
+        OS << " " << CC->getValueAsString("Name")
+           << ": return \""
+           << CC->getValueAsString("Spelling") << "\";\n";
+    }
+    OS << " default: break;\n"
+       << " }\n"
+       << " return nullptr;\n"
+       << "};\n\n";
+\end{cpp}
+
+\item
+And finally, the getKeywordSpelling() function is emitted. The coding is similar to emitting getPunctuatorSpelling(). This time, the loop goes over all records of the Keyword class, and the name is again prefixed with kw\_:
+
+\begin{cpp}
+    OS << "const char *tok::getKeywordSpelling(TokenKind "
+          "Kind) {\n"
+       << " switch (Kind) {\n";
+    for (Record *CC :
+         Records.getAllDerivedDefinitions("Keyword")) {
+        OS << " kw_" << CC->getValueAsString("Name")
+           << ": return \"" << CC->getValueAsString("Name")
+           << "\";\n";
+    }
+    OS << " default: break;\n"
+       << " }\n"
+       << " return nullptr;\n"
+       << «};\n\n»;
+    OS << «#endif\n»;
+}
+\end{cpp}
+
+\item
+The emitKeywordFilter() method is more complex than the previous methods since emitting the filter requires collecting some data from the records. The generated source code uses the std::lower\_bound() function, thus implementing a binary search.
+
+Now, let’s make a shortcut. There can be several records of the TokenFilter class defined in the TableGen file. For demonstration purposes, just emit at most one token filter method:
+
+\begin{cpp}
+    std::vector<Record *> AllTokenFilter =
+        Records.getAllDerivedDefinitionsIfDefined(
+            "TokenFilter");
+    if (AllTokenFilter.empty())
+        return;
+\end{cpp}
+
+\item
+The keywords used for the filter are in the list named Tokens. To get access to that list, you first need to look up the Tokens field in the record. This returns a pointer to an instance of the RecordVal class, from which you can retrieve the Initializer instance via the calling method, getValue(). The Tokens field is defined as a list, so you cast the initializer instance to ListInit. If this fails, then exit the function:
+
+\begin{cpp}
+    ListInit *TokenFilter = dyn_cast_or_null<ListInit>(
+        AllTokenFilter[0]
+            ->getValue("Tokens")
+            ->getValue());
+    if (!TokenFilter)
+        return;
+\end{cpp}
+
+\item
+Now, you are ready to construct a filter table. For each keyword stored in the TokenFilter, list, you need the name and the value of the Flag field. That field is again defined as a list, so you need to loop over those elements to calculate the final value. The resulting name/flag value pair is stored in a Table vector:
+
+\begin{cpp}
+    using KeyFlag = std::pair<StringRef, uint64_t>;
+    std::vector<KeyFlag> Table;
+    for (size_t I = 0, E = TokenFilter->size(); I < E;
+            ++I) {
+        Record *CC = TokenFilter->getElementAsRecord(I);
+        StringRef Name = CC->getValueAsString("Name");
+        uint64_t Val = 0;
+        ListInit *Flags = nullptr;
+        if (RecordVal *F = CC->getValue("Flags"))
+            Flags = dyn_cast_or_null<ListInit>(F->getValue());
+        if (Flags) {
+            for (size_t I = 0, E = Flags->size(); I < E; ++I) {
+                Val |=
+                Flags->getElementAsRecord(I)->getValueAsInt(
+                "Val");
+            }
+        }
+        Table.emplace_back(Name, Val);
+    }
+\end{cpp}
+
+\item
+To be able to perform a binary search, the table needs to be sorted. The comparison function is provided by a lambda function:
+
+\begin{cpp}
+    llvm::sort(Table.begin(), Table.end(),
+                [](const KeyFlag A, const KeyFlag B) {
+                    return A.first < B.first;
+                });
+\end{cpp}
+
+\item
+Now, you can emit the C++ source code. First, you emit the sorted table containing the name of the keyword and the associated flag value:
+
+\begin{cpp}
+    OS << "#ifdef GET_KEYWORD_FILTER\n"
+       << "#undef GET_KEYWORD_FILTER\n";
+    OS << "bool lookupKeyword(llvm::StringRef Keyword, "
+          "unsigned &Value) {\n";
+    OS << " struct Entry {\n"
+       << " unsigned Value;\n"
+       << " llvm::StringRef Keyword;\n"
+       << " };\n"
+       << "static const Entry Table[" << Table.size()
+       << "] = {\n";
+    for (const auto &[Keyword, Value] : Table) {
+        OS << " { " << Value << ", llvm::StringRef(\""
+           << Keyword << "\", " << Keyword.size()
+           << ") },\n";
+    }
+    OS << " };\n\n";
+\end{cpp}
+
+\item
+Next, you look up the keyword in the sorted table, using the std::lower\_bound() standard C++ function. If the keyword is in the table, then the Value parameter receives the value of the flags associated with the keyword, and the function returns true. Otherwise, the function simply returns false:
+
+\begin{cpp}
+    OS << " const Entry *E = "
+            "std::lower_bound(&Table[0], "
+            "&Table["
+       << Table.size()
+       << "], Keyword, [](const Entry &A, const "
+            "StringRef "
+            "&B) {\n";
+    OS << " return A.Keyword < B;\n";
+    OS << " });\n";
+    OS << " if (E != &Table[" << Table.size()
+       << "]) {\n";
+    OS << " Value = E->Value;\n";
+    OS << " return true;\n";
+    OS << " }\n";
+    OS << " return false;\n";
+    OS << "}\n";
+    OS << "#endif\n";
+}
+\end{cpp}
+
+\item
+The only missing part now is a way to call this implementation, for which you define a global function, EmitTokensAndKeywordFilter(). The emitSourceFileHeader() function declared in the llvm/TableGen/TableGenBackend.h header emits a comment at the top of the generated file:
+
+\begin{cpp}
+void EmitTokensAndKeywordFilter(RecordKeeper &RK,
+                                raw_ostream &OS) {
+    emitSourceFileHeader("Token Kind and Keyword Filter "
+                        "Implementation Fragment",
+                        OS);
+    TokenAndKeywordFilterEmitter(RK).run(OS);
+}
+\end{cpp}
+\end{enumerate}
+
+With that, you finished the implementation of the source emitter in the TokenEmitter.cpp file. Overall, the coding is not too complicated.
+
+The TableGenBackends.h header file only contains the declaration of the EmitTokensAndKeywordFilter() function. To avoid including other files, you use forward declarations for the raw\_ostream and RecordKeeper classes:
+
+\begin{cpp}
+#ifndef TABLEGENBACKENDS_H
+#define TABLEGENBACKENDS_H
+
+namespace llvm {
+    class raw_ostream;
+    class RecordKeeper;
+} // namespace llvm
+
+void EmitTokensAndKeywordFilter(llvm::RecordKeeper &RK,
+                                llvm::raw_ostream &OS);
+#endif
+\end{cpp}
+
+The missing part is the implementation of the driver. Its task is to parse the TableGen file and emit the records according to the command-line options. The implementation is in the TableGen.cpp file:
+
+\begin{itemize}
+\item
+As usual, the implementation begins with including the required headers. The most important one is llvm/TableGen/Main.h because this header declares the frontend of TableGen:
+
+\begin{cpp}
+#include "TableGenBackends.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/PrettyStackTrace.h"
+#include "llvm/Support/Signals.h"
+#include "llvm/TableGen/Main.h"
+#include "llvm/TableGen/Record.h"
+\end{cpp}
+
+\item
+To simplify coding, the llvm namespace is imported:
+
+\begin{cpp}
+using namespace llvm;
+\end{cpp}
+
+\item
+The user can choose one action. The ActionType enumeration contains all possible actions:
+
+\begin{cpp}
+enum ActionType {
+    PrintRecords,
+    DumpJSON,
+    GenTokens,
+};
+\end{cpp}
+
+\item
+A single command-line option object called Action is used. The user needs to specify the -{}-gen-tokens option to emit the token filter you implemented. The other two options, -{}-print-records and -{}-dump-json, are standard options to dump read records. Note that the object is in an anonymous namespace:
+
+\begin{cpp}
+namespace {
+cl::opt<ActionType> Action(
+    cl::desc("Action to perform:"),
+    cl::values(
+        clEnumValN(
+            PrintRecords, "print-records",
+            "Print all records to stdout (default)"),
+        clEnumValN(DumpJSON, "dump-json",
+            "Dump all records as "
+            "machine-readable JSON"),
+        clEnumValN(GenTokens, "gen-tokens",
+            "Generate token kinds and keyword "
+            "filter")));
+\end{cpp}
+
+\item
+The Main() function performs the requested action based on the value of Action. Most importantly, your EmitTokensAndKeywordFilter() function is called if -{}-gen-tokens was specified on the command line. After the end of the function, the anonymous namespace is closed:
+
+\begin{cpp}
+bool Main(raw_ostream &OS, RecordKeeper &Records) {
+    switch (Action) {
+    case PrintRecords:
+        OS << Records; // No argument, dump all contents
+        break;
+    case DumpJSON:
+        EmitJSON(Records, OS);
+        break;
+    case GenTokens:
+        EmitTokensAndKeywordFilter(Records, OS);
+        break;
+    }
+    return false;
+}
+} // namespace
+\end{cpp}
+
+\item
+And lastly, you define a main() function. After setting up the stack trace handler and parsing the command-line options, the TableGenMain() function is called to parse the TableGen file and create records. That function also calls your Main() function if there are no errors:
+
+\begin{cpp}
+int main(int argc, char **argv) {
+    sys::PrintStackTraceOnErrorSignal(argv[0]);
+    PrettyStackTraceProgram X(argc, argv);
+    cl::ParseCommandLineOptions(argc, argv);
+
+    llvm_shutdown_obj Y;
+
+    return TableGenMain(argv[0], &Main);
+}
+\end{cpp}
+
+\end{itemize}
+
+Your own TableGen tool is now implemented. After compiling, you can run it with the KeywordC.td sample input file as follows:
+
+\begin{shell}
+$ tinylang-tblgen --gen-tokens –o TokenFilter.inc KeywordC.td
+\end{shell}
+
+The generated C++ source code is written to the TokenFilter.inc file.
+
+\begin{myTip}{Performance of the token filter}
+Using a plain binary search for the keyword filter does not give a better performance than the implementation based on the llvm::StringMap type. To beat the performance of the current implementation, you need to generate a perfect hash function.
+
+The classic algorithm from Czech, Havas, and Majewski can be easily implemented, and it gives you a very good performance. It is described in An optimal algorithm for generating minimal perfect hash functions, Information Processing Letters, Volume 43, Issue 5, 1992. See \url{https:// www.sciencedirect.com/science/article/abs/pii/002001909290220P}.
+
+A state-of-the-art algorithm is PTHash from Pibiri and Trani, described in PTHash: Revisiting FCH Minimal Perfect Hashing, SIGIR ’21. See \url{https://arxiv.org/pdf/2104.10402.pdf}.
+
+Both algorithms are good candidates for generating a token filter that is actually faster than llvm::StringMap.
+\end{myTip}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

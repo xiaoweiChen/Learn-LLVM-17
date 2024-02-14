@@ -3,7 +3,336 @@ Very often, beginners feel overwhelmed by the TableGen language. But as soon as 
 
 \mySubsubsection{8.3.1.}{Defining records and classes}
 
+Let’s define a simple record for an instruction:
+
+\begin{shell}
+def ADD {
+    string Mnemonic = "add";
+    int Opcode = 0xA0;
+}
+\end{shell}
+
+The def keyword signals that you define a record. It is followed by the name of the record. The record body is surrounded by curly braces, and the body consists of field definitions, similar to a structure in C++.
+
+You can use the llvm-tblgen tool to see the generated records. Save the preceding source code in an inst.td file and run the following:
+
+\begin{shell}
+$ llvm-tblgen --print-records inst.td
+------------- Classes -----------------
+------------- Defs -----------------
+def ADD {
+    string Mnemonic = "add";
+    int Opcode = 160;
+}
+\end{shell}
+
+This is not yet exciting; it only shows the defined record was parsed correctly.
+
+Defining instructions using single records is not very comfortable. A modern CPU has hundreds of instructions, and with this amount of records, it is very easy to introduce typing errors in the field names. And if you decide to rename a field or add a new field, then the number of records to change becomes a challenge. Therefore, a blueprint is needed. In C++, classes have a similar purpose, and in TableGen, it is also called a class. Here is the definition of an Inst class and two records based on that class:
+
+\begin{shell}
+class Inst<string mnemonic, int opcode> {
+    string Mnemonic = mnemonic;
+    int Opcode = opcode;
+}
+
+def ADD : Inst<"add", 0xA0>;
+def SUB : Inst<"sub", 0xB0>;
+\end{shell}
+
+The syntax for classes is similar to that of records. The class keyword signals that a class is defined, followed by the name of the class. A class can have a parameter list. Here, the Inst class has two parameters, mnemonic and opcode, which are used to initialize the records’ fields. The values for those fields are given when the class is instantiated. The ADD and SUB records show two instantiations of the class. Again, let’s use llvm-tblgen to look at the records:
+
+\begin{shell}
+$ llvm-tblgen --print-records inst.td
+------------- Classes -----------------
+class Inst<string Inst:mnemonic = ?, int Inst:opcode = ?> {
+    string Mnemonic = Inst:mnemonic;
+    int Opcode = Inst:opcode;
+}
+------------- Defs -----------------
+def ADD { // Inst
+    string Mnemonic = "add";
+    int Opcode = 160;
+}
+def SUB { // Inst
+    string Mnemonic = "sub";
+    int Opcode = 176;
+}
+\end{shell}
+
+Now, you have one class definition and two records. The name of the class used to define the records is shown as a comment. Please note that the arguments of the class have the default value ?, which indicates int is uninitialized.
+
+\begin{myTip}{Tip for debugging}
+To get a more detailed dump of the records, you can use the -{}-print-detailed-records option. The output includes the line numbers of record and class definitions, and where record fields are initialized. They can be very helpful if you try to track down why a record field was assigned a certain value.
+\end{myTip}
+
+In general, the ADD and SUB instructions have a lot in common, but there is also a difference: addition is a commutative operation but subtraction is not. Let’s capture that fact in the record, too. A small challenge is that TableGen only supports a limited set of data types. You already used string and int in the examples. The other available data types are bit, bits<n>, list<type>, and dag.
+The bit type represents a single bit; that is, 0 or 1. If you need a fixed number of bits, then you use the bits<n> type. For example, bits<5> is an integer type 5 bits wide. To define a list based on another type, you use the list<type> type. For example, list<int> is a list of integers, and list<Inst> is a list of records of the Inst class from the example. The dag type represents directed acyclic graph (DAG) nodes. This type is useful for defining patterns and operations and is used extensively in LLVM backends.
+
+To represent a flag, a single bit is sufficient, so you can use one to mark an instruction as commutable. The majority of instructions are not commutable, so you can take advantage of default values:
+
+\begin{shell}
+class Inst<string mnemonic, int opcode, bit commutable = 0> {
+    string Mnemonic = mnemonic;
+    int Opcode = opcode;
+    bit Commutable = commutable;
+}
+
+def ADD : Inst<"add", 0xA0, 1>;
+def SUB : Inst<"sub", 0xB0>;
+\end{shell}
+
+You should run llvm-tblgen to verify that the records are defined as expected.
+
+There is no requirement for a class to have parameters. It is also possible to assign values later. For example, you can define that all instructions are not commutable:
+
+\begin{shell}
+class Inst<string mnemonic, int opcode> {
+    string Mnemonic = mnemonic;
+    int Opcode = opcode;
+    bit Commutable = 0;
+}
+
+def SUB : Inst<"sub", 0xB0>;
+\end{shell}
+
+Using a let statement, you can overwrite that value:
+
+\begin{shell}
+let Commutable = 1 in
+    def ADD : Inst<"add", 0xA0>;
+\end{shell}
+
+Alternatively, you can open a record body to overwrite the value:
+
+\begin{shell}
+def ADD : Inst<"add", 0xA0> {
+    let Commutable = 1;
+}
+\end{shell}
+
+Again, please use llvm-tblgen to verify that the Commutable flag is set to 1 in both cases.
+
+Classes and records can be inherited from multiple classes, and it is always possible to add new fields or overwrite the value of existing fields. You can use inheritance to introduce a new CommutableInst class:
+
+\begin{shell}
+class Inst<string mnemonic, int opcode> {
+    string Mnemonic = mnemonic;
+    int Opcode = opcode;
+    bit Commutable = 0;
+}
+
+class CommutableInst<string mnemonic, int opcode>
+    : Inst<mnemonic, opcode> {
+    let Commutable = 1;
+}
+
+def SUB : Inst<"sub", 0xB0>;
+def ADD : CommutableInst<"add", 0xA0>;
+\end{shell}
+
+The resulting records are always the same, but the language allows you to define records in different ways. Please note that, in the latter example, the Commutable flag may be superfluous: the code generator can query a record for the classes it is based on, and if that list contains the CommutableInst class, then it can set the flag internally.
+
 \mySubsubsection{8.3.2.}{Creating multiple records at once with multiclasses}
 
+Another often-used statement is multiclass. A multiclass allows you to define multiple records at once. Let’s expand the example to show why this can be useful.
+
+The definition of an add instruction is very simplistic. In reality, a CPU often has several add instructions. A common variant is that one instruction has two register operands while another instruction has one register operand and an immediate operand, which is a small number. Assume that for the instruction having an immediate operand, the designer of the instruction set decided to mark them with i as a suffix. So, we end up with the add and addi instructions. Further, assume that the opcodes differ by 1. Many arithmetic and logical instructions follow this scheme; therefore, you want the definition to be as compact as possible.
+
+The first challenge is that you need to manipulate values. There is a limited number of operators that you can use to modify a value. For example, to produce the sum of 1 and the value of the field opcode, you write:
+
+\begin{shell}
+!add(opcode, 1)
+\end{shell}
+
+Such an expression is best used as an argument for a class. Testing a field value and then changing it based on the found value is generally not possible because it requires dynamic statements that are not available. Always remember that all calculations are done while the records are constructed!
+
+In a similar way, strings can be concatenated:
+
+\begin{shell}
+!strconcat(mnemonic,"i")
+\end{shell}
+
+Because all operators begin with an exclamation mark (!), they are also called bang operators. You find a full list of bang operators in the Programmer’s Reference: \url{https://llvm.org/docs/TableGen/ProgRef.html#appendix-a-bang-operators}.
+
+Now, you can define a multiclass. The Inst class serves again as the base:
+
+\begin{shell}
+class Inst<string mnemonic, int opcode> {
+    string Mnemonic = mnemonic;
+    int Opcode = opcode;
+}
+\end{shell}
+
+The definition of a multiclass is a bit more involved, so let’s do it in steps:
+
+\begin{enumerate}
+\item
+The definition of a multiclass uses a similar syntax to classes. The new multiclass is named InstWithImm and has two parameters, mnemonic and opcode:
+
+\begin{shell}
+multiclass InstWithImm<string mnemonic, int opcode> {
+\end{shell}
+
+\item
+First, you define an instruction with two register operands. As in a normal record definition, you use the def keyword to define the record, and you use the Inst class to create the record content. You also need to define an empty name. We will explain later why this is necessary:
+
+\begin{shell}
+    def "": Inst<mnemonic, opcode>;
+\end{shell}
+
+\item
+Next, you define an instruction with the immediate operand. You derive the values for the mnemonic and the opcode from the parameters of the multiclass, using bang operators. The record is named I:
+
+\begin{shell}
+    def I: Inst<!strconcat(mnemonic,"i"), !add(opcode, 1)>;
+\end{shell}
+
+\item
+That is all; the class body can be closed, like so:
+
+\begin{shell}
+}
+\end{shell}
+\end{enumerate}
+
+To instantiate the records, you must use the defm keyword:
+
+\begin{shell}
+defm ADD : InstWithImm<"add", 0xA0>;
+\end{shell}
+
+These statements result in the following:
+
+\begin{enumerate}
+\item
+The Inst<"add", 0xA0> record is instantiated. The name of the record is the concatenation of the name following the defm keyword and of the name following def inside the multiclass statement, which results in the name ADD.
+
+\item
+Generating metadata for type-based alias analysis: Here, you will attach additional metadata to LLVM IR, which helps LLVM to better optimize the code
+
+\item
+The Inst<"addi", 0xA1> record is instantiated and, following the same scheme, is given the name ADDI.
+\end{enumerate}
+
+Let’s verify this claim with llvm-tblgen:
+
+\begin{shell}
+$ llvm-tblgen –print-records inst.td
+------------- Classes -----------------
+class Inst<string Inst:mnemonic = ?, int Inst:opcode = ?> {
+    string Mnemonic = Inst:mnemonic;
+    int Opcode = Inst:opcode;
+}
+------------- Defs -----------------
+def ADD { // Inst
+    string Mnemonic = "add";
+    int Opcode = 160;
+    }
+def ADDI { // Inst
+    string Mnemonic = "addi";
+    int Opcode = 161;
+}
+\end{shell}
+
+Using a multiclass, it is very easy to generate multiple records at once. This feature is used very often!
+
+A record does not need to have a name. Anonymous records are perfectly fine. Omitting the name is all you need to do to define an anonymous record. The name of a record generated by a multiclass is made up of two names, and both names must be given to create a named record. If you omit the name after defm, then only anonymous records are created. Similarly, if the def inside the multiclass is not followed by a name, an anonymous record is created. This is the reason why the first definition in the multiclass example used the empty name "": without it, the record would be anonymous.
+
 \mySubsubsection{8.3.3.}{Simulating function calls}
+
+In some cases, using a multiclass like in the previous example can lead to repetitions. Assume that the CPU also supports memory operands, in a way similar to immediate operands. You can support this by adding a new record definition to the multiclass:
+
+\begin{shell}
+multiclass InstWithOps<string mnemonic, int opcode> {
+    def "": Inst<mnemonic, opcode>;
+    def "I": Inst<!strconcat(mnemonic,"i"), !add(opcode, 1)>;
+    def "M": Inst<!strconcat(mnemonic,"m"), !add(opcode, 2)>;
+}
+\end{shell}
+
+This is perfectly fine. But now, imagine you do not have 3 but 16 records to define, and you need to do this multiple times. A typical scenario where such a situation can arise is when the CPU supports many vector types, and the vector instructions vary slightly based on the used type.
+
+Please note that all three lines with the def statement have the same structure. The variation is only in the suffix of the name and of the mnemonic, and the delta value is added to the opcode. In C, you could put the data into an array and implement a function that returns the data based on an index value. Then, you could create a loop over the data instead of manually repeating statements.
+
+Amazingly, you can do something similar in the TableGen language! Here is how to transform the example:
+
+\begin{enumerate}
+\item
+To store the data, you define a class with all required fields. The class is called InstDesc, because it describes some properties of an instruction:
+
+\begin{shell}
+class InstDesc<string name, string suffix, int delta> {
+    string Name = name;
+    string Suffix = suffix;
+    int Delta = delta;
+}
+\end{shell}
+
+\item
+Now, you can define records for each operand type. Note that it exactly captures the differences observed in the data:
+
+\begin{shell}
+def RegOp : InstDesc<"", "", 0>;
+def ImmOp : InstDesc<"I", """, 1>;
+def MemOp : InstDesc"""","""", 2>;
+\end{shell}
+
+\item
+Imagine you have a loop enumerating the numbers 0, 1, and 2, and you want to select one of the previously defined records based on the index. How can you do this? The solution is to create a getDesc class that takes the index as a parameter. It has a single field, ret, that you can interpret as a return value. To assign the correct value to this field, the !cond operator is used:
+
+\begin{shell}
+class getDesc<int n> {
+    InstDesc ret = !cond(!eq(n, 0) : RegOp,
+                         !eq(n, 1) : ImmOp,
+                         !eq(n, 2) : MemOp);
+}
+\end{shell}
+
+This operator works similarly to a switch/case statement in C.
+
+\item
+Now, you are ready to define the multiclass. The TableGen language has a loop statement, and it also allows us to define variables. But remember that there is no dynamic execution! As a consequence, the loop range is statically defined, and you can assign a value to a variable, but you cannot change that value later. However, this is enough to retrieve the data. Please note how the use of the getDesc class resembles a function call. But there is no function call! Instead, an anonymous record is created, and the values are taken from that record. Lastly, the past operator (\#) performs a string concatenation, similar to the !strconcat operator used earlier:
+
+\begin{shell}
+multiclass InstWithOps<string mnemonic, int opcode> {
+    foreach I = 0-2 in {
+        defvar Name = getDesc<I>.ret.Name;
+        defvar Suffix = getDesc<I>.ret.Suffix;
+        defvar Delta = getDesc<I>.ret.Delta;
+        def Name: Inst<mnemonic # Suffix,
+                            !add(opcode, Delta)>;
+    }
+}
+\end{shell}
+
+\item
+Now, you use the multiclass as before to define records:
+
+\begin{shell}
+defm ADD : InstWithOps<"add", 0xA0>;
+\end{shell}
+\end{enumerate}
+
+Please run llvm-tblgen and examine the records. Besides the various ADD records, you will also see a couple of anonymous records generated by the use of the getDesc class.
+
+This technique is used in the instruction definition of several LLVM backends. With the knowledge you have acquired, you should have no problem understanding those files.
+
+The foreach statement used the syntax 0-2 to denote the bounds of the range. This is called a range piece. An alternative syntax is to use three dots (0...3), which is useful if the numbers are negative. Lastly, you are not restricted to numerical ranges; you can also loop over a list of elements, which allows you to use strings or previously defined records. For example, you may like the use of the foreach statement, but you think that using the getDesc class is too complicated. In this case, looping over the InstDesc records is the solution:
+
+\begin{shell}
+multiclass InstWithOps<string mnemonic, int opcode> {
+    foreach I = [RegOp, ImmOp, MemOp] in {
+        defvar Name = I.Name;
+        defvar Suffix = I.Suffix;
+        defvar Delta = I.Delta;
+        def Name: Inst<mnemonic # Suffix, !add(opcode, Delta)>;
+    }
+}
+\end{shell}
+
+So far, you only defined records in the TableGen language, using the most commonly used statements. In the next section, you’ll learn how to generate C++ source code from records defined in the TableGen language.
+
+
+
 

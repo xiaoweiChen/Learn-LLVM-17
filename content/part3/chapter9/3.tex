@@ -1,1 +1,106 @@
+
+
+
+Running LLVM IR directly is the first idea that comes to mind when thinking about a JIT compiler.
+This is what the lli tool, the LLVM interpreter, and the dynamic compiler do. We will explore the lli tool in the next section.
+
+
 \mySubsubsection{9.3.1.}{Exploring the lli tool}
+
+Let’s try the lli tool with a very simple example. The following LLVM IR can be stored as a file called hello.ll, which is the equivalent of a C hello world application. This file declares a prototype for the printf() function from the C library. The hellostr constant contains the message to be printed. Inside the main() function, a call to the printf() function is generated, and this function contains a hellostr message that will be printed. The application always returns 0.
+
+The complete source code is as follows:
+
+\begin{shell}
+declare i32 @printf(ptr, ...)
+
+@hellostr = private unnamed_addr constant [13 x i8] c"Hello
+world\0A\00"
+
+define dso_local i32 @main(i32 %argc, ptr %argv) {
+    %res = call i32 (ptr, ...) @printf(ptr @hellostr)
+    ret i32 0
+}
+\end{shell}
+
+This LLVM IR file is generic enough that it is valid for all platforms. We can directly execute the IR using the lli tool with the following command:
+
+\begin{shell}
+$ lli hello.ll
+Hello world
+\end{shell}
+
+The interesting point here is how the printf() function is found. The IR code is compiled to machine code, and a lookup for the printf symbol is triggered. This symbol is not found in the IR, so the current process is searched for it. The lli tool dynamically links against the C library, and the symbol is found there.
+
+Of course, the lli tool does not link against the libraries you created. To enable the use of such functions, the lli tool supports the loading of shared libraries and objects. The following C source just prints a friendly message:
+
+\begin{shell}
+#include <stdio.h>
+
+void greetings() {
+    puts("Hi!");
+}
+\end{shell}
+
+Stored in greetings.c, we use this to explore loading objects with lli. The following command will compile this source into a shared library. The –fPIC option instructs clang to generate position-independent code, which is required for shared libraries. Moreover, the compiler creates a greetings.so shared library with –shared:
+
+\begin{shell}
+$ clang greetings.c -fPIC -shared -o greetings.so
+\end{shell}
+
+We also compile the file into the greetings.o object file:
+
+\begin{shell}
+$ clang greetings.c -c -o greetings.o
+\end{shell}
+
+We now have two files, the greetings.so shared library and the greetings.o object file, which we will load into the lli tool.
+
+We also need an LLVM IR file that calls the greetings() function. For this, create a main.ll file that contains a single call to the function:
+
+\begin{shell}
+declare void @greetings(...)
+
+define dso_local i32 @main(i32 %argc, i8** %argv) {
+    call void (...) @greetings()
+    ret i32 0
+}
+\end{shell}
+
+Notice that on executing, the previous IR crashes, as lli cannot locate the greetings symbol:
+
+\begin{shell}
+$ lli main.ll
+JIT session error: Symbols not found: [ _greetings ]
+lli: Failed to materialize symbols: { (main, { _main }) }
+\end{shell}
+
+The greetings() function is defined in an external file, and to fix the crash, we have to tell the lli tool which additional file needs to be loaded. In order to use the shared library, you must use the –load option, which takes the path to the shared library as an argument:
+
+\begin{shell}
+$ lli –load ./greetings.so main.ll
+Hi!
+\end{shell}
+
+It is important to specify the path to the shared library if the directory containing the shared library is not in the search path for the dynamic loader. If omitted, then the library will not be found.
+
+Alternatively, we can instruct lli to load the object file with –extra-object:
+
+\begin{shell}
+$ lli –extra-object greetings.o main.ll
+Hi!
+\end{shell}
+
+Other supported options are –extra-archive, which loads an archive, and –extramodule, which loads another bitcode file. Both options require the path to the file as an argument.
+
+You now know how you can use the lli tool to directly execute LLVM IR. In the next section, we will implement our own JIT tool.
+
+
+
+
+
+
+
+
+
+
