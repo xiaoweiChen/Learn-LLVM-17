@@ -1,0 +1,233 @@
+We have not yet discussed where to place the target description files. Each backend in LLVM has a subdirectory in llvm/lib/Target. We create the M88k directory here and copy the target description files into it.
+
+Of course, just adding the TableGen files is not enough. LLVM uses a registry to look up instances of a target implementation, and it expects certain global functions to register those instances. And since some parts are generated, we can already provide an implementation.
+
+All information about a target, like the target triple and factory function for the target machine, assembler, disassembler, and so on, are stored in an instance of the Target class. Each target holds a static instance of this class, and this instance is registered in the central registry:
+
+\begin{enumerate}
+\item
+The implementation is in the M88kTargetInfo.cpp file in the TargetInfo subdirectory in our target. The single instance of the Target class is held inside the getTheM88kTarget() function:
+
+\begin{cpp}
+using namespace llvm;
+Target &llvm::getTheM88kTarget() {
+    static Target TheM88kTarget;
+    return TheM88kTarget;
+}
+\end{cpp}
+
+\item
+LLVM requires that each target provides a LLVMInitialize<Target Name>TargetInfo() function to register the target instance. That function must have a C linkage because it is also used in the LLVM C API:
+
+\begin{cpp}
+extern "C" LLVM_EXTERNAL_VISIBILITY void
+LLVMInitializeM88kTargetInfo() {
+    RegisterTarget<Triple::m88k, /*HasJIT=*/false> X(
+        getTheM88kTarget(), "m88k", "M88k", "M88k");
+}
+\end{cpp}
+
+\item
+We also need to create an M88kTargetInfo.h header file in the same directory, which just contains a single declaration:
+
+\begin{cpp}
+namespace llvm {
+class Target;
+Target &getTheM88kTarget();
+}
+\end{cpp}
+
+\item
+And last, we add a CMakeLists.txt file for building:
+
+\begin{cmake}
+add_llvm_component_library(LLVMM88kInfo
+    M88kTargetInfo.cpp
+    LINK_COMPONENTS Support
+    ADD_TO_COMPONENT M88k)
+\end{cmake}
+
+\end{enumerate}
+
+Next, we partially populate the target instance with the information used at the machine-code (MC) level. Let’s get started:
+
+\begin{enumerate}
+\item
+The implementation is in the M88kMCTargetDesc.cpp file in the MCTargetDesc subdirectory. TableGen turns the target description we created in the previous section into C++ source code fragments. Here, we include the parts for the register information, the instruction information, and the sub-target information:
+
+\begin{cpp}
+using namespace llvm;
+
+#define GET_INSTRINFO_MC_DESC
+#include "M88kGenInstrInfo.inc"
+
+#define GET_SUBTARGETINFO_MC_DESC
+#include "M88kGenSubtargetInfo.inc"
+
+#define GET_REGINFO_MC_DESC
+#include "M88kGenRegisterInfo.inc"
+\end{cpp}
+
+\item
+The target registry expects a factory method for each of the classes here. Let’s begin with the instruction information. We allocate an instance of the MCInstrInfo class, and call the InitM88kMCInstrInfo() generated function to populate the object:
+
+\begin{cpp}
+static MCInstrInfo *createM88kMCInstrInfo() {
+    MCInstrInfo *X = new MCInstrInfo();
+    InitM88kMCInstrInfo(X);
+    return X;
+}
+\end{cpp}
+
+\item
+Next, we allocate an object of the MCRegisterInfo class and call a generated function to populate it. The additional M88k::R1 parameter value tells LLVM that the r1 register holds the return address:
+
+\begin{cpp}
+static MCRegisterInfo *
+createM88kMCRegisterInfo(const Triple &TT) {
+    MCRegisterInfo *X = new MCRegisterInfo();
+    InitM88kMCRegisterInfo(X, M88k::R1);
+    return X;
+}
+\end{cpp}
+
+\item
+And last, we need a factory method for the sub-target information. This method takes a target triple, a CPU name, and a feature string as parameters, and forwards them to the generated method:
+
+\begin{cpp}
+static MCSubtargetInfo *
+createM88kMCSubtargetInfo(const Triple &TT,
+StringRef CPU, StringRef FS) {
+    return createM88kMCSubtargetInfoImpl(TT, CPU,
+                                        /*TuneCPU*/ CPU,
+                                        FS);
+}
+\end{cpp}
+
+\item
+Having the factory methods defined, we can now register them. Similar to the target registration, LLVM expects a global function called LLVMInitialize<Target Name>TargetMC():
+
+\begin{cpp}
+extern "C" LLVM_EXTERNAL_VISIBILITY void
+LLVMInitializeM88kTargetMC() {
+    TargetRegistry::RegisterMCInstrInfo(
+        getTheM88kTarget(), createM88kMCInstrInfo);
+    TargetRegistry::RegisterMCRegInfo(
+        getTheM88kTarget(), createM88kMCRegisterInfo);
+    TargetRegistry::RegisterMCSubtargetInfo(
+        getTheM88kTarget(), createM88kMCSubtargetInfo);
+}
+\end{cpp}
+
+\item
+The M88kMCTargetDesc.h header file just makes some generated code available:
+
+\begin{cpp}
+#define GET_REGINFO_ENUM
+#include "M88kGenRegisterInfo.inc"
+
+#define GET_INSTRINFO_ENUM
+#include "M88kGenInstrInfo.inc"
+
+#define GET_SUBTARGETINFO_ENUM
+#include "M88kGenSubtargetInfo.inc"
+\end{cpp}
+\end{enumerate}
+
+The implementation is almost done. To prevent a linker error, we need to provide another function, which registers a factory method for an object of the TargetMachine class. This class is required for code generation, and we implement it in Chapter 12, Instruction Selection, up next. Here, we just define an empty function in the M88kTargetMachine.cpp file:
+
+\begin{cpp}
+#include "TargetInfo/M88kTargetInfo.h"
+#include "llvm/MC/TargetRegistry.h"
+
+extern "C" LLVM_EXTERNAL_VISIBILITY void
+LLVMInitializeM88kTarget() {
+    // TODO Register the target machine. See chapter 12.
+}
+\end{cpp}
+
+This concludes our first implementation. However, LLVM does not yet know about our new backend. To integrate it, open the llvm/CMakeLists.txt file, locate the section defining all the experimental targets, and add the M88k target to the list:
+
+\begin{cmake}
+set(LLVM_ALL_EXPERIMENTAL_TARGETS ARC … M88k …)
+\end{cmake}
+
+Assuming the LLVM source code with our new backend is in the directory, you can configure the build by typing the following:
+
+\begin{shell}
+$ mkdir build
+$ cd build
+$ cmake -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=M88k \
+../llvm-m88k/llvm
+…
+-- Targeting M88k
+…
+\end{shell}
+
+After building LLVM, you can verify that the tools already know about our new target:
+
+\begin{shell}
+$ bin/llc –version
+LLVM (http://llvm.org/):
+    LLVM version 17.0.2
+    Registered Targets:
+        m88k - M88k
+\end{shell}
+
+The journey to get to this point was difficult, so take a moment to celebrate!
+
+\begin{myTip}{Fixing a possible compile error}
+There is a small oversight in LLVM 17.0.2, which causes a compile error. In one place in the code, the TableGen emitter for the sub-target information uses the removed value llvm::None instead of std:: nullopt, causing an error while compiling M88kMCTargetDesc.cpp. The easiest way to fix this problem is to cherry-pick the fix from the LLVM 18 development branch: git cherry-pick -x a587f429.
+\end{myTip}
+
+In the next section, we implement the assembler parser, which will give us the first working LLVM tool.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

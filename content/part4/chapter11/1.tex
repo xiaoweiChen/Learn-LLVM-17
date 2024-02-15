@@ -1,0 +1,20 @@
+Whether commercially needed to support a new CPU or only a hobby project to add support for some old architecture, adding a new backend to LLVM is a major task. This and the following two chapters outline what you need to develop for a new backend. We will add a backend for the Motorola M88k architecture, which is a RISC architecture from the 1980s.
+
+\begin{myTip}{References}
+You can read more about this Motorola architecture on Wikipedia at \url{https://en.wikipedia.org/wiki/Motorola_88000}. The most important information about this architecture is still available on the internet. You can find the CPU manuals with the instruction set and timing information at \url{http://www.bitsavers.org/components/motorola/88000/}, and the System V ABI M88k Processor supplement with the definitions of the ELF format and the calling convention at \url{https://archive.org/details/bitsavers_attunixSysa0138776555SystemVRelease488000ABI1990_8011463}.
+
+OpenBSD, available at \url{https://www.openbsd.org/}, still supports the LUNA-88k system. On the OpenBSD system, it is easy to create a GCC cross-compiler for M88k. And with GXemul, available at \url{http://gavare.se/gxemul/}, we get an emulator capable of running certain OpenBSD releases for the M88k architecture.
+\end{myTip}
+
+The M88k architecture is long out of production, but we found enough information and tools to make it an interesting goal to add an LLVM backend for it. We will begin with a very basic task of extending the Triple class.
+
+
+
+
+
+
+
+
+
+
+

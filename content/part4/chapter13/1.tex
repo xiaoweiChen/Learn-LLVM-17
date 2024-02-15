@@ -1,9 +1,436 @@
+
+In this section, we will explore how to implement a new machine function pass within LLVM that runs after instruction selection. Specifically, a MachineFunctionPass class will be created, which is a subset of the original FunctionPass class within LLVM that can be run with opt. This class adapts the original infrastructure to allow for the implementation of passes that operate on the MachineFunction representation in the backend through llc.
+
+It is important to note that the implementation of passes within the backend utilizes the interfaces of the legacy pass manager, rather than the new pass manager. This is because LLVM currently does not have a complete working implementation of the new pass manager within the backend. Due to this, this chapter will follow the method of adding a new pass within the legacy pass manager pipeline.
+
+In terms of the actual implementation, such as function passes, machine function passes optimize a single (machine) function at a time, but instead of overriding the runOnFunction() method, machine function passes override the runOnMachineFunction() method. The machine function pass that will be implemented in this section is a pass that checks for when a division by zero occurs, specifically, to insert code that traps in the backend. This type of pass is important for the M88k target due to hardware limitations on MC88100 as this CPU does not reliably detect division by zero situations.
+
+Continuing from the previous chapter’s implementation of the backend, let’s examine how a backend machine function pass is implemented!
+
 \mySubsubsection{13.1.1.}{Implementing the top-level interface for the M88k target}
+
+Firstly, within llvm/lib/Target/M88k/M88k.h, let’s add two prototypes inside the llvm namespace declaration that will be used later:
+
+\begin{enumerate}
+\item
+The machine function pass that will be implemented will be called M88kDivInstrPass. We will add a function declaration that initializes this pass and takes in the pass registry, which is a class that manages the registration and initialization of all passes:
+
+\begin{cpp}
+void initializeM88kDivInstrPass(PassRegistry &);
+\end{cpp}
+
+\item
+Next, the actual function that creates the M88kDivInstr pass is declared, with the M88k target machine information as its argument:
+
+\begin{cpp}
+FunctionPass *createM88kDivInstr(const M88kTargetMachine &);
+\end{cpp}
+\end{enumerate}
 
 \mySubsubsection{13.1.2.}{Adding the TargetMachine implementation for machine function passes}
 
+Next, we will analyze some of the changes that are required in llvm/lib/Target/M88k/ M88kTargetMachine.cpp:
+
+\begin{enumerate}
+\item
+Within LLVM, it’s common to give the user the option to toggle passes on or off. So, let’s provide the user the same flexibility with our machine function pass. We’ll start by declaring a command-line option called m88k-no-check-zero-division and initializing it to false, which implies that there will always be a check for zero division unless the user explicitly turns this off. We’ll add this under the llvm namespace declaration and is an option for llc:
+
+\begin{cpp}
+using namespace llvm;
+static cl::opt<bool>
+    NoZeroDivCheck("m88k-no-check-zero-division", cl::Hidden,
+                    cl::desc("M88k: Don't trap on integer division by zero."),
+                    cl::init(false));
+\end{cpp}
+
+\item
+It is also customary to create a formal method that returns the command-line value so that we can query it to determine whether the pass will be run. Our original command-line option will be wrapped in the noZeroDivCheck() method so that we can utilize the commandline result later:
+
+\begin{cpp}
+M88kTargetMachine::~M88kTargetMachine() {}
+bool M88kTargetMachine::noZeroDivCheck() const { return NoZeroDivCheck; }
+\end{cpp}
+
+\item
+Next, inside LLVMInitializeM88kTarget(), where the M88k target and passes are registered and initialized, we will insert a call to the initializeM88kDivInstrPass() method that was declared earlier in llvm/lib/Target/M88k/M88k.h:
+
+\begin{cpp}
+extern "C" LLVM_EXTERNAL_VISIBILITY void
+LLVMInitializeM88kTarget() {
+    RegisterTargetMachine<M88kTargetMachine> X(getTheM88kTarget());
+    auto &PR = *PassRegistry::getPassRegistry();
+    initializeM88kDAGToDAGISelPass(PR);
+    initializeM88kDivInstrPass(PR);
+}
+\end{cpp}
+
+\item
+The M88k target also needs to override addMachineSSAOptimization(), which is a method that adds passes to optimize machine instructions when they are in SSA form. Essentially, our machine function pass is added as a type of machine SSA optimization. This method is declared as a function that is to be overridden. We will add the full implementation at the end of M88kTargetMachine.cpp:
+
+\begin{cpp}
+    bool addInstSelector() override;
+    void addPreEmitPass() override;
+    void addMachineSSAOptimization() override;
+
+. . .
+void M88kPassConfig::addMachineSSAOptimization() {
+    addPass(createM88kDivInstr(getTM<M88kTargetMachine>()));
+    TargetPassConfig::addMachineSSAOptimization();
+}
+\end{cpp}
+
+\item
+Our method that returns the command-line option to toggle the machine function pass on and off (the noZeroDivCheck() method) is also declared in M88kTargetMachine.h:
+
+\begin{cpp}
+    ~M88kTargetMachine() override;
+    bool noZeroDivCheck() const;
+\end{cpp}
+\end{enumerate}
+
 \mySubsubsection{13.1.3.}{Developing the specifics of the machine function pass}
+
+Now that the implementation in the M88k target machine is completed, the next step will be to develop the machine function pass itself. The implementation is contained within the new file, llvm/lib/ Target/M88k/M88kDivInstr.cpp:
+
+\begin{enumerate}
+\item
+The necessary headers for our machine function pass are added first. This includes headers that give us access to the M88k target information and headers that allow us to operate on machine functions and machine instructions:
+
+\begin{cpp}
+#include "M88k.h"
+#include "M88kInstrInfo.h"
+#include "M88kTargetMachine.h"
+#include "MCTargetDesc/M88kMCTargetDesc.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/Support/Debug.h"
+\end{cpp}
+
+\item
+After that, we will add some code to prepare for our machine function pass. The first is a DEBUG\_TYPE definition that is named m88k-div-instr, which is used for fine-grained control when debugging. Specifically, defining this DEBUG\_TYPE allows users to specify the machine function pass name and view any debugging information that is pertinent to the pass when debug information is enabled:
+
+\begin{cpp}
+#define DEBUG_TYPE "m88k-div-instr"
+\end{cpp}
+
+\item
+We also specify that the llvm namespace is being used, and a STATISTIC value for our machine function is also declared. This statistic, called InsertedChecks, keeps track of how many division-by-zero checks are inserted by the compiler. Finally, an anonymous namespace is declared to encapsulate the subsequent machine function pass implementation:
+
+\begin{cpp}
+using namespace llvm;
+STATISTIC(InsertedChecks, "Number of inserted checks for
+division by zero");
+namespace {
+\end{cpp}
+
+\item
+As mentioned previously, this machine function pass aims to check for division by zero cases and inserts instructions that will cause the CPU to trap. These instructions require condition codes, so an enum value that we call CC0 is defined with condition codes that are valid for the M88k target, along with their encodings:
+
+\begin{cpp}
+enum class CC0 : unsigned {
+    EQ0 = 0x2,
+    NE0 = 0xd,
+    GT0 = 0x1,
+    LT0 = 0xc,
+    GE0 = 0x3,
+    LE0 = 0xe
+};
+\end{cpp}
+
+\item
+Let’s create the actual class for our machine function pass next, called M88kDivInstr. Firstly, we create it as an instance that inherits and is of the MachineFunctionPass type. Next, we declare various necessary instances that our M88kDivInstr pass will require. This includes M88kBuilder, which we will create and elaborate on later, and M88kTargetMachine, which contains target instruction and register information. Furthermore, we also require the register bank information and the machine register information when emitting instructions. An AddZeroDivCheck Boolean is also added to represent the previous command-line option, which turns our pass on or off:
+
+\begin{cpp}
+class M88kDivInstr : public MachineFunctionPass {
+    friend class M88kBuilder;
+    const M88kTargetMachine *TM;
+    const TargetInstrInfo *TII;
+    const TargetRegisterInfo *TRI;
+    const RegisterBankInfo *RBI;
+    MachineRegisterInfo *MRI;
+    bool AddZeroDivCheck;
+\end{cpp}
+
+\item
+For the public variables and methods of the M88kDivInstr class, we declare an identification number that LLVM will use to identify our pass, as well as the M88kDivInstr constructor, which takes in M88kTargetMachine. Next, we override the getRequiredProperties() method, which represents the properties that MachineFunction may have at any time during the optimization, and we also override the runOnMachineFunction() method, which will be one of the primary methods that our pass will run when checking for any division by zero. The second important function that is publicly declared is the runOnMachineBasicBlock() function, which will be executed from inside runOnMachineFunction():
+
+\begin{cpp}
+public:
+    static char ID;
+    M88kDivInstr(const M88kTargetMachine *TM = nullptr);
+    MachineFunctionProperties getRequiredProperties() const override;
+    bool runOnMachineFunction(MachineFunction &MF) override;
+    bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
+\end{cpp}
+
+\item
+Finally, the last part is declaring the private methods and closing off the class. The only private method we declare within the M88kDivInstr class is the addZeroDivCheck() method, which inserts the checks for division by zero after any divide instruction. As we will see later, MachineInstr will need to point to specific divide instructions on the M88k target:
+
+\begin{cpp}
+private:
+    void addZeroDivCheck(MachineBasicBlock &MBB, MachineInstr *DivInst);
+};
+\end{cpp}
+
+\item
+An M88kBuilder class is created next, which is a specialized builder instance that creates M88k-specific instructions. This class keeps an instance of MachineBasicBlock (and a corresponding iterator), and DebugLoc to keep track of the debug location of this builder class. Other necessary instances include the target instruction information, the target register information, and the register bank information of the M88k target:
+
+\begin{cpp}
+class M88kBuilder {
+    MachineBasicBlock *MBB;
+    MachineBasicBlock::iterator I;
+    const DebugLoc &DL;
+    const TargetInstrInfo &TII;
+    const TargetRegisterInfo &TRI;
+    const RegisterBankInfo &RBI;
+\end{cpp}
+
+\item
+For public methods of the M88kBuilder class, we must implement the constructor for this builder. Upon initialization, our specialized builder requires an instance of the M88kDivInstr pass to initialize the target instruction, register information, and the register bank information, as well as MachineBasicBlock and a debug location:
+
+\begin{cpp}
+public:
+    M88kBuilder(M88kDivInstr &Pass, MachineBasicBlock *MBB, const DebugLoc &DL)
+        : MBB(MBB), I(MBB->end()), DL(DL), TII(*Pass.TII), TRI(*Pass.TRI), RBI(*Pass.RBI) {}
+\end{cpp}
+
+\item
+Next, a method to set MachineBasicBlock inside the M88k builder is created, and the MachineBasicBlock iterator is also set accordingly:
+
+\begin{cpp}
+void setMBB(MachineBasicBlock *NewMBB) {
+    MBB = NewMBB;
+    I = MBB->end();
+}
+\end{cpp}
+
+\item
+The constrainInst() function needs to be implemented next and is needed for when MachineInstr instances are processed. For a given MachineInstr, we check if the register class of the MachineInstr instance’s operands can be constrained through the pre-existing function, constrainSelectedInstRegOperands(). As shown here, this machine function pass requires that the register operands of the machine instruction can be constrained:
+
+\begin{cpp}
+void constrainInst(MachineInstr *MI) {
+    if (!constrainSelectedInstRegOperands(*MI, TII, TRI, RBI))
+    llvm_unreachable("Could not constrain register operands");
+}
+\end{cpp}
+
+\item
+One of the instructions that this pass inserts is a BCND instruction, as defined in M88kInstrInfo.td, which is a conditional branch on the M88k target. To create this instruction, we require a condition code, which are the CC0 enums that were implemented at the beginning of M88kDivInstr.cpp – that is, a register and MachineBasicBlock. The BCND instruction is simply returned upon creation and after checking if the newly created instruction can be constrained:
+
+\begin{cpp}
+MachineInstr *bcnd(CC0 Cc, Register Reg, MachineBasicBlock
+    *TargetMBB) {
+    MachineInstr *MI = BuildMI(*MBB, I, DL, TII.get(M88k::BCND))
+                            .addImm(static_cast<int64_t>(Cc))
+                            .addReg(Reg)
+                            .addMBB(TargetMBB);
+    constrainInst(MI);
+    return MI;
+}
+\end{cpp}
+
+\item
+Similarly, we also require a trap instruction for our machine function pass, which is a TRAP503 instruction. This instruction requires a register and raises a trap with vector 503 if the 0-th bit of the register is not set, which will be raised after a zero division. Upon creating the TRAP503 instruction, TRAP503 is checked for constraints before being returned. Moreover, this concludes the class implementation of the M88kBuilder class and completes the previously declared anonymous namespace:
+
+\begin{cpp}
+    MachineInstr *trap503(Register Reg) {
+        MachineInstr *MI = BuildMI(*MBB, I, DL, TII.
+            get(M88k::TRAP503)).addReg(Reg);
+        constrainInst(MI);
+        return MI;
+    }
+};
+} // end anonymous namespace
+\end{cpp}
+
+\item
+We can now start implementing the functions that perform the actual checks in the machine function pass. First, let’s explore how addZeroDivCheck() is implemented. This function simply inserts a check for division by zero between the current machine instruction, which is expected to point to either DIVSrr or DIVUrr; these are mnemonics for signed and unsigned divisions, respectively. The BCND and TRAP503 instructions are inserted, and the InsertedChecks statistic is incremented to indicate the addition of the two instructions:
+
+\begin{cpp}
+void M88kDivInstr::addZeroDivCheck(MachineBasicBlock &MBB,
+                                   MachineInstr *DivInst) {
+    assert(DivInst->getOpcode() == M88k::DIVSrr ||
+            DivInst->getOpcode() == M88k::DIVUrr && "Unexpected
+            opcode");
+    MachineBasicBlock *TailBB = MBB.splitAt(*DivInst);
+    M88kBuilder B(*this, &MBB, DivInst->getDebugLoc());
+    B.bcnd(CC0::NE0, DivInst->getOperand(2).getReg(), TailBB);
+    B.trap503(DivInst->getOperand(2).getReg());
+    ++InsertedChecks;
+}
+\end{cpp}
+
+\item
+runOnMachineFunction() is implemented next and is one of the important functions to override when creating a type of function pass within LLVM. This function returns true or false, depending on if any changes have been made during the duration of the machine function pass. Furthermore, for a given machine function, we gather all the relevant M88k subtarget information, including the target instruction, target register, register bank, and machine register information.Details regarding whether or not the user turns the M88kDivInstr machine function pass on or off are also queried and stored in the AddZeroDivCheck variable. Additionally, all machine basic blocks in the machine function are analyzed for the division by zero. The function that performs the machine basic block analysis is runOnMachineBasicBlock(); we will implement this next. Finally, if the machine function has changed, this is indicated by the Changed variable that is returned:
+
+\begin{cpp}
+bool M88kDivInstr::runOnMachineFunction(MachineFunction &MF) {
+    const M88kSubtarget &Subtarget =
+    MF.getSubtarget<M88kSubtarget>();
+    TII = Subtarget.getInstrInfo();
+    TRI = Subtarget.getRegisterInfo();
+    RBI = Subtarget.getRegBankInfo();
+    MRI = &MF.getRegInfo();
+    AddZeroDivCheck = !TM->noZeroDivCheck();
+    bool Changed = false;
+    for (MachineBasicBlock &MBB : reverse(MF))
+        Changed |= runOnMachineBasicBlock(MBB);
+    return Changed;
+}
+\end{cpp}
+
+\item
+For the runOnMachineBasicBlock() function, a Changed Boolean flag is also returned to indicate if the machine basic block has been changed; however, it is initially set to false. Furthermore, within a machine basic block, we need to analyze all the machine instructions and check if the instructions are the DIVUrr or DIVSrr opcodes, respectively. In addition to checking if the opcodes are divide instructions, we need to check if the user has turned our machine function pass on or off. If all of these conditions are satisfied, the division by zero checks with the conditional branch and the trap instructions are added accordingly through the addZeroDivCheck() function, which was implemented previously.
+
+\begin{cpp}
+bool M88kDivInstr::runOnMachineBasicBlock(MachineBasicBlock
+&MBB) {
+    bool Changed = false;
+    for (MachineBasicBlock::reverse_instr_iterator I =
+    MBB.instr_rbegin();
+            I != MBB.instr_rend(); ++I) {
+        unsigned Opc = I->getOpcode();
+        if ((Opc == M88k::DIVUrr || Opc == M88k::DIVSrr) &&
+        AddZeroDivCheck) {
+            addZeroDivCheck(MBB, &*I);
+            Changed = true;
+        }
+    }
+    return Changed;
+}
+\end{cpp}
+
+\item
+After, we need to implement the constructor to initialize our function pass and set the appropriate machine function properties. This can be achieved by calling the initializeM88kDivInstrPass() function with the PassRegistry instance inside the constructor of the M88kDivInstr class, and also by setting the machine function properties to indicate that our pass requires machine functions to be in SSA form:
+
+\begin{cpp}
+M88kDivInstr::M88kDivInstr(const M88kTargetMachine *TM)
+: MachineFunctionPass(ID), TM(TM) {
+    initializeM88kDivInstrPass(*PassRegistry::getPassRegistry());
+}
+MachineFunctionProperties M88kDivInstr::getRequiredProperties()
+const {
+    return MachineFunctionProperties().set(
+        MachineFunctionProperties::Property::IsSSA);
+}
+\end{cpp}
+
+\item
+The next step is to initialize the ID for our machine function pass and to instantiate the INITIALIZE\_PASS macro with the details of our machine function pass. This requires the pass instance, naming information, and two Boolean arguments that indicate if the pass only examines the CFG and if the pass is an analysis pass. Since M88kDivInstr performs neither of those, two false arguments are specified to the pass initialization macro:
+
+\begin{cpp}
+char M88kDivInstr::ID = 0;
+INITIALIZE_PASS(M88kDivInstr, DEBUG_TYPE, "Handle div instructions", false, false)
+\end{cpp}
+
+\item
+Finally, the createM88kDivInstr() function creates a new instance of the M88kDivInstr pass, with a M88kTargetMachine instance. This is encapsulated into an llvm namespace, and the namespace is ended after finishing this function:
+
+\begin{cpp}
+namespace llvm {
+FunctionPass *createM88kDivInstr(const M88kTargetMachine &TM) {
+    return new M88kDivInstr(&TM);
+}
+} // end namespace llvm
+\end{cpp}
+\end{enumerate}
+
 
 \mySubsubsection{13.1.4.}{Building newly implemented machine function passes}
 
+We’re almost done with implementing our new machine function pass! Now, we need to ensure CMake is aware of the new machine function pass within M88kDivinstr.cpp. This file is then added to llvm/lib/Target/M88k/CMakeLists.txt:
+
+\begin{cmake}
+add_llvm_target(M88kCodeGen
+    M88kAsmPrinter.cpp
+    M88kDivInstr.cpp
+    M88kFrameLowering.cpp
+    M88kInstrInfo.cpp
+    M88kISelDAGToDAG.cpp
+\end{cmake}
+
+The last step is to build LLVM with our new machine function pass implementation with the following commands. We require the -DLLVM\_EXPERIMENTAL\_TARGETS\_TO\_BUILD=M88k CMake option to build the M88k target:
+
+\begin{shell}
+$ cmake -G Ninja ../llvm-project/llvm -DLLVM_EXPERIMENTAL_TARGETS_TO_
+BUILD=M88k -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="llvm"
+$ ninja
+\end{shell}
+
+With that, we’ve implemented the machine function pass, but wouldn’t it be interesting to see how it works? We can demonstrate the result of this pass by passing LLVM IR through llc.
+
 \mySubsubsection{13.1.5.}{A glimpse of running a machine function pass with llc}
+
+We have the following IR, which contains a division by zero:
+
+\begin{shell}
+$ cat m88k-divzero.ll
+target datalayout = "E-m:e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-
+i32:32:32-i64:64:64-f32:32:32-f64:64:64-a:8:16-n32"
+target triple = "m88k-unknown-openbsd"
+
+@dividend = dso_local global i32 5, align 4
+define dso_local i32 @testDivZero() #0 {
+    %1 = load i32, ptr @dividend, align 4
+    %2 = sdiv i32 %1, 0
+    ret i32 %2
+}
+\end{shell}
+
+Let’s feed it into llc:
+
+\begin{shell}
+$ llc m88k-divzero.ll
+\end{shell}
+
+By doing this, we’ll see that, in the resulting assembly, by default, the division by zero checks, which are represented by bcnd.n (BCND) and tb0 (TRAP503), are inserted by our new machine function pass:
+
+\begin{shell}
+| %bb.1:
+    subu %r2, %r0, %r2
+    bcnd.n ne0, %r0, .LBB0_2
+    divu %r2, %r2, 0
+    tb0 0, %r3, 503
+. . .
+.LBB0_3:
+    bcnd.n ne0, %r0, .LBB0_4
+    divu %r2, %r2, 0
+    tb0 0, %r3, 503
+\end{shell}
+
+However, let’s see what happens when we specify -{}-m88k-no-check-zero-division to llc:
+
+\begin{shell}
+$ llc m88k-divzero.ll –m88k-no-check-zero-division
+\end{shell}
+
+This option to the backend instructs llc not to run the pass that checks for the division by zero. The resulting assembly will not contain any BCND or TRAP503 instructions. Here’s an example:
+
+\begin{shell}
+| %bb.1:
+    subu %r2, %r0, %r2
+    divu %r2, %r2, 0
+    jmp.n %r1
+    subu %r2, %r0, %r2
+\end{shell}
+
+As we can see, implementing a machine function pass requires several steps, but these procedures can be used as a guideline for you to implement any type of machine function pass that fits your needs. Since we have extensively explored the backend within this section, let’s switch gears and see how we can teach the frontend about the M88k target.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

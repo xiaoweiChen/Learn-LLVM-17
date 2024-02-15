@@ -1,0 +1,92 @@
+The binary interface of a platform not only defines how parameters are passed. It also includes how a stack frame is laid out: in which places are local variables stored, where registers are spilled to, and so on. Often, a special instruction sequence is required at the beginning and end of a function, called the prolog and the epilog. At the current development state, our target does not support the required machine instructions to create the prolog and the epilog. However, the framework code for instruction selection requires that a subclass of TargetFrameLowering is available. The easy solution is to provide the M88kFrameLowering class with an empty implementation.
+
+The declaration of the class is in the M88kFrameLowering.h file. All we must do here is override the pure virtual functions:
+
+\begin{cpp}
+namespace llvm {
+class M88kFrameLowering : public TargetFrameLowering {
+public:
+    M88kFrameLowering();
+
+    void
+    emitPrologue(MachineFunction &MF,
+    MachineBasicBlock &MBB) const override;
+
+    void
+    emitEpilogue(MachineFunction &MF,
+                 MachineBasicBlock &MBB) const override;
+    bool hasFP(const MachineFunction &MF) const override;
+};
+}
+\end{cpp}
+
+The implementation, which is stored in the M88kFrameLowering.cpp file, provides some basic details about stack frames in the constructor. The stack grows downwards, to smaller addresses, and is aligned on 8-byte boundaries. When a function is called, the local variables are stored directly below the stack pointer of the calling function, so the offset of the local area is 0. Even during a function call, the stack should remain aligned at an 8-byte boundary. The last parameter implies that the stack cannot be realigned. The other functions just have an empty implementation:
+
+\begin{cpp}
+M88kFrameLowering::M88kFrameLowering()
+    : TargetFrameLowering(
+        TargetFrameLowering::StackGrowsDown, Align(8),
+        0, Align(8), false /* StackRealignable */) {}
+
+void M88kFrameLowering::emitPrologue(
+    MachineFunction &MF, MachineBasicBlock &MBB) const {}
+
+void M88kFrameLowering::emitEpilogue(
+    MachineFunction &MF, MachineBasicBlock &MBB) const {}
+
+bool M88kFrameLowering::hasFP(
+    const MachineFunction &MF) const { return false; }
+\end{cpp}
+
+Of course, as soon as our implementation grows, this class will be one of the first that needs to be fully implemented.
+
+Before we can put all the pieces together, we need to implement the assembly printer, which is used to emit machine instructions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

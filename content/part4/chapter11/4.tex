@@ -1,5 +1,245 @@
+
+The target description is the heart of a backend implementation. It is written in the TableGen language and defines the basic properties of an architecture, such as the registers and the instruction formats and patterns for instruction selection. If you are not familiar with the TableGen language, then we recommend reading Chapter 8, The TableGen Language, first. The base definitions are in the llvm/ include/llvm/Target/Target.td file, which can be found online at \url{https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/Target/Target.td}. This file is heavily commented on and is a useful source of information about the use of the definitions.
+
+In an ideal world, we would generate the whole backend from the target description. This goal has not yet been reached, and therefore, we will need to extend the generated code later. Because of its size, the target description is split into several files. The top-level file will be M88k.td, inside the llvm/ lib/Target/M88k directory, which also includes the other files. Let’s have a look at some files, beginning with the register definition.
+
 \mySubsubsection{11.4.1.}{Adding the register definition}
+
+A CPU architecture usually defines a set of registers. The characteristics of these registers can vary. Some architectures allow access to sub-registers. For example, the x86 architecture has special register names to access only a part of a register value. Other architectures do not implement this. In addition to general-purpose, floating-point, and vector registers, an architecture may have special registers for status codes or configuration of floating-point operations. We need to define all this information for LLVM. The register definitions are stored in the M88kRegisterInfo.td file, also found within the llvm/lib/Target/M88k directory.
+
+The M88k architecture defines general-purpose registers, extended registers for floating-point operations, and control registers. To keep the example small, we only define the general-purpose registers. We begin by defining a super-class for the registers. A register has a name and an encoding. The name is used in the textual representation of an instruction. Similarly, the encoding is used as part of the binary representation of an instruction. The architecture defines 32 registers and the encoding for registers therefore uses 5 bits, so we limit the field holding the encoding. We also define that all the generated C++ code should live in the M88k namespace:
+
+\begin{cpp}
+class M88kReg<bits<5> Enc, string n> : Register<n> {
+    let HWEncoding{15-5} = 0;
+    let HWEncoding{4-0} = Enc;
+    let Namespace = "M88k";
+}
+\end{cpp}
+
+Next, we can define all 32 general-purpose registers. The r0 register is special because it always returns the constant 0 when read, so we set the isConstant flag to true for that register:
+
+\begin{cpp}
+foreach I = 0-31 in {
+    let isConstant = !eq(I, 0) in
+        def R#I : M88kReg<I, "r"#I>;
+}
+\end{cpp}
+
+For the register allocator, the single registers need to be grouped into register classes. The sequence order of the registers defines the allocation order. The register allocator also needs other information about the registers such as, for example, the value types, which can be stored in a register, the spill size of a register in bits, and the required alignment in memory. Instead of using the RegisterClass base class directly, we create a new M88kRegisterClass class. This allows us to change the parameter list to our needs. It also avoids the repetition of the C++ namespace name used for the generated code, which is the first argument for the RegisterClass class:
+
+\begin{cpp}
+class M88kRegisterClass<list<ValueType> types, int size,
+                        int alignment, dag regList,
+                        int copycost = 1>
+    : RegisterClass<"M88k", types, alignment, regList> {
+    let Size = size;
+    let CopyCost = copycost;
+}
+\end{cpp}
+
+In addition, we define a class for register operands. Operands describe the input and output of an instruction. They are used during assembling and disassembling of an instruction, and also in the patterns used by the instruction selection phase. Using our own class, we can give the generated function used to decode a register operand a name that conforms to the LLVM coding guidelines:
+
+\begin{cpp}
+class M88kRegisterOperand<RegisterClass RC>
+: RegisterOperand<RC> {
+    let DecoderMethod = "decode"#RC#"RegisterClass";
+}
+\end{cpp}
+
+Based on these definitions, we now define the general-purpose registers. Please note that a generalpurpose register of the m88k architecture is 32-bits wide and can hold integer and floating-point values. To avoid writing all register names, we use the sequence generator, which generates a list of strings based on the template string:
+
+\begin{cpp}
+def GPR : M88kRegisterClass<[i32, f32], 32, 32,
+                            (add (sequence "R%u", 0, 31))>;
+\end{cpp}
+
+Likewise, we define the register operand. The r0 register is special because it contains the constant 0. This fact can be used by the global instruction selection framework, and therefore, we attach this information to the register operand:
+
+\begin{cpp}
+def GPROpnd : M88kRegisterOperand<GPR> {
+    let GIZeroRegister = R0;
+}
+\end{cpp}
+
+There is an extension to the m88k architecture that defines an extended register file for floating-point values only. You would define those registers in the same way as the general-purpose registers.
+
+The general-purpose registers are also used in pairs, mainly for 64-bit floating point operations, and we need to model them. We use the sub\_hi and sub\_lo sub-register indices to describe the high 32 bits and the low 32 bits. We also need to set the C++ namespace for the generated code:
+
+\begin{cpp}
+let Namespace = "M88k" in {
+    def sub_hi : SubRegIndex<32, 0>;
+    def sub_lo : SubRegIndex<32, 32>;
+}
+\end{cpp}
+
+The register pairs are then defined using the RegisterTuples class. The class takes a list of sub-register indices as the first argument and a list of registers as the second argument. We only need even/odd numbered pairs, and we achieve this with the optional fourth parameter of sequence, which is the stride to use when generating the sequence:
+
+\begin{cpp}
+def GRPair : RegisterTuples<[sub_hi, sub_lo],
+                            [(add (sequence "R%u", 0, 30, 2)),
+                            (add (sequence "R%u", 1, 31, 2))]>;
+\end{cpp}
+
+To use the register pairs, we define a register class and a register operand:
+
+\begin{cpp}
+def GPR64 : M88kRegisterClass<[i64, f64], 64, 32,
+                              (add GRPair), /*copycost=*/ 2>;
+def GPR64Opnd : M88kRegisterOperand<GPR64>;
+\end{cpp}
+
+Please note that we set the copycost parameter to 2 because we need two instructions instead of one to copy a register pair to another register pair.
+
+This finishes our definition of the registers. In the next section, we will define the instruction formats.
 
 \mySubsubsection{11.4.2.}{Defining the instruction formats and the instruction informations}
 
+An instruction is defined using the TableGen Instruction class. Defining an instruction is a complex task because we have to consider many details. An instruction has a textual representation used by the assembler and the disassembler. It has a name, for example, and, and it may have operands. The assembler transforms the textual representation into a binary format, therefore, we must define the layout of that format. For instruction selection, we need to attach a pattern to the instruction. To manage this complexity, we define a class hierarchy. The base classes will describe the various instruction formats and are stored in the M88kIntrFormats.td file. The instructions themselves and other definitions required for the instruction selection are stored in the M88kInstrInfo.td file.
+
+Let’s begin with defining a class for the instructions of the m88k architecture called M88kInst. We derive this class from the predefined Instruction class. Our new class has a couple of parameters. The outs and ins parameters describe the output and input operands as a list, using the special dag type. The textual representation of the instruction is split into the mnemonic given in theasm parameter, and the operands. Last, the pattern parameter can hold a pattern used for instruction selection.
+
+We also need to define two new fields:
+
+\begin{itemize}
+\item
+The Inst field is used to hold the bit pattern of the instruction. Because the size of an instruction depends on the platform, this field cannot be predefined. All instructions of the m88k architecture are 32-bit wide, and so this field has the bits<32> type.
+
+\item
+The other field is called SoftFail and has the same type as Inst. It holds a bit mask used with an instruction for which the actual encoding can differ from the bits in the Inst field and still be valid. The only platform that requires this is ARM, so we can simply set this field to 0.
+\end{itemize}
+
+The other fields are defined in the superclass, and we only set the value. Simple computations are possible in the TableGen language, and we use this when we create the value for the AsmString field, which holds the full assembler representation. If the operands operand string is empty, then the AsmString field will just have the value of the asm parameter, otherwise, it will be the concatenation of both strings, with a space between them:
+
+\begin{cpp}
+class InstM88k<dag outs, dag ins, string asm, string operands,
+                list<dag> pattern = []>
+    : Instruction {
+    bits<32> Inst;
+    bits<32> SoftFail = 0;
+    let Namespace = "M88k";
+    let Size = 4;
+    dag OutOperandList = outs;
+    dag InOperandList = ins;
+    let AsmString = !if(!eq(operands, ""), asm,
+                        !strconcat(asm, " ", operands));
+    let Pattern = pattern;
+    let DecoderNamespace = "M88k";
+}
+\end{cpp}
+
+For the instruction encoding, the manufacturer usually groups instructions together, and the instructions of one group have a similar encoding. We can use those groups to systematically create classes defining the instruction formats. For example, all logical operations of the m88k architecture encode the destination register in the bits from 21 to 25 and the first source register in the bits from 16 to 20. Please note the implementation pattern here: we declare the rd and rs1 fields for the values, and we assign those values to the correct bit positions of the Inst field, which we defined previously in the superclass:
+
+\begin{cpp}
+class F_L<dag outs, dag ins, string asm, string operands,
+          list<dag> pattern = []>
+        : InstM88k<outs, ins, asm, operands, pattern> {
+    bits<5> rd;
+    bits<5> rs1;
+    let Inst{25-21} = rd;
+    let Inst{20-16} = rs1;
+}
+\end{cpp}
+
+There are several groups of logical operations based on this format. One of them is the group of instructions using three registers, which is called triadic addressing mode in the manual:
+
+\begin{cpp}
+class F_LR<bits<5> func, bits<1> comp, string asm,
+            list<dag> pattern = []>
+    : F_L<(outs GPROpnd:$rd), (ins GPROpnd:$rs1, GPROpnd:$rs2),
+            !if(comp, !strconcat(asm, ".c"), asm),
+            "$rd, $rs1, $rs2", pattern> {
+    bits<5> rs2;
+    let Inst{31-26} = 0b111101;
+    let Inst{15-11} = func;
+    let Inst{10} = comp;
+    let Inst{9-5} = 0b00000;
+    let Inst{4-0} = rs2;
+}
+\end{cpp}
+
+Let’s examine the functionality provided by this class in more detail. The func parameter specifies the operation. As a special feature, the second operand can be complemented before the operation, which is indicated by setting the flag comp to 1. The mnemonic is given in the asm parameter, and an instruction selection pattern can be passed.
+
+With initializing the superclass, we can give more information. The full assembler text template for the and instruction is and \$rd, \$rs1, \$rs2. The operand string is fixed for all instructions of this group, so we can define it here. The mnemonic is given by the user of this class, but we can concatenate the .c suffix here, which denotes that the second operand should be complemented first. And last, we can define the output and input operands. These operands are expressed as directed acyclic graphs or dag for short. A dag has an operation and a list of arguments. An argument can also be a dag, which allows the construction of complex graphs. For example, the output operand is (outs GPROpnd:\$rd).
+
+The outs operation denotes this dag as the output operand list. The only argument, GPROpnd:\$rd, consists of a type and a name. It connects several pieces we have already seen. The type is GPROnd, which is the name of the register operand we have defined in the previous section. The name \$rd refers to the destination register. We used this name in the operand string earlier, and also as a field name in the F\_L superclass. The input operands are defined similarly. The rest of the class initializes the other bits of the Inst field. Please take the time and check that all 32 bits are indeed now assigned.
+
+We put the final instruction definition in the M88kInstrInfo.td file. Since we have two variants of each logical instruction, we use a multiclass to define both instructions at once. We also define here the pattern for the instruction selection as a directed acyclic graph. The operation in the pattern is set, and the first argument is the destination register. The second argument is a nested graph, which is the actual pattern. Once again, the name of the operation is the first OpNode element.
+
+LLVM has many predefined operations, which you find in the llvm/include/llvm/Target/ TargetSelectionDAG.td file (\url{https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/Target/TargetSelectionDAG.td}). For example, there is the and operation, which denotes a bitwise AND operation. The arguments are the two source registers, \$rs1 and \$rs2.You read this pattern roughly as follows: if the input to the instruction selection contains an OpNode operation using two registers, then assign the result of this operation to the \$rd register and generate this instruction. Utilizing the graph structure, you can define more complex patterns. For example, the second pattern integrates the complement into the pattern using the not operand.
+
+A small detail to point out is that the logical operations are commutative. This can be helpful for the instruction selection, so we set the isCommutable flag to 1 for those instructions:
+
+\begin{cpp}
+multiclass Logic<bits<5> Fun, string OpcStr, SDNode OpNode> {
+    let isCommutable = 1 in
+    def rr : F_LR<Fun, /*comp=*/0b0, OpcStr,
+                    [(set i32:$rd,
+                    (OpNode GPROpnd:$rs1, GPROpnd:$rs2))]>;
+    def rrc : F_LR<Fun, /*comp=*/0b1, OpcStr,
+                    [(set i32:$rd,
+                    (OpNode GPROpnd:$rs1, (not GPROpnd:$rs2)))]>;
+}
+\end{cpp}
+
+And finally, we define the records for the instructions:
+
+\begin{cpp}
+defm AND : Logic<0b01000, "and", and>;
+defm XOR : Logic<0b01010, "xor", xor>;
+defm OR : Logic<0b01011, "or", or>;
+\end{cpp}
+
+The first parameter is the bit pattern for the function, the second is the mnemonic, and the third parameter is the dag operation used in the pattern.
+
+To fully understand the class hierarchy, revisit the class definitions. The guiding design principle is to avoid the repetition of information. For example, the 0b01000 function bit pattern is used exactly once. Without the Logic multiclass you would need to type this bit pattern twice and repeat the patterns several times, which is error-prone.
+
+Please also note that it is good to establish a naming scheme for the instructions. For example, the record for the and instruction is named ANDrr, while the variant with the complemented register is named ANDrrc. Those names end up in the generated C++ source code, and using a naming scheme helps to understand to which assembler instruction the name refers.
+
+Up to now, we modeled the register file of the m88k architecture and defined a couple of instructions. In the next section, we will create the top-level file.
+
 \mySubsubsection{11.4.3.}{Creating the top-level file for the target description}
+
+So far, we created the M88kRegisterInfo.td, M88kInstrFormats.td, and M88kInstrInfo. td files. The target description is a single file, called M88k.td. This file includes the LLVM definitions first, and the files that we have implemented follow afterwards.:
+
+\begin{cpp}
+include "llvm/Target/Target.td"
+
+include "M88kRegisterInfo.td"
+include "M88kInstrFormats.td"
+include "M88kInstrInfo.td"
+\end{cpp}
+
+We will extend this include section later when we add more backend functionality.
+
+The top-level file also defines some global instances. The first record named M88kInstrInfo holds the information about all instructions:
+
+\begin{cpp}
+def M88kInstrInfo : InstrInfo;
+\end{cpp}
+
+We call the assembler class M88kAsmParser. To enable TableGen to identify hardcoded registers, we specify that register names are prefixed with a percent sign, and we need to define an assembler parser variant to specify this:
+
+\begin{cpp}
+def M88kAsmParser : AsmParser;
+def M88kAsmParserVariant : AsmParserVariant {
+    let RegisterPrefix = "%";
+}
+\end{cpp}
+
+And last, we need to define the target:
+
+\begin{cpp}
+def M88k : Target {
+    let InstructionSet = M88kInstrInfo;
+    let AssemblyParsers = [M88kAsmParser];
+    let AssemblyParserVariants = [M88kAsmParserVariant];
+}
+\end{cpp}
+
+We now have defined enough of the target so that we can code the first utility. In the next section, we add the M88k backend to LLVM.
+
+
+
+
+

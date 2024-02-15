@@ -1,0 +1,142 @@
+Today, many small computers, such as the Raspberry Pi, are in use despite having only limited resources. Running a compiler on such a computer is often not possible or it takes too much time. Thus, a common requirement for a compiler is to generate code for a different CPU architecture. The whole process of having a host compile an executable for a different target is called cross-compiling.
+
+In cross-compiling, two systems are involved: the host system and the target system. The compiler runs on the host system and produces code for the target system. To denote the systems, the so-called triple is used. This is a configuration string that usually consists of the CPU architecture, the vendor, and the operating system. Furthermore, additional information about the environment is often added to the configuration string. For example, the x86\_64-pc-win32 triple is used for a Windows system running on a 64-bit X86 CPU. The CPU architecture is x86\_64, pc is a generic vendor, and win32 is the operating system, and all of these pieces are connected by a hyphen. A Linux system running on an ARMv8 CPU uses aarch64-unknown-linux-gnu as the triple, with aarch64 as the CPU architecture. Moreover, the operating system is linux, running a gnu environment. There is no real vendor for a Linux-based system, so this part is unknown. Additionally, parts that are not known or unimportant for a specific purpose are often omitted: the aarch64-linux-gnu triple describes the same Linux system.
+
+Let’s assume your development machine runs Linux on an X86 64-bit CPU and you want to crosscompile to an ARMv8 CPU system running Linux. The host triple is x86\_64-linux-gnu and the target triple is aarch64-linux-gnu. Different systems have different characteristics. Thus, your application must be written in a portable fashion; otherwise, complications may arise. Some common pitfalls are as follows:
+
+\begin{itemize}
+\item
+Endianness: The order in which multi-byte values are stored in memory can be different.
+
+\item
+Pointer size: The size of a pointer varies with the CPU architecture (usually 16, 32, or 64-bit). The C int type may not be large enough to hold a pointer.
+
+\item
+Type differences: Data types are often closely related to the hardware. The long double type can use 64-bit (ARM), 80-bit (X86), or 128-bit (ARMv8). PowerPC systems may use doubledouble arithmetic for long double, which gives more precision by using a combination of two 64-bit double values.
+\end{itemize}
+
+If you do not pay attention to these points, then your application can act surprisingly or crash on the target platform, even if it runs perfectly on your host system. The LLVM libraries are tested on different platforms and also contain portable solutions to the aforementioned issues.
+
+For cross-compiling, the following tools are required:
+
+\begin{itemize}
+\item
+A compiler that generates code for the target
+
+\item
+A linker capable of generating binaries for the target
+
+\item
+Header files and libraries for the target
+\end{itemize}
+
+Fortunately, the Ubuntu and Debian distributions have packages that support cross-compiling. We’re taking advantage of this in the following setup. The gcc and g++ compilers, the linker, ld, and the libraries are available as precompiled binaries that produce ARMv8 code and executables. The following command installs all of these packages:
+
+\begin{shell}
+$ sudo apt –y install gcc-12-aarch64-linux-gnu \
+    g++-12-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+    libstdc++-12-dev-arm64-cross
+\end{shell}
+
+The new files are installed under the /usr/aarch64-linux-gnu directory. This directory is the (logical) root directory of the target system. It contains the usual bin, lib, and include directories. The cross-compilers (aarch64-linux-gnu-gcc-8 and aarch64-linux-gnu-g++-8) are aware of this directory.
+
+\begin{myTip}{Cross-compiling on other systems}
+Some distributions, such as Fedora, only provide cross-compiling support for bare-metal targets such as the Linux kernel, but the header and library files needed for user land applications are not provided. In such a case, you can simply copy the missing files from your target system.
+
+If your distribution does not come with the required toolchain, then you can build it from source. For the compiler, you can use clang or gcc/g++. The gcc and g++ compilers must be configured to produce code for the target system and the binutils tools need to handle files for the target system. Moreover, the C and C++ libraries need to be compiled with this toolchain. The steps vary by operating system and host and target architecture. On the web, you can find instructions if you search for gcc cross-compile <architecture>.
+\end{myTip}
+
+With this preparation, you are almost ready to cross-compile the sample application (including the LLVM libraries) except for one little detail. LLVM uses the TableGen tool during the build. During cross-compilation, everything is compiled for the target architecture, including this tool. You can use llvm-tblgen from the build in Chapter 1 or you can compile only this tool. Assuming you are in the directory that contains the clone of this book’s GitHub repository, type the following:
+
+\begin{shell}
+$ mkdir build-host
+$ cd build-host
+$ cmake -G Ninja \
+    -DLLVM_TARGETS_TO_BUILD="X86" \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    ../llvm-project/llvm
+$ ninja llvm-tblgen
+$ cd ..
+\end{shell}
+
+These steps should be familiar by now. A build directory is created and entered. The cmake command creates the build files for LLVM only for the X86 target. To save space and time, a release build is done but assertions are enabled to catch possible errors. Only the llvm-tblgen tool is compiled with ninja.
+
+With the llvm-tblgen tool at hand, you can now start the cross-compilation process. The CMake command line is very long, so you may want to store the command in a script file. The difference from previous builds is that more information must be provided:
+
+\begin{shell}
+$ mkdir build-target
+$ cd build-target
+$ cmake -G Ninja \
+    -DCMAKE_CROSSCOMPILING=True \
+    -DLLVM_TABLEGEN=../build-host/bin/llvm-tblgen \
+    -DLLVM_DEFAULT_TARGET_TRIPLE=aarch64-linux-gnu \
+    -DLLVM_TARGET_ARCH=AArch64 \
+    -DLLVM_TARGETS_TO_BUILD=AArch64 \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DLLVM_EXTERNAL_PROJECTS=tinylang \
+    -DLLVM_EXTERNAL_TINYLANG_SOURCE_DIR=../tinylang \
+    -DCMAKE_INSTALL_PREFIX=../target-tinylang \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc-12 \
+    -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++-12 \
+    ../llvm-project/llvm
+$ ninja
+\end{shell}
+
+Again, you create a build directory and enter it before running the CMake command. Some of these CMake parameters have not been used before and require some explanation:
+
+\begin{itemize}
+\item
+CMAKE\_CROSSCOMPILING set to ON tells CMake that we are cross-compiling.
+
+\item
+LLVM\_TABLEGEN specifies the path to the llvm-tblgen tool to use. This is the one from the previous build.
+
+\item
+LLVM\_DEFAULT\_TARGET\_TRIPLE is the triple of the target architecture.
+
+\item
+LLVM\_TARGET\_ARCH is used for JIT code generation. It defaults to the architecture of the host. For cross-compiling, this must be set to the target architecture.
+
+\item
+LLVM\_TARGETS\_TO\_BUILD is the list of targets for which LLVM should include code generators. The list should at least include the target architecture.
+
+\item
+CMAKE\_C\_COMPILER and CMAKE\_CXX\_COMPILER specify the C and C++ compilers used for the build, respectively. The binaries of the cross-compilers are prefixed with the target triple and are not found automatically by CMake.
+\end{itemize}
+
+With the other parameters, a release build with assertions enabled is requested and our tinylang application is built as part of LLVM. Once the compilation process has finished, the file command can demonstrate that we have created a binary for ARMv8. Specifically, we can run \$ file bin/ tinylang and check that the output says ELF 64-bit object for the ARM aarch64 architecture.
+
+\begin{myTip}{Cross-compiling with clang}
+As LLVM generates code for different architectures, it seems obvious to use clang to crosscompile. The obstacle here is that LLVM does not provide all the required parts – for example, the C library is missing. Because of this, you must use a mix of LLVM and GNU tools and as a result, you need to tell CMake even more about the environment you are using. As a minimum, you need to specify the following options for clang and clang++: -{}-target=<targettriple> (enables code generation for a different target), -{}-sysroot=<path> (path to the root directory for the target), I (search path for header files), and –L (search path for libraries).
+
+During the CMake run, a small application is compiled and CMake complains if something is wrong with your setup. This step is sufficient to check if you have a working environment. Common problems are picking the wrong header files or link failures due to different library names or wrong search paths.
+\end{myTip}
+
+Cross-compiling is surprisingly complex. With the instructions from this section, you will be able to cross-compile your application for a target architecture of your choice.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

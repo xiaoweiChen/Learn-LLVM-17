@@ -1,0 +1,37 @@
+With the code from this and the previous chapter, we have created a backend that can translate some LLVM IR into machine code. It is very satisfying to see the backend working, but it is far from being usable for serious tasks. Much more coding is needed. Here is a recipe for how you can further evolve the backend:
+
+\begin{itemize}
+\item
+The first decision you should make is if you want to use GlobalISel or the selection DAG. In our experience, GlobalISel is easier to understand and develop, but all targets in the LLVM source tree implement the selection DAG, and you may already have experience in using it.
+
+\item
+Next, you should define the instructions for adding and subtracting integer values, which can be done similarly to the bitwise and instruction.
+
+\item
+After, you should implement the load and store instructions. This is more involved since you need to translate the different addressing modes. Most likely, you will deal with indexing, for example, to address an element of an array, which most likely requires the previously defined instruction for addition.
+
+\item
+Finally, you can fully implement frame lowering and call lowering. At this point, you can translate a simple “Hello, world!” style application into a running program.
+
+\item
+The next logical step is to implement branch instructions, which enable the translation of loops. To generate optimal code, you need to implement the branch analyzing methods in the instruction information class.
+\end{itemize}
+
+When you reach this point, your backend can already translate simple algorithms. You should also have gained enough experience to develop the missing parts based on your priorities.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

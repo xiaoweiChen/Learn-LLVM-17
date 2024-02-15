@@ -1,9 +1,276 @@
+
+Instruction selection via the selection DAG produces fast code, but it takes time to do so. The speed of the compiler is often critical for developers, who want to quickly try out the changes they’ve made.
+Usually, the compiler should be very fast at optimization level 0, but it can take more time with increased optimization levels. However, constructing the selection DAG costs so much time that this approach does not scale as required. The first solution was to create another instruction selection algorithm called FastISel, which is fast but does not generate good code. It also does not share code with the selection DAG implementation, which is an obvious problem. Because of this, not all targets support FastISel.
+
+The selection DAG approach does not scale because it is a large, monolithic algorithm. If we can avoid creating a new data structure such as the selection DAG, then we should be able to perform the instruction selection using small components. The backend already has a pass pipeline, so using passes is a natural choice. Based on these thoughts, GlobalISel performs the following steps:
+
+\begin{enumerate}
+\item
+First, the LLVM IR is lowered into generic machine instructions. Generic machine instructions represent the most common operation found in real hardware. Note that this translation uses the machine functions and machine basic blocks, which means it directly translates into the data structures used by the other parts of the backend.
+
+\item
+The generic machine instructions are then legalized.
+
+\item
+After, the operands of generic machine instructions are mapped to register banks.
+
+\item
+Finally, the generic instructions are replaced with real machine instructions, using the patterns defined in the target description.
+\end{enumerate}
+
+Since these are all passes, we can insert as many passes as we want in between. For example, a combiner pass could be used to replace a sequence of generic machine instructions with another generic machine instruction, or with a real machine instruction. Turning these additional passes off increases the compilation speed while turning them on improves the quality of the generated code. Hence, we can scale as we need.
+
+There is another advantage in this approach. The selection DAG translates basic block by basic block, but a machine pass works on a machine function, which enables us to consider all basic blocks of a function during instruction selections. Therefore, this instruction selection method is called global instruction selection (GlobalISel). Let’s have a look at how this approach works, starting with the transformation of calls.
+
+
 \mySubsubsection{12.7.1.}{Lowering arguments and return values}
+
+For translating the LLVM IR to generic machine instructions, we only need to implement how arguments and return values are handled. Again, the implementation can be simplified by using the generated code from the target description. The class we’ll create is called M88kCallLowering, and the declaration is in the GISel/M88kCallLowering.h header file:
+
+\begin{cpp}
+class M88kCallLowering : public CallLowering {
+public:
+    M88kCallLowering(const M88kTargetLowering &TLI);
+
+    bool
+    lowerReturn(MachineIRBuilder &MIRBuilder,
+                const Value *Val,
+                ArrayRef<Register> VRegs,
+                FunctionLoweringInfo &FLI,
+                Register SwiftErrorVReg) const override;
+
+    bool lowerFormalArguments(
+        MachineIRBuilder &MIRBuilder, const Function &F,
+        ArrayRef<ArrayRef<Register>> VRegs,
+        FunctionLoweringInfo &FLI) const override;
+    bool enableBigEndian() const override { return true; }
+};
+\end{cpp}
+
+The GlobalISel framework will call the lowerReturn() and lowerFormalArguments() methods when a function is translated. To translate a function call, you would need to override and implement the lowerCall() method as well. Please note that we also need to override enableBigEndian(). Without it, the wrong machine code would be generated.
+
+For the implementation in the GISel/M88kCallLowering.cpp file, we need to define to support classes. The generated code from the target description tells us how a parameter is passed – for example, in a register. We need to create a subclass of ValueHandler to generate the machine instructions for it. For incoming parameters, we need to derive our class from IncomingValueHandler, as well as for the return value from OutgoingValueHandler. Both are very similar, so we’ll only look at the handler for incoming arguments:
+
+\begin{cpp}
+namespace {
+struct FormalArgHandler
+        : public CallLowering::IncomingValueHandler {
+    FormalArgHandler(MachineIRBuilder &MIRBuilder,
+                     MachineRegisterInfo &MRI)
+        : CallLowering::IncomingValueHandler(MIRBuilder,
+                                             MRI) {}
+
+    void assignValueToReg(Register ValVReg,
+                          Register PhysReg,
+                          CCValAssign VA) override;
+
+    void assignValueToAddress(Register ValVReg,
+                              Register Addr, LLT MemTy,
+                              MachinePointerInfo &MPO,
+                              CCValAssign &VA) override{};
+
+    Register
+    getStackAddress(uint64_t Size, int64_t Offset,
+                    MachinePointerInfo &MPO,
+                    ISD::ArgFlagsTy Flags) override {
+        return Register();
+    };
+};
+} // namespace
+\end{cpp}
+
+So far, we can only handle parameters passed in registers, so we must provide a dummy implementation for the other methods. The assignValueToReg() method copies the value of the incoming physical register to a virtual register, performing a truncation if necessary. All we have to do here is mark the physical register as live-in to the function, and call the superclass implementation:
+
+\begin{cpp}
+void FormalArgHandler::assignValueToReg(
+        Register ValVReg, Register PhysReg,
+        CCValAssign VA) {
+    MIRBuilder.getMRI()->addLiveIn(PhysReg);
+    MIRBuilder.getMBB().addLiveIn(PhysReg);
+    CallLowering::IncomingValueHandler::assignValueToReg(
+        ValVReg, PhysReg, VA);
+}
+\end{cpp}
+
+Now, we can implement the lowerFormalArgument() method:
+
+\begin{enumerate}
+\item
+First, the parameters of the IR function are translated into instances of the ArgInfo class. The setArgFlags() and splitToValueTypes() framework methods help with copying the parameter attributes and splitting the value type in case an incoming argument needs more than one virtual register:
+
+\begin{cpp}
+bool M88kCallLowering::lowerFormalArguments(
+        MachineIRBuilder &MIRBuilder, const Function &F,
+        ArrayRef<ArrayRef<Register>> VRegs,
+        FunctionLoweringInfo &FLI) const {
+    MachineFunction &MF = MIRBuilder.getMF();
+    MachineRegisterInfo &MRI = MF.getRegInfo();
+    const auto &DL = F.getParent()->getDataLayout();
+
+    SmallVector<ArgInfo, 8> SplitArgs;
+    for (const auto &[I, Arg] :
+            llvm::enumerate(F.args())) {
+        ArgInfo OrigArg{VRegs[I], Arg.getType(),
+                        static_cast<unsigned>(I)};
+        setArgFlags(OrigArg,
+                    I + AttributeList::FirstArgIndex, DL,
+                    F);
+        splitToValueTypes(OrigArg, SplitArgs, DL,
+                          F.getCallingConv());
+    }
+\end{cpp}
+
+\item
+With the arguments prepared in the SplitArgs variable, we are ready to generate the machine code. This is all done by the framework code, with the help of the generated calling convention, CC\_M88k, and our helper class, FormalArghandler:
+
+\begin{cpp}
+    IncomingValueAssigner ArgAssigner(CC_M88k);
+    FormalArgHandler ArgHandler(MIRBuilder, MRI);
+    return determineAndHandleAssignments(
+        ArgHandler, ArgAssigner, SplitArgs, MIRBuilder,
+        F.getCallingConv(), F.isVarArg());
+}
+\end{cpp}
+\end{enumerate}
+
+Return values are handled similarly, with the main difference being that one value is returned at most. The next task is to legalize the generic machine instructions.
 
 \mySubsubsection{12.7.2.}{Legalizing the generic machine instructions}
 
+The translation from LLVM IR to generic machine code is mostly fixed. As a result, instructions can be generated that use unsupported data types, among other challenges. The task of the legalizer pass is to define which operations and instructions are legal. With this information, the GlobalISel framework tries to transform the instructions into a legal form. For example, the m88k architecture only has 32-bit registers, so a bitwise and operation with 64-bit values is not legal. However, if we split the 64-bit value into two 32-bit values, and use two bitwise and operations instead, then we have legal code. This can be translated into a legalization rule:
+
+\begin{cpp}
+getActionDefinitionsBuilder({G_AND, G_OR, G_XOR})
+    .legalFor({S32})
+    .clampScalar(0, S32, S32);
+\end{cpp}
+
+Whenever the legalizer pass processes a G\_AND instruction, then it is legal if all operands are 32-bit wide. Otherwise, the operands are clamped to 32-bit, effectively splitting larger values into multiple 32-bit values, and the rule is applied again. If an instruction cannot be legalized, then the backend terminates with an error message.
+
+All legalization rules are defined in the constructor of the M88kLegalizerInfo class, which makes the class very simple.
+
+\begin{myTip}{What does legal mean?}
+In GlobalISel, a generic instruction is legal if it can be translated by the instruction selector. This gives us more freedom in the implementation. For example, we can state that an instruction works on a bit value, even if the hardware only operates on 32-bit values, so long as the instruction selector can handle the type correctly.
+\end{myTip}
+
+The next pass we need to look at is the register bank selector.
+
 \mySubsubsection{12.7.3.}{Selecting a register bank for operands}
+
+Many architectures define several register banks. A register bank is a set of registers. Typical register banks are general-purpose register banks and floating-point register banks. Why is this information important? Moving a value from one register to another is usually cheap inside a register bank, but copying the value to another register bank can be costly or impossible. Thus, we must select a good register bank for each operand.
+
+The implementation of this class involves an addition to the target description. In the GISel/ M88lRegisterbanks.td file, we define our single register bank, referencing the register classes we have defined:
+
+\begin{cpp}
+def GRRegBank : RegisterBank<"GRRB", [GPR, GPR64]>;
+\end{cpp}
+
+From this line, some support code is generated. However, we still need to add some code that could be potentially generated. First, we need to define partial mappings. This tells the framework at which bit index a value begins, how wide it is, and to which register bank it maps. We have two entries, one for each register class:
+
+\begin{cpp}
+RegisterBankInfo::PartialMapping
+    M88kGenRegisterBankInfo::PartMappings[]{
+        {0, 32, M88k::GRRegBank},
+        {0, 64, M88k::GRRegBank},
+    };
+\end{cpp}
+
+To index this array, we must define an enumeration:
+
+\begin{cpp}
+enum PartialMappingIdx { PMI_GR32 = 0, PMI_GR64, };
+\end{cpp}
+
+Since we have only three address instructions, we need three partial mappings, one for each operand. We must create an array with all those pointers, with the first entry denoting an invalid mapping:
+
+\begin{cpp}
+RegisterBankInfo::ValueMapping
+    M88kGenRegisterBankInfo::ValMappings[]{
+        {nullptr, 0},
+        {&M88kGenRegisterBankInfo::PartMappings[PMI_GR32], 1},
+        {&M88kGenRegisterBankInfo::PartMappings[PMI_GR32], 1},
+        {&M88kGenRegisterBankInfo::PartMappings[PMI_GR32], 1},
+        {&M88kGenRegisterBankInfo::PartMappings[PMI_GR64], 1},
+        {&M88kGenRegisterBankInfo::PartMappings[PMI_GR64], 1},
+        {&M88kGenRegisterBankInfo::PartMappings[PMI_GR64], 1},
+    };
+\end{cpp}
+
+To access that array, we must define a function:
+
+\begin{cpp}
+const RegisterBankInfo::ValueMapping *
+M88kGenRegisterBankInfo::getValueMapping(
+        PartialMappingIdx RBIdx) {
+    return &ValMappings[1 + 3*RBIdx];
+}
+\end{cpp}
+
+When creating these tables, it is easy to make errors. At first glance, all this information can be derived from the target description, and a comment in the source states that this code should be generated by TableGen! However, this hasn’t been implemented yet, so we have to create the code manually.
+
+The most important function we have to implement in the M88kRegisterBankInfo class is getInstrMapping(), which returns the mapped register banks for each operand of the instruction. This now becomes easy because we can look up the array of partial mappings, which we can then pass to the getInstructionMapping() method, which constructs the full instruction mapping:
+
+\begin{cpp}
+const RegisterBankInfo::InstructionMapping &
+M88kRegisterBankInfo::getInstrMapping(
+        const MachineInstr &MI) const {
+    const ValueMapping *OperandsMapping = nullptr;
+    switch (MI.getOpcode()) {
+    case TargetOpcode::G_AND:
+    case TargetOpcode::G_OR:
+    case TargetOpcode::G_XOR:
+        OperandsMapping = getValueMapping(PMI_GR32);
+        break;
+    default:
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+        MI.dump();
+#endif
+        return getInvalidInstructionMapping();
+    }
+
+    return getInstructionMapping(DefaultMappingID, /*Cost=*/1,
+                                 OperandsMapping,
+                                 MI.getNumOperands());
+}
+\end{cpp}
+
+During development, it is common to forget the register bank mapping for a generic instruction.
+Unfortunately, the error message that’s generated at runtime does not mention for which instruction the mapping failed. The easy fix is to dump the instruction before returning the invalid mapping.
+However, we need to be careful here because the dump() method is not available in all build types.
+
+After mapping the register banks, we must translate the generic machine instructions into real machine instructions.
 
 \mySubsubsection{12.7.4.}{Translating generic machine instructions}
 
+For instruction selection via the selection DAG, we added patterns to the target description, which use DAG operations and operands. To reuse those patterns, a mapping from DAG node types to generic machine instructions was introduced. For example, the DAG and operation maps to the generic G\_AND machine instruction. Not all DAG operations have an equivalent generic machine instruction; however, the most common cases are covered. Therefore, it is beneficial to define all code selection patterns in the target description.
+
+Most of the implementation of the M88kInstructionSelector class, which can be found in the GISel/M88kInstructionSelector.cpp file, is generated from the target description. However, we need to override the select() method, which allows us to translate generic machine instructions that are not covered by the patterns in the target description. Since we only support a very small subset of generic instructions, we can simply call the generated pattern matcher:
+
+\begin{cpp}
+bool M88kInstructionSelector::select(MachineInstr &I) {
+    if (selectImpl(I, *CoverageInfo))
+        return true;
+    return false;
+}
+\end{cpp}
+
+With the instruction selection implemented, we can translate LLVM IR using GlobalISel!
+
 \mySubsubsection{12.7.5.}{Running an example}
+
+To translate LLVM IR using GlobalISel, we need to add the -global-isel option to the command line of llc. For example, you can use the previously defined IR file, and.ll:
+
+\begin{shell}
+$ llc -mtriple m88k-openbsd -global-isel < and.ll
+\end{shell}
+
+The printed assembly text is the same. To convince ourselves that the translation uses GlobalISel, we must take advantage of the fact that we can stop the translation after a specified pass is run with the -stop-after= option. For example, to see the generic instructions after legalization, you would run the following command:
+
+\begin{shell}
+$ llc -mtriple m88k-openbsd -global-isel < and.ll -stop-after=legalizer
+\end{shell}
+
+The ability to stop after (or before) a pass is run is another advantage of GlobalISel because it makes it easy to debug and test the implementation.
+
+At this point, we have a working backend that can translate some LLVM IR into machine code for the m88k architecture. Let’s think about how to move from here to a more complete backend.
+

@@ -1,0 +1,152 @@
+The instruction selection creates machine instructions, represented by the MachineInstr class, from LLVM IR. But this is not the end. An instance of the MachineInstr class still carries additional information, such as labels or flags. To emit an instruction via the machine code component, we need to lower the instances of MachineInstr to instances of MCInst. By doing this, the machine code component provides the functionality to write instructions into object files or print them as assembler text. The M88kAsmPrinter class is responsible for emitting a whole compilation unit. Lowering an instruction is delegated to the M88kMCInstLower class.
+
+The assembly printer is the last pass to run in a backend. Its implementation is stored in the M88kAsmPrinter.cpp file:
+
+\begin{enumerate}
+\item
+The declaration of the M88kAsmPrinter class is in an anonymous namespace. Besides the constructor, we only override the getPassName() function, which returns the name of the pass as a human-readable string, and the emitInstruction() function:
+
+\begin{cpp}
+namespace {
+class M88kAsmPrinter : public AsmPrinter {
+public:
+    explicit M88kAsmPrinter(
+        TargetMachine &TM,
+        std::unique_ptr<MCStreamer> Streamer)
+        : AsmPrinter(TM, std::move(Streamer)) {}
+
+    StringRef getPassName() const override {
+        return "M88k Assembly Printer";
+    }
+
+    void emitInstruction(const MachineInstr *MI) override;
+};
+} // end of anonymous namespace
+\end{cpp}
+
+\item
+Like many other classes, we have to register our assembly printer in the target registry:
+
+\begin{cpp}
+extern "C" LLVM_EXTERNAL_VISIBILITY void
+LLVMInitializeM88kAsmPrinter() {
+    RegisterAsmPrinter<M88kAsmPrinter> X(
+        getTheM88kTarget());
+}
+\end{cpp}
+
+\item
+The emitInstruction() method is responsible for emitting the machine instruction, MI, to the output stream. In our implementation, we delegate the lowering of the instruction to the M88kMCInstLower class:
+
+\begin{cpp}
+void M88kAsmPrinter::emitInstruction(
+        const MachineInstr *MI) {
+    MCInst LoweredMI;
+    M88kMCInstLower Lower(MF->getContext(), *this);
+    Lower.lower(MI, LoweredMI);
+    EmitToStreamer(*OutStreamer, LoweredMI);
+}
+\end{cpp}
+\end{enumerate}
+
+This is already the full implementation. The base class, AsmPrinter, provides many useful hooks you can override. For example, the emitStartOfAsmFile() method is called before anything is emitted, and emitEndOfAsmFile() is called after everything is emitted. These methods can emit target-specific data or code at the beginning and the end of a file. Similarly, the emitFunctionBodyStart() and emitFunctionBodyEnd() methods are called before and after a function body is emitted. Read the comments in the llvm/include/llvm/CodeGen/ AsmPrinter.h file to understand what can be customized.
+
+The M88kMCInstLower class lowers operands and instructions, and our implementation contains two methods for that purpose. The declaration is in the M88kMCInstLower.h file:
+
+\begin{cpp}
+class LLVM_LIBRARY_VISIBILITY M88kMCInstLower {
+public:
+    void lower(const MachineInstr *MI, MCInst &OutMI) const;
+    MCOperand lowerOperand(const MachineOperand &MO) const;
+};
+\end{cpp}
+
+The definition goes into the M88kMCInstLower.cpp file:
+
+\begin{enumerate}
+\item
+To lower MachineOperand to MCOperand, we need to check the operand type. Here, we only handle registers and immediates by creating MCOperand-equivalent register and immediate values by supplying the original MachineOperand values. As soon as expressions are introduced as operands, this method needs to be enhanced:
+
+\begin{cpp}
+MCOperand M88kMCInstLower::lowerOperand(
+        const MachineOperand &MO) const {
+    switch (MO.getType()) {
+    case MachineOperand::MO_Register:
+        return MCOperand::createReg(MO.getReg());
+
+    case MachineOperand::MO_Immediate:
+        return MCOperand::createImm(MO.getImm());
+
+    default:
+        llvm_unreachable("Operand type not handled");
+    }
+}
+\end{cpp}
+
+\item
+The lowering of an instruction is similar. First, the opcode is copied, and then the operands are handled. An instance of MachineInstr can have implicit operands attached, which are not lowered, and we need to filter them:
+
+\begin{cpp}
+void M88kMCInstLower::lower(const MachineInstr *MI,
+MCInst &OutMI) const {
+    OutMI.setOpcode(MI->getOpcode());
+    for (auto &MO : MI->operands()) {
+        if (!MO.isReg() || !MO.isImplicit())
+            OutMI.addOperand(lowerOperand(MO));
+    }
+}
+\end{cpp}
+\end{enumerate}
+
+With that, we’ve implemented the assembly printer. Now, we need to bring all the pieces together. We’ll do this in the next section.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

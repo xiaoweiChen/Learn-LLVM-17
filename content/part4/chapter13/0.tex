@@ -1,0 +1,32 @@
+Now that we’ve learned about instruction selection using the SelectionDAG and GlobalISel LLVM-based frameworks in the previous chapters, we can explore other interesting concepts beyond instruction selection. This chapter encapsulates some more advanced topics outside of the backend that can be interesting for a highly optimizing compiler. For instance, some passes run beyond instruction selection and can perform different optimizations on various instructions, which can mean that developers have the luxury to introduce their own passes to perform meaningful target-specific tasks at this point in the compiler.
+
+Ultimately, within this chapter, we will dive into the following concepts:
+
+\begin{itemize}
+\item
+Adding a new machine function pass to LLVM
+
+\item
+Integrating a new target into the clang frontend
+
+\item
+How to target a different CPU architecture
+\end{itemize}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

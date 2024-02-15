@@ -1,0 +1,259 @@
+
+The target description captures most information about registers and instructions. To access that information, we must implement the M88kRegisterInfo and M88kInstrInfo classes. These classes also contain hooks that we can override to accomplish tasks that are too complex to express in the target description. Let’s begin with the M88kRegisterInfo class, which is declared in the M88kRegisterInfo.h file:
+
+\begin{enumerate}
+\item
+The header file begins by including the code generated from the target description:
+
+\begin{cpp}
+#define GET_REGINFO_HEADER
+#include "M88kGenRegisterInfo.inc"
+\end{cpp}
+
+\item
+After that, we must declare the M88kRegisterInfo class in the llvm namespace. We only override a couple of methods:
+
+\begin{cpp}
+namespace llvm {
+struct M88kRegisterInfo : public M88kGenRegisterInfo {
+    M88kRegisterInfo();
+
+    const MCPhysReg *getCalleeSavedRegs(
+        const MachineFunction *MF) const override;
+
+    BitVector getReservedRegs(
+        const MachineFunction &MF) const override;
+
+    bool eliminateFrameIndex(
+        MachineBasicBlock::iterator II, int SPAdj,
+        unsigned FIOperandNum,
+        RegScavenger *RS = nullptr) const override;
+
+    Register getFrameRegister(
+        const MachineFunction &MF) const override;
+};
+} // end namespace llvm
+\end{cpp}
+
+\end{enumerate}
+
+The definition of the class is stored in the M88kRegisterInfo.cpp file:
+
+\begin{enumerate}
+\item
+Again, the film begins with including the code generated from the target description:
+
+\begin{cpp}
+#define GET_REGINFO_TARGET_DESC
+#include "M88kGenRegisterInfo.inc"
+\end{cpp}
+
+\item
+The constructor initializes the superclass, passing the register holding the return address as a parameter:
+
+\begin{cpp}
+M88kRegisterInfo::M88kRegisterInfo()
+    : M88kGenRegisterInfo(M88k::R1) {}
+\end{cpp}
+
+\item
+Then, we implement the method that returns the list of callee-saved registers. We defined the list in the target description, and we only return that list:
+
+\begin{cpp}
+const MCPhysReg *M88kRegisterInfo::getCalleeSavedRegs(
+        const MachineFunction *MF) const {
+    return CSR_M88k_SaveList;
+}
+\end{cpp}
+
+\item
+After, we deal with the reserved registers. The reserved registers depend on the platform and the hardware. The r0 register contains a constant value of 0, so we treat it as a reserved register. The r28 and r29 registers are always reserved for use by a linker. Lastly, the r31 register is used as a stack pointer. This list may depend on the function, and it cannot be generated due to this dynamic behavior:
+
+\begin{cpp}
+BitVector M88kRegisterInfo::getReservedRegs(
+        const MachineFunction &MF) const {
+    BitVector Reserved(getNumRegs());
+    Reserved.set(M88k::R0);
+    Reserved.set(M88k::R28);
+    Reserved.set(M88k::R29);
+    Reserved.set(M88k::R31);
+    return Reserved;
+}
+\end{cpp}
+
+\item
+If a frame register is required, then r30 is used. Please note that our code does not support creating a frame yet. If the function requires a frame, then r30 must also be marked as reserved in the getReservedRegs() method. However, we must implement this method because it is declared pure virtual in the superclass:
+
+\begin{cpp}
+Register M88kRegisterInfo::getFrameRegister(
+        const MachineFunction &MF) const {
+    return M88k::R30;
+}
+\end{cpp}
+
+\item
+Similarly, we need to implement the eliminateFrameIndex() method because it is declared pure virtual. It is called to replace a frame index in an operand with the correct value to use to address the value on the stack:
+
+\begin{cpp}
+bool M88kRegisterInfo::eliminateFrameIndex(
+        MachineBasicBlock::iterator MI, int SPAdj,
+        unsigned FIOperandNum, RegScavenger *RS) const {
+    return false;
+}
+\end{cpp}
+
+\end{enumerate}
+
+The M88kInstrInfo class has many hook methods we can override to accomplish special tasks, for example, for branch analysis and rematerialization. For now, we’re only overriding the expandPostRAPseudo() method, in which we expand the pseudo-instruction RET. Let’s begin with the header file, M88kInstrInfo.h:
+
+\begin{enumerate}
+\item
+The header file begins with including the generated code:
+
+\begin{cpp}
+#define GET_INSTRINFO_HEADER
+#include "M88kGenInstrInfo.inc"
+\end{cpp}
+
+\item
+The M88kInstrInfo class derives from the generated M88kGenInstrInfo class. Besides overriding the expandPostRAPseudo() method, the only other addition is that this class owns an instance of the previously defined class, M88kRegisterInfo:
+
+\begin{cpp}
+namespace llvm {
+class M88kInstrInfo : public M88kGenInstrInfo {
+    const M88kRegisterInfo RI;
+    [[maybe_unused]] M88kSubtarget &STI;
+
+    virtual void anchor();
+
+public:
+    explicit M88kInstrInfo(M88kSubtarget &STI);
+
+    const M88kRegisterInfo &getRegisterInfo() const {
+        return RI;
+    }
+
+    bool
+    expandPostRAPseudo(MachineInstr &MI) const override;
+} // end namespace llvm
+\end{cpp}
+\end{enumerate}
+
+The implementation is stored in the M88kInstrInfo.cpp class:
+
+\begin{enumerate}
+\item
+Like the header file, the implementation begins with including the generated code:
+
+\begin{cpp}
+#define GET_INSTRINFO_CTOR_DTOR
+#define GET_INSTRMAP_INFO
+#include "M88kGenInstrInfo.inc"
+\end{cpp}
+
+\item
+Then, we define the anchor() method, which is used to pin the vtable to this file:
+
+\begin{cpp}
+void M88kInstrInfo::anchor() {}
+\end{cpp}
+
+\item
+Finally, we expand RET in the expandPostRAPseudo() method. As its name suggests, this method is invoked after the register allocator runs and is intended to expand the pseudoinstruction, which may still be mixed with the machine code. If the opcode of the machine instruction, MI, is the pseudo-instruction, RET, we must insert the jmp \%r1 jump instruction, which is the instruction to exit a function. Then, we copy all implicit operands that represent the values to return and we delete the pseudo instruction. If we need other pseudo-instructions during code generation, then we can extend this function to expand them here too:
+
+\begin{cpp}
+bool M88kInstrInfo::expandPostRAPseudo(
+        MachineInstr &MI) const {
+    MachineBasicBlock &MBB = *MI.getParent();
+
+    switch (MI.getOpcode()) {
+        default:
+            return false;
+        case M88k::RET: {
+            MachineInstrBuilder MIB =
+            BuildMI(MBB, &MI, MI.getDebugLoc(),
+                    get(M88k::JMP))
+                .addReg(M88k::R1, RegState::Undef);
+
+            for (auto &MO : MI.operands()) {
+                if (MO.isImplicit())
+                    MIB.add(MO);
+            }
+            break;
+    }
+    }
+    MBB.erase(MI);
+    return true;
+}
+\end{cpp}
+
+\end{enumerate}
+
+Both classes have minimal implementations. If you continue to develop the target, then many more methods need to be overridden. It is worth reading the comments in the TargetInstrInfo and TargetRegisterInfo base classes, which you can find in the llvm/include/llvm/ CodeGen directory.
+
+We still need more classes to get the instruction selection running. Next, we’ll look at frame lowering.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,5 +1,343 @@
+
+So far, we’ve implemented the instruction selection classes and a couple of other classes. Now, we need to set up how our backend will work. Like the optimization pipeline, a backend is divided into passes. Configuring those passes is the main task of the M88kTargetMachine class. In addition, we need to specify which features are available for instruction selection. Usually, a platform is a family of CPUs, which all have a common set of instructions but differ by specific extensions. For example, some CPUs have vector instructions, while others do not. In LLVM IR, a function can have attributes attached that specify for which CPU this function should be compiled, or what features are available. In other words, each function could have a different configuration, which is captured in the M88kSubTarget class.
+
 \mySubsubsection{12.6.1.}{Implementing M88kSubtarget}
+
+Let’s implement the M88kSubtarget class first. The declaration is stored in the M88kSubtarget.h class:
+
+\begin{enumerate}
+\item
+Parts of the sub-target are generated from the target description, and we include those codes first:
+
+\begin{cpp}
+#define GET_SUBTARGETINFO_HEADER
+#include "M88kGenSubtargetInfo.inc"
+\end{cpp}
+
+\item
+Then, we declare the class, deriving it from the generated M88kGenSubtargetInfo class. The class owns a couple of previously defined classes – the instruction information, the target lowering class, and the frame lowering class:
+
+\begin{cpp}
+namespace llvm {
+class StringRef;
+class TargetMachine;
+class M88kSubtarget : public M88kGenSubtargetInfo {
+    virtual void anchor();
+
+    Triple TargetTriple;
+    M88kInstrInfo InstrInfo;
+    M88kTargetLowering TLInfo;
+    M88kFrameLowering FrameLowering;
+\end{cpp}
+
+\item
+The sub-target is initialized with the target triple, the name of the CPU, and a feature string, as well as with the target machine. All these parameters describe the hardware for which our backend will generate code:
+
+\begin{cpp}
+public:
+    M88kSubtarget(const Triple &TT,
+                  const std::string &CPU,
+                  const std::string &FS,
+                  const TargetMachine &TM);
+\end{cpp}
+
+\item
+Next, we include the generated file again, this time for automatically defining getter methods for features defined in the target description:
+
+\begin{cpp}
+#define GET_SUBTARGETINFO_MACRO(ATTRIBUTE, DEFAULT, \
+                                GETTER) \
+    bool GETTER() const { return ATTRIBUTE; }
+#include "M88kGenSubtargetInfo.inc"
+\end{cpp}
+
+\item
+In addition, we need to declare the ParseSubtargetFeatures() method. The method itself is generated from the target description:
+
+\begin{cpp}
+    void ParseSubtargetFeatures(StringRef CPU,
+                                StringRef TuneCPU,
+                                StringRef FS);
+\end{cpp}
+
+\item
+Next, we must add getter methods for the member variables:
+
+\begin{cpp}
+    const TargetFrameLowering *
+    getFrameLowering() const override {
+        return &FrameLowering;
+    }
+    const M88kInstrInfo *getInstrInfo() const override {
+        return &InstrInfo;
+    }
+    const M88kTargetLowering *
+    getTargetLowering() const override {
+        return &TLInfo;
+    }
+\end{cpp}
+
+\item
+Finally, we must add a getter method for the register information, which is owned by the instruction information class. This finishes the declaration:
+
+\begin{cpp}
+    const M88kRegisterInfo *
+    getRegisterInfo() const override {
+        return &InstrInfo.getRegisterInfo();
+    }
+};
+} // end namespace llvm
+\end{cpp}
+
+\end{enumerate}
+
+Next, we must implement the actual subtarget class. The implementation is stored in the M88kSubtarget.cpp file:
+
+\begin{enumerate}
+\item
+Again, we begin the file by including the generated source:
+
+\begin{cpp}
+#define GET_SUBTARGETINFO_TARGET_DESC
+#define GET_SUBTARGETINFO_CTOR
+#include "M88kGenSubtargetInfo.inc"
+\end{cpp}
+
+\item
+Then, we define the anchor method, which pins the vtable to this file:
+
+\begin{cpp}
+void M88kSubtarget::anchor() {}
+\end{cpp}
+
+\item
+Finally, we define the constructor. Note that the generated class expected two CPU parameters: the first one for the instruction set, and the second one for scheduling. The use case here is that you want to optimize the code for the latest CPU but still be able to run the code on an older CPU. We do not support this feature and use the same CPU name for both parameters:
+
+\begin{cpp}
+M88kSubtarget::M88kSubtarget(const Triple &TT,
+                             const std::string &CPU,
+                             const std::string &FS,
+                             const TargetMachine &TM)
+    : M88kGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS),
+      TargetTriple(TT), InstrInfo(*this),
+      TLInfo(TM, *this), FrameLowering() {}
+\end{cpp}
+\end{enumerate}
 
 \mySubsubsection{12.6.2.}{Implementing M88kTargetMachine – defining the definitions}
 
+Finally, we can implement the M88kTargetMachine class. This class holds all used sub-target instances. It also owns a subclass of TargetLoweringObjectFile, which provides details such as section names to the lowering process. Lastly, it creates the configuration of the passes that runs in this backend.
+
+The declaration in the M88kTargetMachine.h file is as follows:
+
+\begin{enumerate}
+\item
+The M88kTargetMachine class derives from the LLVMTargetMachine class. The only members are an instance of TargetLoweringObjectFile and the sub-target map:
+
+\begin{cpp}
+namespace llvm {
+class M88kTargetMachine : public LLVMTargetMachine {
+    std::unique_ptr<TargetLoweringObjectFile> TLOF;
+    mutable StringMap<std::unique_ptr<M88kSubtarget>>
+        SubtargetMap;
+\end{cpp}
+
+\item
+The parameters of the constructor completely describe the target configuration for which we will generate code. With the TargetOptions class, many details of the code generations can be controlled – for example, if floating-point multiply-and-add instructions can be used or not. Also, the relocation model, the code model, and the optimization level are passed to the constructor. Notably, the JIT parameter is set to true if the target machine is used for just-in-time compilation.
+
+\begin{cpp}
+public:
+    M88kTargetMachine(const Target &T, const Triple &TT,
+                      StringRef CPU, StringRef FS,
+                      const TargetOptions &Options,
+                      std::optional<Reloc::Model> RM,
+                      std::optional<CodeModel::Model> CM,
+                      CodeGenOpt::Level OL, bool JIT);
+\end{cpp}
+
+\item
+We also need to override some methods. The getSubtargetImpl() method returns the sub-target instance to use for the given function, and the getObjFileLowering() method just returns the member variable. In addition, we override the createPassConfig() method, which returns our configuration for the backend passes:
+
+\begin{cpp}
+    ~M88kTargetMachine() override;
+
+    const M88kSubtarget *
+    getSubtargetImpl(const Function &) const override;
+
+    TargetPassConfig *
+    createPassConfig(PassManagerBase &PM) override;
+
+    TargetLoweringObjectFile *
+    getObjFileLowering() const override {
+        return TLOF.get();
+    }
+};
+} // end namespace llvm
+\end{cpp}
+
+\end{enumerate}
+
 \mySubsubsection{12.6.3.}{Implementing M88kTargetMachine – adding the implementation}
+
+The implementation of the class is stored in the M88kTargetMachine.cpp file. Please note that we created this file in Chapter 11. Now, we will replace this file with a complete implementation:
+
+\begin{enumerate}
+\item
+First, we must register the target machine. In addition, we must initialize the DAG-to-DAG pass via the initialization function we defined earlier:
+
+\begin{cpp}
+extern "C" LLVM_EXTERNAL_VISIBILITY void
+LLVMInitializeM88kTarget() {
+    RegisterTargetMachine<M88kTargetMachine> X(
+        getTheM88kTarget());
+    auto &PR = *PassRegistry::getPassRegistry();
+    initializeM88kDAGToDAGISelPass(PR);
+}
+\end{cpp}
+
+\item
+Next, we must define the support function, computeDataLayout(). We talked about the data layout string in Chapter 4, Basics of IR Code Generation. In this function, the data layout, as the backend, expects it to be defined. Since the data layout depends on hardware features, the triple, the name of the CPU, and the feature set string are passed to this function. We create the data layout string with the following components. The target is big-endian (E) and uses the ELF symbol mangling.
+
+Pointers are 32-bit wide and 32-bit aligned. All scalar types are naturally aligned. The MC88110 CPU has an extended register set and supports 80-bit wide floating points. If we were to support this special feature, then we’d need to add a check of the CPU name here and extend the string with the floating-point values accordingly. Next, we must state that all globals have a preferred alignment of 16-bit and that the hardware has only 32-bit registers:
+
+\begin{cpp}
+namespace {
+std::string computeDataLayout(const Triple &TT,
+                              StringRef CPU,
+                              StringRef FS) {
+    std::string Ret;
+    Ret += "E";
+    Ret += DataLayout::getManglingComponent(TT);
+    Ret += "-p:32:32:32";
+    Ret += "-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64";
+    Ret += "-f32:32:32-f64:64:64";
+    Ret += "-a:8:16";
+    Ret += "-n32";
+    return Ret;
+}
+} // namespace
+\end{cpp}
+
+\item
+Now, we can define the constructor and destructor. Many of the parameters are just passed to the superclass constructor. Note that our computeDataLayout() function is called here. In addition, the TLOF member is initialized with an instance of TargetLoweringObjectFileELF, since we are using the ELF file format. In the body of the constructor, we must call the initAsmInfo() method, which initializes many data members of the superclass:
+
+\begin{cpp}
+M88kTargetMachine::M88kTargetMachine(
+    const Target &T, const Triple &TT, StringRef CPU,
+    StringRef FS, const TargetOptions &Options,
+    std::optional<Reloc::Model> RM,
+    std::optional<CodeModel::Model> CM,
+    CodeGenOpt::Level OL, bool JIT)
+    : LLVMTargetMachine(
+        T, computeDataLayout(TT, CPU, FS), TT, CPU,
+        FS, Options, !RM ? Reloc::Static : *RM,
+        getEffectiveCodeModel(CM, CodeModel::Medium),
+        OL),
+    TLOF(std::make_unique<
+        TargetLoweringObjectFileELF>()) {
+    initAsmInfo();
+}
+
+M88kTargetMachine::~M88kTargetMachine() {}
+\end{cpp}
+
+\item
+After, we define the getSubtargetImpl() method. The sub-target instance to use depends on the target-cpu and target-features function attributes. For example, the targetcpu attribute could be set to MC88110, thus targeting the second-generation CPU. However, the attribute target feature could describe that we should not use the graphics instructions of that CPU. We have not defined the CPUs and their features in the target description yet, so we are doing a bit more than what’s necessary here. However, the implementation is simple enough: we query the function attributes and use either the returned strings or the default values. With this information, we can query the SubtargetMap member, and if it’s not found, we create the sub-target:
+
+\begin{cpp}
+const M88kSubtarget *
+M88kTargetMachine::getSubtargetImpl(
+        const Function &F) const {
+    Attribute CPUAttr = F.getFnAttribute("target-cpu");
+    Attribute FSAttr =
+        F.getFnAttribute("target-features");
+
+    std::string CPU =
+        !CPUAttr.hasAttribute(Attribute::None)
+            ? CPUAttr.getValueAsString().str()
+            : TargetCPU;
+    std::string FS = !FSAttr.hasAttribute(Attribute::None)
+                        ? FSAttr.getValueAsString().str()
+                        : TargetFS;
+
+    auto &I = SubtargetMap[CPU + FS];
+    if (!I) {
+        resetTargetOptions(F);
+        I = std::make_unique<M88kSubtarget>(TargetTriple,
+                                            CPU, FS, *this);
+    }
+    return I.get();
+}
+\end{cpp}
+
+\item
+Finally, we create the pass configuration. For this, we need our own class, M88kPassConfig, which derives from the TargetPassConfig class. We only override the addInstSelector method:
+
+\begin{cpp}
+namespace {
+class M88kPassConfig : public TargetPassConfig {
+    public:
+    M88kPassConfig(M88kTargetMachine &TM,
+                   PassManagerBase &PM)
+        : TargetPassConfig(TM, PM) {}
+    bool addInstSelector() override;
+};
+} // namespace
+\end{cpp}
+
+\item
+With this definition, we can implement the createPassConfig factory method:
+
+\begin{cpp}
+TargetPassConfig *M88kTargetMachine::createPassConfig(
+        PassManagerBase &PM) {
+    return new M88kPassConfig(*this, PM);
+}
+\end{cpp}
+
+\item
+Lastly, we must add our instruction selection class to the pass pipeline in the addInstSelector() method. The return value, false, indicates that we have added a pass that converts LLVM IR into machine instructions:
+
+\begin{cpp}
+bool M88kPassConfig::addInstSelector() {
+        addPass(createM88kISelDag(getTM<M88kTargetMachine>(),
+                                  getOptLevel()));
+    return false;
+}
+\end{cpp}
+\end{enumerate}
+
+That was a long journey to finish the implementation! Now that we’ve built the llc tool, we can run an example. Save the following simple IR in the and.ll file:
+
+\begin{shell}
+define i32 @f1(i32 %a, i32 %b) {
+    %res = and i32 %a, %b
+    ret i32 %res
+}
+\end{shell}
+
+Now, we can run llc and verify that the generated assembly looks reasonable:
+
+\begin{shell}
+$ llc -mtriple m88k-openbsd < and.ll
+        .text
+        .file "<stdin>"
+        .globl f1                         | -- Begin function f1
+        .align 2
+        .type f1,@function
+f1:                                       | @f1
+| %bb.0:
+        and %r2, %r2, %r3
+        jmp %r1
+.Lfunc_end0:
+        .size   f1, .Lfunc_end0-f1
+                                          | -- End function
+        .section        ".note.GNU-stack","",@progbits
+\end{shell}
+
+To compile for the m88k target, we must specify the triple on the command line, as in this example, or in the IR file.
+
+Enjoy your success for a bit before we look at global instruction selection.
+
+
+

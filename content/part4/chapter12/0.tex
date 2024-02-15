@@ -1,0 +1,72 @@
+The heart of any backend is instruction selection. LLVM implements several approaches; in this chapter, we will implement instruction selection via the selection directed acyclic graph (DAG) and with global instruction selection.
+
+In this chapter, you will learn about the following topics:
+
+\begin{itemize}
+\item
+Defining the rules of the calling convention: This section shows you how to describe the rules of a calling convention in the target description
+
+\item
+Instruction selection via the selection DAG: This section teaches you how to implement instruction selection with a graph data structure
+
+\item
+Adding register and instruction information: This section explains how to access information in the target description, and what additional information you need to provide
+
+\item
+Putting an empty frame lowering in place: This section introduces you to the stack layout and the prologue of a function
+
+\item
+Emitting machine instructions: This section tells you how machine instructions are finally written into an object file or as assembly text
+
+\item
+Creating the target machine and the sub-target: This section shows you how a backend is configured
+
+\item
+Global instruction selection: This section demonstrates a different approach to instruction selection
+
+\item
+How to further evolve the backend: This section gives you some guidance about possible next steps
+\end{itemize}
+
+By the end of this chapter, you will know how to create an LLVM backend that can translate simple instructions. You will also acquire the knowledge to develop instruction selection via the selection DAG and with global instruction selection, and you will become familiar with all the important support classes you have to implement to get instruction selection working.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

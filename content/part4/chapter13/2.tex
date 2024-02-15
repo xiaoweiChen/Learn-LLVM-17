@@ -1,7 +1,598 @@
+
+In the previous chapters, we developed the M88k target’s backend implementation within LLVM. To complete the compiler implementation for the M88k target, we will investigate connecting our new target to the frontend by adding a clang implementation for our M88k target.
+
 \mySubsubsection{13.2.1.}{Implementing the driver integration within clang}
+
+Let’s start by adding driver integration into clang for M88k:
+
+\begin{enumerate}
+\item
+The first change we will be making is inside the clang/include/clang/Basic/ TargetInfo.h file. The BuiltinVaListKind enum lists the different kinds of \_\_ builtin\_va\_list types for each target, which is used for variadic functions support, so a corresponding type for M88k is added:
+
+\begin{cpp}
+enum BuiltinVaListKind {
+    . . .
+    // typedef struct __va_list_tag {
+        // int __va_arg;
+        // int *__va_stk;
+        // int *__va_reg;
+        //} va_list;
+    M88kBuiltinVaList
+};
+\end{cpp}
+
+\item
+Next, we must add a new header file, clang/lib/Basic/Targets/M88k.h. This file is a header for the M88k target feature support within the frontend. The first step is to define a new macro, to prevent multiple inclusive of the same header files, types, variables, and more. We must also include various headers that we require for the implementation to follow:
+
+\begin{cpp}
+#ifndef LLVM_CLANG_LIB_BASIC_TARGETS_M88K_H
+#define LLVM_CLANG_LIB_BASIC_TARGETS_M88K_H
+#include "OSTargets.h"
+#include "clang/Basic/TargetInfo.h"
+#include "clang/Basic/TargetOptions.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/TargetParser/Triple.h"
+\end{cpp}
+
+\item
+The methods we will declare will be added to the clang and targets namespaces accordingly, much like the other targets within llvm-project:
+
+\begin{cpp}
+namespace clang {
+namespace targets {
+\end{cpp}
+
+\item
+Let’s declare the actual M88kTargetInfo class now, and have it extend the original TargetInfo class. This class is marked with LLVM\_LIBRARY\_VISIBILITY because if this class is linked to a shared library, this attribute allows the M88kTargetInfo class to only be visible from within the library, and inaccessible externally:
+
+\begin{cpp}
+class LLVM_LIBRARY_VISIBILITY M88kTargetInfo: public TargetInfo
+{
+\end{cpp}
+
+\item
+Additionally, we must declare two variables – an array of characters to represent the register names and an enum value containing the type of CPUs available in the M88k target that can be selected. The default CPU that we set is the CK\_Unknown CPU. Later, we will see that this can be overwritten by user options:
+
+\begin{cpp}
+    static const char *const GCCRegNames[];
+    enum CPUKind { CK_Unknown, CK_88000, CK_88100, CK_88110 } CPU = CK_Unknown;
+\end{cpp}
+
+\item
+After, we begin by declaring the public methods that will be needed in our class implementation. Aside from the constructor of our class, we define various getter methods. This includes methods that get target-specific \#define values, ones that get a list of built-ins supported by the target, methods that return the GCC register names along with their aliases, and finally, a method that returns our M88k BuiltinVaListKind that we previously added to clang/include/clang/Basic/TargetInfo.h:
+
+\begin{cpp}
+public:
+    M88kTargetInfo(const llvm::Triple &Triple, const TargetOptions&);
+    void getTargetDefines(const LangOptions &Opts,
+    MacroBuilder &Builder) const override;
+    ArrayRef<Builtin::Info> getTargetBuiltins() const override;
+    ArrayRef<const char *> getGCCRegNames() const override;
+    ArrayRef<TargetInfo::GCCRegAlias> getGCCRegAliases() const override;
+    BuiltinVaListKind getBuiltinVaListKind() const override {
+        return TargetInfo::M88kBuiltinVaList;
+    }
+\end{cpp}
+
+\item
+Following the getter methods, we must also define methods that perform various checks on the M88k target. The first one checks if the M88k target has a particular target feature, supplied in the form of a string. Secondly, we add a function to validate the constraints when inline assembly is used. Finally, we have a function that checks if a specific CPU is valid for the M88k target, also supplied in the form of a string:
+
+\begin{cpp}
+    bool hasFeature(StringRef Feature) const override;
+    bool validateAsmConstraint(const char *&Name,
+                                TargetInfo::ConstraintInfo &info)
+                                const override;
+    bool isValidCPUName(StringRef Name) const override;
+\end{cpp}
+
+\item
+Next, let’s declare setter methods for our M88kTargetInfo class. The first one simply sets the specific M88k CPU that we want to target, while the second method sets a vector to contain all of the valid supported CPUs for M88k:
+
+\begin{cpp}
+    bool setCPU(const std::string &Name) override;
+    void fillValidCPUList(SmallVectorImpl<StringRef> &Values) const override;
+};
+\end{cpp}
+
+\item
+To complete our header for the driver implementation, let’s conclude our namespaces and macro definition that we added in the beginning:
+
+\begin{cpp}
+} // namespace targets
+} // namespace clang
+#endif // LLVM_CLANG_LIB_BASIC_TARGETS_M88K_H
+\end{cpp}
+
+\item
+Now that we’ve completed the M88k header file within clang/lib/Basic/Targets, we must add the corresponding TargetInfo C++ implementation within clang/lib/ Basic/Targets/M88k.cpp. We’ll start by including the required header files, especially the new M88k.h header we have just created:
+
+\begin{cpp}
+#include "M88k.h"
+#include "clang/Basic/Builtins.h"
+#include "clang/Basic/Diagnostic.h"
+#include "clang/Basic/TargetBuiltins.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
+#include "llvm/TargetParser/TargetParser.h"
+#include <cstring>
+\end{cpp}
+
+\item
+As we did previously in the header, we start with the clang and targets namespaces, and then also begin implementing the constructor for the M88kTargetInfo class:
+
+\begin{cpp}
+namespace clang {
+namespace targets {
+M88kTargetInfo::M88kTargetInfo(const llvm::Triple &Triple,
+                               const TargetOptions &)
+    : TargetInfo(Triple) {
+\end{cpp}
+
+\item
+Within the constructor, we set the data layout string for the M88k target. As you may have seen before, this data layout string is seen at the top of the emitted LLVM IR files. An explanation of each section of the data layout string is described here:
+
+\begin{cpp}
+    std::string Layout = "";
+    Layout += "E"; // M68k is Big Endian
+    Layout += "-m:e";
+    Layout += "-p:32:32:32"; // Pointers are 32 bit.
+    // All scalar types are naturally aligned.
+    Layout += "-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64";
+
+    // Floats and doubles are also naturally aligned.
+    Layout += "-f32:32:32-f64:64:64";
+    // We prefer 16 bits of aligned for all globals; see above.
+    Layout += "-a:8:16";
+
+    Layout += "-n32"; // Integer registers are 32bits.
+    resetDataLayout(Layout);
+\end{cpp}
+
+\item
+The constructor for the M88kTargetInfo class concludes by setting the various variable types as signed long long, unsigned long, or signed int:
+
+\begin{cpp}
+    IntMaxType = SignedLongLong;
+    Int64Type = SignedLongLong;
+    SizeType = UnsignedLong;
+    PtrDiffType = SignedInt;
+    IntPtrType = SignedInt;
+}
+\end{cpp}
+
+\item
+After that, the function to set the CPU for the target is implemented. This function takes a string and sets the CPU to be the particular CPU string that is supplied by the user within llvm::StringSwitch, which is essentially just a regular switch but specifically for strings with LLVM. We can see that there are three supported CPU types on the M88k target, and there is a CK\_Unknown type for if the supplied string does not match any of the expected types:
+
+\begin{cpp}
+bool M88kTargetInfo::setCPU(const std::string &Name) {
+    StringRef N = Name;
+    CPU = llvm::StringSwitch<CPUKind>(N)
+                .Case("generic", CK_88000)
+                .Case("mc88000", CK_88000)
+                .Case("mc88100", CK_88100)
+                .Case("mc88110", CK_88110)
+                .Default(CK_Unknown);
+    return CPU != CK_Unknown;
+}
+\end{cpp}
+
+\item
+It was previously stated that there are three supported and valid CPU types on the M88k target: mc88000, mc88100, and mc88110, with the generic type simply being the mc88000 CPU. We must implement the following functions to enforce these valid CPUs within clang. First, we must declare an array of strings, ValidCPUNames[], to denote the valid CPU names on M88k. Secondly, the fillValidCPUList() method populates the array of valid CPU names into a vector. This vector is then used in the isValidCPUName() method, to check whether a particular CPU name supplied is indeed valid for our M88k target:
+
+\begin{cpp}
+static constexpr llvm::StringLiteral ValidCPUNames[] = {
+    {"generic"}, {"mc88000"}, {"mc88100"}, {"mc88110"}};
+
+void M88kTargetInfo::fillValidCPUList(
+        SmallVectorImpl<StringRef> &Values) const {
+    Values.append(std::begin(ValidCPUNames),
+    std::end(ValidCPUNames));
+}
+bool M88kTargetInfo::isValidCPUName(StringRef Name) const {
+    return llvm::is_contained(ValidCPUNames, Name);
+}
+\end{cpp}
+
+\item
+Next, the getTargetDefines() method is implemented. This function defines the macros that are necessary for the frontend, such as the valid CPU types. Aside from the \_\_m88k\_\_ and \_\_m88k macros, we must also define corresponding CPU macros for the valid CPUs:
+
+\begin{cpp}
+void M88kTargetInfo::getTargetDefines(const LangOptions &Opts,
+                                      MacroBuilder &Builder)
+const {
+    using llvm::Twine;
+    Builder.defineMacro("__m88k__");
+    Builder.defineMacro("__m88k");
+    switch (CPU) { // For sub-architecture
+    case CK_88000:
+        Builder.defineMacro("__mc88000__");
+        break;
+    case CK_88100:
+    Builder.defineMacro("__mc88100__");
+    break;
+    case CK_88110:
+        Builder.defineMacro("__mc88110__");
+        break;
+    default:
+        break;
+    }
+}
+\end{cpp}
+
+\item
+The next few functions are stub functions but are required for the frontend for basic support. This includes the functions to get builtins from a target and a function to query the target if a specific feature of the target is supported. For now, we’ll leave them unimplemented and set default return values for these functions so that they can be implemented later:
+
+\begin{cpp}
+ArrayRef<Builtin::Info> M88kTargetInfo::getTargetBuiltins()
+const {
+    return std::nullopt;
+}
+bool M88kTargetInfo::hasFeature(StringRef Feature) const {
+    return Feature == "M88000";
+}
+\end{cpp}
+
+\item
+Following these functions, we will add an implementation for the register names on M88k. Usually, the list of supported register names and their purposes can be found on the ABI of the specific platform of interest. Within this implementation, we’ll implement the main generalpurpose registers from 0-31 and also create an array to store this information in. In terms of register aliases, note that there are no aliases for the registers that we implement currently:
+
+\begin{cpp}
+const char *const M88kTargetInfo::GCCRegNames[] = {
+    "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+    "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+    "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
+    "r24", "r25", "r26", "r27", "r28", "r29", "r39", "r31"};
+
+ArrayRef<const char *> M88kTargetInfo::getGCCRegNames() const {
+    return llvm::makeArrayRef(GCCRegNames);
+}
+ArrayRef<TargetInfo::GCCRegAlias>
+M88kTargetInfo::getGCCRegAliases() const {
+    return std::nullopt; // No aliases.
+}
+\end{cpp}
+
+\item
+The last function we’ll implement is a function that validates the inline assembly constraints on our target. This function simply takes a character, which represents the inline assembly constraint, and handles the constraint accordingly. A few inline assembly register constraints are implemented, such as for the address, data, and floating-point registers, and a select few constraints for constants are also accounted for:
+
+\begin{cpp}
+bool M88kTargetInfo::validateAsmConstraint(
+const char *&Name, TargetInfo::ConstraintInfo &info) const {
+    switch (*Name) {
+    case 'a': // address register
+    case 'd': // data register
+    case 'f': // floating point register
+        info.setAllowsRegister();
+        return true;
+    case 'K': // the constant 1
+    case 'L': // constant -1^20 .. 1^19
+    case 'M': // constant 1-4:
+        return true;
+    }
+    return false;
+}
+\end{cpp}
+
+\item
+We conclude the file by closing off the clang and targets namespaces that we initiated at the beginning of the file:
+
+\begin{cpp}
+} // namespace targets
+} // namespace clang
+\end{cpp}
+
+\end{enumerate}
+
+After completing the implementation for clang/lib/Basic/Targets/M88k.cpp, the following implementation of adding the M88k features group and valid CPU types within clang/include/ clang/Driver/Options.td. is required.
+
+Recall from earlier that we previously defined three valid CPU types for our M88k target: mc88000, mc88100, and mc88110. These CPU types also need to be defined in Options.td since this file is the central place that defines all options and flags that will be accepted by clang:
 
 \mySubsubsection{13.2.2.}{Implementing ABI support for M88k within clang}
 
+Now, we need to add ABI support within the frontend for clang, which allows us to produce code specific to the M88k target from the frontend:
+
+\begin{enumerate}
+\item
+Let’s start by adding the following clang/lib/CodeGen/TargetInfo.h. This is a prototype that creates the code generation information for the M88k target:
+
+\begin{cpp}
+std::unique_ptr<TargetCodeGenInfo>
+createM88kTargetCodeGenInfo(CodeGenModule &CGM);
+\end{cpp}
+
+\item
+We also need to add the following code to clang/lib/Basic/Targets.cpp, which will help teach clang the acceptable target triples for M88k. As we can see, for the M88k target, the acceptable operating system is OpenBSD. This means that clang accepts m88k-openbsd as a target triple:
+
+\begin{cpp}
+#include "Targets/M88k.h"
+#include "Targets/MSP430.h"
+...
+    case llvm::Triple::m88k:
+        switch (os) {
+            case llvm::Triple::OpenBSD:
+            return std::make_unique<OpenBSDTargetInfo<M88kTargetInfo>>(Triple, Opts);
+        default:
+            return std::make_unique<M88kTargetInfo>(Triple, Opts);
+        }
+    case llvm::Triple::le32:
+...
+\end{cpp}
+
+Now, we need to create a file called clang/lib/CodeGen/Targets/M88k.cpp so that we can continue the code generation information and ABI implementation for M88k.
+
+\item
+Within clang/lib/CodeGen/Targets/M88k.cpp, we must add the following necessary headers, one of which is the TargetInfo.h header that we have just modified. Then, we must specify that we’re using the clang and clang::codegen namespaces:
+
+\begin{cpp}
+#include "ABIInfoImpl.h"
+#include "TargetInfo.h"
+using namespace clang;
+using namespace clang::CodeGen;
+\end{cpp}
+
+\item
+Next, we must declare a new anonymous namespace and place our M88kABIInfo inside of it. M88kABIInfo inherits from the existing ABIInfo from clang and contains DefaultABIInfo inside it. For our target, we rely heavily on the existing ABIInfo and DefaultABIInfo, which simplifies the M88kABIInfo class significantly:
+
+\begin{cpp}
+namespace {
+class M88kABIInfo final : public ABIInfo {
+    DefaultABIInfo defaultInfo;
+\end{cpp}
+
+\item
+Furthermore, aside from adding the constructor for the M88kABIInfo class, a couple of methods are also added. computeInfo() implements the default clang::CodeGen::ABIInfo class. There’s also the EmitVAArg() function, which generates code that retrieves an argument from a pointer that is passed in; this is updated after. This is primarily used for variadic function support:
+
+\begin{cpp}
+public:
+    explicit M88kABIInfo(CodeGen::CodeGenTypes &CGT)
+        : ABIInfo(CGT), defaultInfo(CGT) {}
+    void computeInfo(CodeGen::CGFunctionInfo &FI) const override
+    {}
+    CodeGen::Address EmitVAArg(CodeGen::CodeGenFunction &CGF,
+                               CodeGen::Address VAListAddr,
+                               QualType Ty) const override {
+        return VAListAddr;
+    }
+};
+\end{cpp}
+
+\item
+The class constructor for the M88kTargetCodeGenInfo class is added next, which extends from the original TargetCodeGenInfo. After, we must close off the anonymous namespace that was created initially:
+
+\begin{cpp}
+class M88kTargetCodeGenInfo final : public TargetCodeGenInfo {
+public:
+    explicit M88kTargetCodeGenInfo(CodeGen::CodeGenTypes &CGT)
+        : TargetCodeGenInfo(std::make_unique<DefaultABIInfo>(CGT))
+{} };
+}
+\end{cpp}
+
+\item
+Finally, we must add the implementation to create the actual M88kTargetCodeGenInfo class as std::unique\_ptr, which takes in a single CodeGenModule that generates LLVM IR code. This directly corresponds to what was originally added to TargetInfo.h:
+
+\begin{cpp}
+std::unique_ptr<TargetCodeGenInfo>
+CodeGen::createM88kTargetCodeGenInfo(CodeGenModule &CGM) {
+    return std::make_unique<M88kTargetCodeGenInfo>(CGM.getTypes());
+}
+\end{cpp}
+
+\item
+\end{enumerate}
+
+That concludes the ABI support for the M88k in the frontend.
+
 \mySubsubsection{13.2.3.}{Implementing the toolchain support for M88k within clang}
 
+The final portion of the M88k target integration within clang will be to implement toolchain support for our target. Like before, we’ll need to create a header file for toolchain support. We call this header clang/lib/Driver/ToolChains/Arch/M88k.h:
+
+\begin{enumerate}
+\item
+First, we must define LLVM\_CLANG\_LIB\_DRIVER\_TOOLCHAINS\_ARCH\_M88K\_H to prevent multiple inclusion later, and also add any necessary headers for later use. Following this, we must declare the clang, driver, tools, and m88k namespaces, with each nesting inside the other:
+
+\begin{cpp}
+#ifndef LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_ARCH_M88K_H
+#define LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_ARCH_M88K_H
+#include "clang/Driver/Driver.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Option/Option.h"
+#include <string>
+#include <vector>
+namespace clang {
+namespace driver {
+namespace tools {
+namespace m88k {
+\end{cpp}
+
+\item
+Next, we must declare an enum value that depicts the floating-point ABI, which is for soft and hard floating points. This means that floating-point computations can either be done by the floating-point hardware itself, which is fast, or through software emulation, which would be slower:
+
+\begin{cpp}
+enum class FloatABI { Invalid, Soft, Hard, };
+\end{cpp}
+
+\item
+Following this, we must add definitions to get the float ABI through the driver, and the CPU through clang’s -mcpu= and -mtune= options. We must also declare a function that retrieves the target features from the driver:
+
+\begin{cpp}
+FloatABI getM88kFloatABI(const Driver &D, const
+llvm::opt::ArgList &Args);
+StringRef getM88kTargetCPU(const llvm::opt::ArgList &Args);
+StringRef getM88kTuneCPU(const llvm::opt::ArgList &Args);
+void getM88kTargetFeatures(const Driver &D, const
+llvm::Triple &Triple, const llvm::opt::ArgList &Args,
+std::vector<llvm::StringRef> &Features);
+\end{cpp}
+
+\item
+Finally, we conclude the header file by ending the namespaces and the macro that we originally defined:
+
+\begin{cpp}
+} // end namespace m88k
+} // end namespace tools
+} // end namespace driver
+} // end namespace clang
+#endif // LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_ARCH_M88K_H
+\end{cpp}
+\end{enumerate}
+
+The last file we will implement is the C++ implementation for the toolchain support, within clang/ lib/Driver/ToolChains/Arch/M88k.cpp:
+
+\begin{enumerate}
+\item
+Once again, we’ll begin the implementation by including the necessary headers and namespaces that we will use later. We must also include the M88k.h header that we created earlier:
+
+\begin{cpp}
+#include "M88k.h"
+#include "ToolChains/CommonArgs.h"
+#include "clang/Driver/Driver.h"
+#include "clang/Driver/DriverDiagnostic.h"
+#include "clang/Driver/Options.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringSwitch.h"
+#include "llvm/Option/ArgList.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/Regex.h"
+#include <sstream>
+using namespace clang::driver;
+using namespace clang::driver::tools;
+using namespace clang;
+using namespace llvm::opt;
+\end{cpp}
+
+\item
+The normalizeCPU() function is implemented next, which processes the CPU name into the -mcpu= option in clang. As we can see, each CPU name has several accepted variations. Furthermore, when a user specifies -mcpu=native, it allows them to compile for the current host’s CPU type:
+
+\begin{cpp}
+static StringRef normalizeCPU(StringRef CPUName) {
+    if (CPUName == "native") {
+        StringRef CPU = std::string(llvm::sys::getHostCPUName());
+        if (!CPU.empty() && CPU != "generic")
+        return CPU;
+    }
+    return llvm::StringSwitch<StringRef>(CPUName)
+    .Cases("mc88000", "m88000", "88000", "generic", "mc88000")
+    .Cases("mc88100", "m88100", "88100", "mc88100")
+    .Cases("mc88110", "m88110", "88110", "mc88110")
+    .Default(CPUName);
+}
+\end{cpp}
+
+\item
+Next up, we must implement the getM88kTargetCPU() function, in which, given the clang CPU name that we implemented earlier in clang/include/clang/Driver/Options.td, we get the corresponding LLVM name for the M88k CPU we are targeting:
+
+\begin{cpp}
+StringRef m88k::getM88kTargetCPU(const ArgList &Args) {
+    Arg *A = Args.getLastArg(options::OPT_m88000, options::OPT_
+        m88100, options::OPT_m88110, options::OPT_mcpu_EQ);
+    if (!A)
+        return StringRef();
+    switch (A->getOption().getID()) {
+    case options::OPT_m88000:
+        return "mc88000";
+    case options::OPT_m88100:
+        return "mc88100";
+    case options::OPT_m88110:
+        return "mc88110";
+    case options::OPT_mcpu_EQ:
+        return normalizeCPU(A->getValue());
+    default:
+        llvm_unreachable("Impossible option ID");
+    }
+}
+\end{cpp}
+
+\item
+The getM88kTuneCPU() function is implemented after. This is the behavior of the clang -mtune= option, which changes the instruction scheduling model to use data from a given CPU for M88k. We simply tune for whatever CPU that we are currently targeting:
+
+\begin{cpp}
+StringRef m88k::getM88kTuneCPU(const ArgList &Args) {
+    if (const Arg *A = Args.getLastArg(options::OPT_mtune_EQ))
+        return normalizeCPU(A->getValue());
+    return StringRef();
+}
+\end{cpp}
+
+\item
+We’ll also implement the getM88kFloatABI() method, which gets the floating-point ABI. Initially, we’ll set the ABI to be m88k::FloatABI::Invalid as a default value. Next, we must check if any of the -msoft-float or -mhard-float options are passed to the command line. If -msoft-float is specified, then we set the ABI to m88k::FloatABI::Soft accordingly. Likewise, we set m88k::FloatABI::Hard when -mhard-float is specified to clang. Finally, if none of these options are specified, we choose the default on the current platform, which would be a hard floating-point value for M88k:
+
+\begin{cpp}
+m88k::FloatABI m88k::getM88kFloatABI(const Driver &D, const
+ArgList &Args) {
+    m88k::FloatABI ABI = m88k::FloatABI::Invalid;
+
+    if (Arg *A =
+        Args.getLastArg(options::OPT_msoft_float,
+    options::OPT_mhard_float)) {
+        if (A->getOption().matches(options::OPT_msoft_float))
+            ABI = m88k::FloatABI::Soft;
+        else if (A->getOption().matches(options::OPT_mhard_float))
+            ABI = m88k::FloatABI::Hard;
+    }
+    if (ABI == m88k::FloatABI::Invalid)
+        ABI = m88k::FloatABI::Hard;
+    return ABI;
+}
+\end{cpp}
+
+\item
+We’ll add the implementation for getM88kTargetFeatures() next. The important part of this function is the vector of Features that are passed as a parameter. As we can see, the only target features that are handled are the floating-point ABI. From the driver and arguments passed to it, we’ll get the appropriate floating-point ABI from what we implemented in the previous step. Note that we add the -hard-float target features to the Features vector for soft float ABI as well, which means that currently, M88k only supports hard float:
+
+\begin{cpp}
+void m88k::getM88kTargetFeatures(const Driver &D,
+                                 const llvm::Triple &Triple,
+                                 const ArgList &Args,
+                                 std::vector<StringRef> &Features) {
+    m88k::FloatABI FloatABI = m88k::getM88kFloatABI(D, Args);
+    if (FloatABI == m88k::FloatABI::Soft)
+        Features.push_back("-hard-float");
+}
+\end{cpp}
+
+\end{enumerate}
+
 \mySubsubsection{13.3.4.}{Building the M88k target with clang integration}
+
+We’re almost done with the implementation for integrating M88k into clang. The last step is to add the new clang files that we have added into their corresponding CMakeLists.txt file, which allows us to build the clang project with our M88k target implementation:
+
+\begin{enumerate}
+\item
+First, add the Targets/M88k.cpp line to clang/lib/Basic/CMakeLists.txt.
+
+\item
+Next, add Targets/M88k.cpp to clang/lib/CodeGen/CMakeLists.txt.
+
+\item
+Finally, add ToolChains/Arch/M88k.cpp to clang/lib/Driver/CMakeLists.txt.
+\end{enumerate}
+
+There we have it! That concludes our toolchain implementation for the toolchain support for the M88k target, which subsequently means we’ve completed the integration into clang for M88k!
+
+The last step we need to do is build clang with the M88k target. The following commands will build the clang and LLVM project. For clang, be aware of the M88k target. Here, the -DLLVM\_EXPERIMENTAL\_TARGETS\_TO\_BUILD=M88k CMake option must be added, as in the previous section:
+
+\begin{shell}
+$ cmake -G Ninja ../llvm-project/llvm -DLLVM_EXPERIMENTAL_
+TARGETS_TO_BUILD=M88k -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_
+PROJECTS="clang;llvm"
+$ ninja
+\end{shell}
+
+We should now have a version of clang that recognizes the M88k target! We can confirm this by checking the list of targets that clang supports, through the –print-targets option:
+
+\begin{shell}
+$ clang --print-targets | grep M88k
+    m88k        - M88k
+\end{shell}
+
+In this section, we delved into the technical details of integrating a new backend target into clang and having it recognized. In the next section, we’ll explore the concept of cross-compiling, where we detail the procedure of targeting a different CPU architecture from the current host.
+
+
+
+
+
+
+
+
+
+
