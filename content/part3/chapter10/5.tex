@@ -1,1 +1,534 @@
+
+The clang static analyzer is a tool that performs additional checks on C, C++, and Objective C source code. The checks that are performed by the static analyzer are more thorough than the checks the compiler performs. They are also more costly in terms of time and required resources. The static analyzer has a set of checkers, which check for certain bugs.
+
+The tool performs a symbolic interpretation of the source code, which looks at all code paths through an application and derives constraints on the values used in the application from it. Symbolic interpretation is a common technique that’s used in compilers, for example, to identify constant values. In the context of the static analyzer, the checkers are applied to the derived values.
+
+For example, if the divisor of a division is zero, then the static analyzer warns us about it. We can check this with the following example stored in the div.c file:
+
+\begin{cpp}
+int divbyzero(int a, int b) { return a / b; }
+
+int bug() { return divbyzero(5, 0); }
+\end{cpp}
+
+The static analyzer will warn about a division by 0 in this example. However, when compiling, the file, when compiled with the clang -Wall -c div.c command, will show no warning.
+
+There are two ways to invoke the static analyzer from the command line. The older tool is scan-build, which is included in LLVM and can be used for simple scenarios. The newer tool is CodeChecker, available at \url{https://github.com/Ericsson/codechecker/}. To check a single file, the scan-build tool is the easiest solution. You simply pass the compile command to the tool; everything else is done automatically:
+
+\begin{shell}
+$ scan-build clang -c div.c
+scan-build: Using '/usr/home/kai/LLVM/llvm-17/bin/clang-17' for static
+analysis
+div.c:2:12: warning: Division by zero [core.DivideZero]
+    return a / b;
+             ~~^~~
+1 warning generated.
+scan-build: Analysis run complete.
+scan-build: 1 bug found.
+scan-build: Run 'scan-view /tmp/scan-build-2021-03-01-023401-8721-1'
+to examine bug reports.
+\end{shell}
+
+The output on the screen already tells you that a problem was found – that is, the core.DivideZero checker was triggered. However, that is not all. You will find a complete report in HTML in the mentioned subdirectory of the /tmp directory. You can then use the scan-view command to view the report or open the index.html file found in the subdirectory in your browser.
+
+The first page of the report shows you a summary of the bugs that were found:
+
+\myGraphic{1.0}{content/part3/chapter10/images/3.png}{Figure 10.3 – Summary page}
+
+For each error that was found, the summary page shows the type of the error, the location in the source, and the path length after which the analyzer found the error. A link to a detailed report for the error is also provided.
+
+The following screenshot shows the detailed report for the error:
+
+\myGraphic{0.7}{content/part3/chapter10/images/4.png}{Figure 10.4 – Detailed report}
+
+With this detailed report, you can verify the error by following the numbered bubbles. Our simple example shows how passing 0 as a parameter value leads to a division by zero error.
+
+Thus, human verification is required. If the derived constraints are not precise enough for a certain checker, then false positives are possible – that is, an error is reported for perfectly fine code. Based on the report, you can use them to identify false positives.
+
+You are not limited to checkers that are provided with the tool – you can also add new checkers. The next section demonstrates how to do this.
+
 \mySubsubsection{10.5.1.}{Adding a new checker to the clang static analyzer}
+
+Many C libraries provide functions that must be used in pairs. For example, the C standard library provides the malloc() and free() functions. The memory that’s allocated by malloc() function must be freed exactly one time by the free() function. Not calling the free() function, or calling it several times, is a programming error. There are many more instances of this coding pattern, and the static analyzer provides checkers for some of them.
+
+The iconv library provides functions for converting text from one encoding into another – for example, from Latin-1 encoding into UTF-16 encoding. To perform the conversion, the implementation needs to allocate memory. To transparently manage the internal resources, the iconv library provides the iconv\_open() and iconv\_close() functions, which must be used in pairs, similar to the memory management functions. No checker is implemented for those functions, so let’s implement one.
+
+To add a new checker to the clang static analyzer, you must create a new subclass of the Checker class. The static analyzer tries all possible paths through the code. The analyzer engine generates events at certain points – for example, before or after a function call. Moreover, your class must provide callbacks for these events if you need to handle them. The Checker class and the registrations for the events are provided in the clang/include/clang/StaticAnalyzer/Core/Checker.h header file.
+
+Usually, a checker needs to track some symbols. However, the checker cannot manage the state because it does not know which code path the analyzer engine currently tries. Therefore, the tracked state must be registered with the engine, and can only be changed using a ProgramStateRef instance.
+
+To detect the errors, the checker needs to track the descriptor that’s returned from the iconv\_open() function. The analyzer engine returns a SymbolRef instance for the return value of the iconv\_open() function. We associate this symbol with a state to reflect if iconv\_close() was called or not. For the state, we create the IconvState class, which encapsulates a bool value.
+
+The new IconvChecker class needs to handle four types of events:
+
+\begin{itemize}
+\item
+PostCall, which occurs after a function call. After the iconv\_open() function was called, we retrieved the symbol for the return value and remembered it as being in an “opened” state.
+
+\item
+PreCall, which occurs before a function call. Before the iconv\_close() function is called, we check if the symbol for the descriptor is in an “opened” state. If not, then the iconv\_close() function was already called for the descriptor, and we have detected a double call to the function.
+
+\item
+DeadSymbols, which occurs when unused symbols are cleaned up. We check if an unused symbol for a descriptor is still in an “opened” state. If it is, then we have detected a missing call to iconv\_close(), which is a resource leak.
+
+\item
+PointerEscape, which is called when the symbols can no longer be tracked by the analyzer. In this case, we remove the symbol from the state because we can no longer reason about whether the descriptor was closed or not.
+\end{itemize}
+
+We can create a new directory to implement the new checker as a clang plugin, and add the implementations within the IconvChecker.cpp file:
+
+\begin{enumerate}
+\item
+For the implementation, we need to include several header files. The include file, BugType.h is required for emitting reports. The header file, Checker.h, provides the declaration of the Checker class and the callbacks for the events, which are declared in the CallEvent file Moreover, the CallDescription.h file helps with matching functions and methods. Finally, the CheckerContext.h file is required for declaring the CheckerContext class, which is the central class that provides access to the state of the analyzer:
+
+\begin{cpp}
+#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/CallDescription.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
+#include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
+#include <optional>
+\end{cpp}
+
+\item
+To avoid typing the namespace names, we can use the clang and ento namespaces:
+
+\begin{cpp}
+using namespace clang;
+using namespace ento;
+\end{cpp}
+
+\item
+We associate a state with each symbol representing an iconv descriptor. The state can be open or closed, and we use a bool typed variable, with true value for the open state. The state value is encapsulated in the IconvState struct. This struct is used with a FoldingSet data structure, which is a hash set that filters duplicate entries. To be usable with this data structure implementation, the Profile() method is added here, which sets the unique bits of this struct. We put the struct into an anonymous namespace to avoid polluting the global namespace. Instead of exposing the bool value, the class provides the getOpened() and getClosed() factory methods and the isOpen() query method:
+
+\begin{cpp}
+namespace {
+class IconvState {
+    const bool IsOpen;
+
+    IconvState(bool IsOpen) : IsOpen(IsOpen) {}
+
+public:
+    bool isOpen() const { return IsOpen; }
+
+    static IconvState getOpened() {
+        return IconvState(true);
+    }
+
+    static IconvState getClosed() {
+        return IconvState(false);
+    }
+
+    bool operator==(const IconvState &O) const {
+        return IsOpen == O.IsOpen;
+    }
+
+    void Profile(llvm::FoldingSetNodeID &ID) const {
+        ID.AddInteger(IsOpen);
+    }
+};
+} // namespace
+\end{cpp}
+
+\item
+The IconvState struct represents the state of an iconv descriptor, which is represented by a symbol of the SymbolRef class. This is best done with a map, which has the symbol as the key and the state as the value. As explained earlier, the checker cannot hold the state. Instead, the state must be registered with the global program state, which is done with the REGISTER\_ MAP\_WITH\_PROGRAMSTATE macro. This macro introduces the IconvStateMap name, which we will use later to access the map:
+
+\begin{cpp}
+REGISTER_MAP_WITH_PROGRAMSTATE(IconvStateMap, SymbolRef,
+                               IconvState)
+\end{cpp}
+
+\item
+We also implement the IconvChecker class in an anonymous namespace. The requested PostCall, PreCall, DeadSymbols, and PointerEscape events are template parameters to the Checker base class:
+
+\begin{cpp}
+namespace {
+    class IconvChecker
+        : public Checker<check::PostCall, check::PreCall,
+                         check::DeadSymbols,
+                         check::PointerEscape> {
+\end{cpp}
+
+\item
+The IconvChecker class has fields of the CallDescription type, which are used to identify function calls to iconv\_open(), iconv(), and iconv\_close()in the program:
+
+\begin{cpp}
+    CallDescription IconvOpenFn, IconvFn, IconvCloseFn;
+\end{cpp}
+
+\item
+The class also holds references to the detected bug types:
+
+\begin{cpp}
+    std::unique_ptr<BugType> DoubleCloseBugType;
+    std::unique_ptr<BugType> LeakBugType;
+\end{cpp}
+
+\item
+Finally, the class has a couple of methods. Besides the constructor and the methods for the call events, we also need a method to emit a bug report:
+
+\begin{cpp}
+    void report(ArrayRef<SymbolRef> Syms,
+                const BugType &Bug, StringRef Desc,
+                CheckerContext &C, ExplodedNode *ErrNode,
+                std::optional<SourceRange> Range =
+                    std::nullopt) const;
+
+public:
+    IconvChecker();
+    void checkPostCall(const CallEvent &Call,
+                       CheckerContext &C) const;
+    void checkPreCall(const CallEvent &Call,
+                      CheckerContext &C) const;
+    void checkDeadSymbols(SymbolReaper &SymReaper,
+                          CheckerContext &C) const;
+    ProgramStateRef
+    checkPointerEscape(ProgramStateRef State,
+                       const InvalidatedSymbols &Escaped,
+                       const CallEvent *Call,
+                       PointerEscapeKind Kind) const;
+};
+} // namespace
+\end{cpp}
+
+\item
+The implementation of the constructor of the IconvChecker class initializes the CallDescription fields using the name of the functions, and creates the objects representing the bug types:
+
+\begin{cpp}
+IconvChecker::IconvChecker()
+    : IconvOpenFn({"iconv_open"}), IconvFn({"iconv"}),
+        IconvCloseFn({"iconv_close"}, 1) {
+    DoubleCloseBugType.reset(new BugType(
+        this, "Double iconv_close", "Iconv API Error"));
+    LeakBugType.reset(new BugType(
+        this, "Resource Leak", "Iconv API Error",
+        /*SuppressOnSink=*/true));
+}
+\end{cpp}
+
+\item
+Now, we can implement the first call event method, checkPostCall(). This method is called after the analyzer has executed a function call. If the executed function is not a global C function and not named iconv\_open, then there is nothing to do:
+
+\begin{cpp}
+void IconvChecker::checkPostCall(
+        const CallEvent &Call, CheckerContext &C) const {
+    if (!Call.isGlobalCFunction())
+        return;
+    if (!IconvOpenFn.matches(Call))
+        return;
+\end{cpp}
+
+\item
+Otherwise, we can try to get the return value of the function as a symbol. To store the symbol with the open state in the global program state, we need to get a ProgramStateRef instance from the CheckerContext instance. The state is immutable, so adding the symbol to the state results in a new state. Finally, the analyzer engine is informed about the new state with a call to the addTransition() method:
+
+\begin{cpp}
+    if (SymbolRef Handle =
+            Call.getReturnValue().getAsSymbol()) {
+        ProgramStateRef State = C.getState();
+        State = State->set<IconvStateMap>(
+            Handle, IconvState::getOpened());
+        C.addTransition(State);
+    }
+}
+\end{cpp}
+
+\item
+Likewise, the checkPreCall() method is called before the analyzer executes a function. Only a global C function called iconv\_close is of interest to us:
+
+\begin{cpp}
+void IconvChecker::checkPreCall(
+        const CallEvent &Call, CheckerContext &C) const {
+    if (!Call.isGlobalCFunction()) {
+        return;
+    }
+    if (!IconvCloseFn.matches(Call)) {
+        return;
+    }
+\end{cpp}
+
+\item
+If the symbol for the first argument of the function, which is the iconv descriptor, is known, then we can retrieve the state of the symbol from the program state:
+
+\begin{cpp}
+    if (SymbolRef Handle =
+            Call.getArgSVal(0).getAsSymbol()) {
+        ProgramStateRef State = C.getState();
+        if (const IconvState *St =
+                State->get<IconvStateMap>(Handle)) {
+\end{cpp}
+
+\item
+If the state represents the closed state, then we have detected a double close error, and we can generate a bug report for it. The call to generateErrorNode() can return a nullptr value if an error report was already generated for this path, so we have to check for this situation:
+
+\begin{cpp}
+            if (!St->isOpen()) {
+                if (ExplodedNode *N = C.generateErrorNode()) {
+                    report(Handle, *DoubleCloseBugType,
+                            "Closing a previous closed iconv "
+                            "descriptor",
+                            C, N, Call.getSourceRange());
+                }
+                return;
+            }
+        }
+\end{cpp}
+
+\item
+Otherwise, we must set the state for the symbol to the “closed” state:
+
+\begin{cpp}
+        State = State->set<IconvStateMap>(
+            Handle, IconvState::getClosed());
+        C.addTransition(State);
+    }
+}
+\end{cpp}
+
+\item
+The checkDeadSymbols() method is called to clean up unused symbols. We loop over all symbols we track and ask the SymbolReaper instance if the current symbol is dead:
+
+\begin{cpp}
+void IconvChecker::checkDeadSymbols(
+        SymbolReaper &SymReaper, CheckerContext &C) const {
+    ProgramStateRef State = C.getState();
+    SmallVector<SymbolRef, 8> LeakedSyms;
+    for (auto [Sym, St] : State->get<IconvStateMap>()) {
+        if (SymReaper.isDead(Sym)) {
+\end{cpp}
+
+\item
+If the symbol is dead, then we need to check the state. If the state is still open, then this is a potential resource leak. There is one exception: iconv\_open() returns -1 in case of an error. If the analyzer is in a code path that handles this error, then it is wrong to assume a resource leak because the function call failed. We try to get the value of the symbol from the ConstraintManager instance, and we do not consider the symbol as a resource leak if this value is -1. We add a leaked symbol to a SmallVector instance to generate the error report later. Finally, we remove the dead symbol from the program state:
+
+\begin{cpp}
+            if (St.isOpen()) {
+                bool IsLeaked = true;
+                if (const llvm::APSInt *Val =
+                State->getConstraintManager().getSymVal(
+                State, Sym))
+                IsLeaked = Val->getExtValue() != -1;
+                if (IsLeaked)
+                LeakedSyms.push_back(Sym);
+                }
+                State = State->remove<IconvStateMap>(Sym);
+            }
+        }
+\end{cpp}
+
+\item
+After the loop, we call the generateNonFatalErrorNode() method. This method transitions to the new program state and returns an error node if there is not already an error node for this path. The LeakedSyms container holds the (possibly empty) list of leaked symbols, and we call the report() method to generate an error report:
+
+\begin{cpp}
+        if (ExplodedNode *N =
+                C.generateNonFatalErrorNode(State)) {
+            report(LeakedSyms, *LeakBugType,
+                "Opened iconv descriptor not closed", C, N);
+        }
+    }
+\end{cpp}
+
+\item
+The checkPointerEscape() function is called when the analyzer detects a function call for which the parameters cannot be tracked. In such a case, we must assume that we do not know if the iconv descriptor will be closed inside the function or not. The exceptions are a call to iconv(), which does the conversion and is known to not call the iconv\_close() function, and the iconv\_close() function itself, which we handle in the checkPreCall() method. We also do not change the state if the call is inside a system header file, and if we know that the arguments do not escape in the called function. In all other cases, we remove the symbol from the state:
+
+\begin{cpp}
+ProgramStateRef IconvChecker::checkPointerEscape(
+        ProgramStateRef State,
+        const InvalidatedSymbols &Escaped,
+        const CallEvent *Call,
+        PointerEscapeKind Kind) const {
+    if (Kind == PSK_DirectEscapeOnCall) {
+        if (IconvFn.matches(*Call) ||
+            IconvCloseFn.matches(*Call))
+            return State;
+        if (Call->isInSystemHeader() ||
+            !Call->argumentsMayEscape())
+        return State;
+    }
+    for (SymbolRef Sym : Escaped)
+        State = State->remove<IconvStateMap>(Sym);
+    return State;
+}
+\end{cpp}
+
+\item
+The report() method generates an error report. The important parameters of the method are an array of symbols, the type of the bug, and a bug description. Inside the method, a bug report is created for each symbol, and the symbol is marked as the interesting one for the bug. If a source range is provided as a parameter, then this is also added to the report. Finally, the report is emitted:
+
+\begin{cpp}
+void IconvChecker::report(
+        ArrayRef<SymbolRef> Syms, const BugType &Bug,
+        StringRef Desc, CheckerContext &C,
+        ExplodedNode *ErrNode,
+        std::optional<SourceRange> Range) const {
+    for (SymbolRef Sym : Syms) {
+        auto R = std::make_unique<PathSensitiveBugReport>(
+            Bug, Desc, ErrNode);
+        R->markInteresting(Sym);
+        if (Range)
+            R->addRange(*Range);
+        C.emitReport(std::move(R));
+    }
+}
+\end{cpp}
+
+\item
+Now, the new checker needs to be registered at a CheckerRegistry instance. When our plugin is loaded, the clang\_registerCheckers() function is used, in which we perform the registration. Each checker has a name and belongs to a package. We call the IconvChecker checker and put it into the unix packager because the iconv library is a standard POSIX interface. This is the first parameter of the addChecker() method. The second parameter is a brief documentation of the functionality, and the third parameter can be a URI to a document that provides more information about the checker:
+
+\begin{cpp}
+extern "C" void
+clang_registerCheckers(CheckerRegistry &registry) {
+    registry.addChecker<IconvChecker>(
+        "unix.IconvChecker",
+        "Check handling of iconv functions", "");
+}
+\end{cpp}
+
+\item
+Finally, we need to declare the version of the static analyzer API we are using, which enables the system to determine if the plugin is compatible:
+
+\begin{cpp}
+extern "C" const char clang_analyzerAPIVersionString[] =
+    CLANG_ANALYZER_API_VERSION_STRING;
+\end{cpp}
+
+This finishes the implementation of the new checker. To build the plugin, we also need to create a build description in the CMakeLists.txt file which lives in the same directory as IconvChecker.cpp:
+
+\item
+Begin by defining the required CMake version and the name of the project:
+
+\begin{cmake}
+cmake_minimum_required(VERSION 3.20.0)
+project(iconvchecker)
+\end{cmake}
+
+\item
+Next, include the LLVM files. If CMake can’t find the files automatically, then you have to set the LLVM\_DIR variable so that it points to the LLVM directory containing the CMake files:
+
+\begin{cmake}
+find_package(LLVM REQUIRED CONFIG)
+\end{cmake}
+
+\item
+Append the LLVM directory with the CMake files to the search path, and include the required modules from LLVM:
+
+\begin{cmake}
+list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR})
+include(AddLLVM)
+include(HandleLLVMOptions)
+\end{cmake}
+
+\item
+Then, load the CMake definitions for clang. If CMake can’t find the files automatically, then you have to set the Clang\_DIR variable so that it points to the clang directory containing the CMake files:
+
+\begin{cmake}
+find_package(Clang REQUIRED)
+\end{cmake}
+
+\item
+Next, append the Clang directory with the CMake files to the search path, and include the required modules from Clang:
+
+\begin{cmake}
+list(APPEND CMAKE_MODULE_PATH ${Clang_DIR})
+include(AddClang)
+\end{cmake}
+
+\item
+Then, define where the header files and the library files are located, and which definitions to use:
+
+\begin{cmake}
+include_directories("${LLVM_INCLUDE_DIR}"
+                    "${CLANG_INCLUDE_DIRS}")
+add_definitions("${LLVM_DEFINITIONS}")
+link_directories("${LLVM_LIBRARY_DIR}")
+\end{cmake}
+
+\item
+The previous definitions set up the build environment. Insert the following command, which defines the name of your plugin, the source file(s) of the plugin, and that it is a clang plugin:
+
+\begin{cmake}
+add_llvm_library(IconvChecker MODULE IconvChecker.cpp
+                 PLUGIN_TOOL clang)
+\end{cmake}
+
+\item
+On Windows, the plugin support is different from Unix, and the required LLVM and clang libraries must be linked in. The following code ensures this:
+
+\begin{cmake}
+if(WIN32 OR CYGWIN)
+    set(LLVM_LINK_COMPONENTS Support)
+    clang_target_link_libraries(IconvChecker PRIVATE
+        clangAnalysis
+        clangAST
+        clangStaticAnalyzerCore
+        clangStaticAnalyzerFrontend)
+endif()
+\end{cmake}
+\end{enumerate}
+
+Now, we can configure and build the plugin, assuming that the CMAKE\_GENERATOR and CMAKE\_BUILD\_TYPE environment variables are set:
+
+\begin{shell}
+$ cmake -DLLVM_DIR=~/LLVM/llvm-17/lib/cmake/llvm \
+        -DClang_DIR=~/LLVM/llvm-17/lib/cmake/clang \
+        -B build
+$ cmake --build build
+\end{shell}
+
+You can test the new checker with the following source saved in the conv.c file, which has two calls to the iconv\_close() function:
+
+\begin{cpp}
+#include <iconv.h>
+
+void doconv() {
+    iconv_t id = iconv_open("Latin1", "UTF-16");
+    iconv_close(id);
+    iconv_close(id);
+}
+\end{cpp}
+
+To use the plugin with the scan-build script, you need to specify the path to the plugin via the -load-plugin option. A run with the conv.c file looks like:
+
+\begin{shell}
+$ scan-build -load-plugin build/IconvChecker.so clang-17 -c conv.c
+scan-build: Using '/home/kai/LLVM/llvm-17/bin/clang-17' for static
+analysis
+conv.c:6:3: warning: Closing a previous closed iconv descriptor [unix.
+IconvChecker]
+    6 | iconv_close(id);
+      | ^~~~~~~~~~~~~~~
+1 warning generated.
+scan-build: Analysis run complete.
+scan-build: 1 bug found.
+scan-build: Run 'scan-view /tmp/scan-build-2023-08-08-114154-12451-1' to examine bug reports.
+\end{shell}
+
+With that, you’ve learned how to extend the clang static analyzer with your own checker. You can use this knowledge to either create new general checkers and contribute them to the community or create checkers specifically built for your needs, to raise the quality of your product.
+
+The static analyzer is built by leveraging the clang infrastructure. The next section introduces you to how can build your own plugin extending clang.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

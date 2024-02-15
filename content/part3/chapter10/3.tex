@@ -1,1 +1,172 @@
+
+To test your application, you’ll need to write unit tests. This is a great way to make sure your software behaves correctly and as you might expect. However, because of the exponential number of possible inputs, you’ll probably miss certain weird inputs, and a few bugs as well.
+
+Fuzz testing can help here. The idea is to present your application with randomly generated data, or data based on valid input but with random changes. This is done repeatedly, so your application is tested with a large number of inputs, which is why fuzz testing can be a powerful testing approach. It has been noted that fuzz testing has assisted in finding hundreds of bugs within web browsers and other software.
+
+Interestingly, LLVM comes with its own fuzz testing library. Originally part of the LLVM core libraries, the libFuzzer implementation was finally moved to compiler-rt. The library is designed to test small and fast functions.
+
+Let’s run a small example to see how libFuzzer works. First, you will need to provide the LLVMFuzzerTestOneInput() function. This function is called by the fuzzer driver and provides you with some input. The following function counts consecutive ASCII digits in the input. Once it’s done that, we’ll feed random input to it.
+
+You’ll need to save the example in the fuzzer.c file:
+
+\begin{cpp}
+#include <stdint.h>
+#include <stdlib.h>
+int count(const uint8_t *Data, size_t Size) {
+    int cnt = 0;
+    if (Size)
+        while (Data[cnt] >= '0' && Data[cnt] <= '9') ++cnt;
+    return cnt;
+}
+
+int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+    count(Data, Size);
+    return 0;
+}
+\end{cpp}
+
+In the preceding code, the count() function counts the number of digits in the memory pointed to by the Data variable. The size of the data is only checked to determine if there are any bytes available. Inside the while loop, the size is not checked.
+
+Used with normal C strings, there will be no error because C strings are always terminated by a 0 byte. The LLVMFuzzerTestOneInput() function is the so-called fuzz target, and it is the function called by libFuzzer. It calls the function we want to test and returns 0, which is currently the only allowed value.
+
+To compile the file with libFuzzer, you must add the -fsanitize=fuzzer option. The recommendation is to also enable the address sanitizer and the generation of debug symbols. We can use the following command to compile the fuzzer.c file:
+
+\begin{shell}
+$ clang -fsanitize=fuzzer,address -g fuzzer.c -o fuzzer
+\end{shell}
+
+When you run the test, it emits a lengthy report. The report contains more information than a stack trace, so let’s have a closer look at it:
+
+\begin{itemize}
+\item
+The first line tells you the seed that was used to initialize the random number generator. You can use the –seed= option to repeat this execution:
+
+\begin{shell}
+INFO: Seed: 1297394926
+\end{shell}
+
+\item
+By default, libFuzzer limits inputs to, at most, 4096 bytes. You can change the default by using the –max\_len= option:
+
+\begin{shell}
+INFO: -max_len is not provided; libFuzzer will not generate
+inputs larger than 4096 bytes
+\end{shell}
+
+\item
+Now, we can run the test without providing sample input. The set of all sample inputs is called corpus, and it is empty for this run:
+
+\begin{shell}
+INFO: A corpus is not provided, starting from an empty corpus
+\end{shell}
+
+\item
+Some information about the generated test data will follow. It shows you that 28 inputs were tried and 6 inputs, which together have a length of 19 bytes, were found, which together cover 6 coverage points or basic blocks:
+
+\begin{shell}
+#28 NEW cov: 6 ft: 9 corp: 6/19b lim: 4 exec/s: 0 rss:
+29Mb L: 4/4 MS: 4 CopyPart-PersAutoDict-CopyPart-ChangeByte- DE:
+"1\x00"-
+\end{shell}
+
+\item
+After this, a buffer overflow was detected, and it followed the information from the address sanitizer. Lastly, the report tells you where the input causing the buffer overflow is saved:
+
+\begin{shell}
+artifact_prefix='./'; Test unit written to ./crash-17ba0791499db908433b80f37c5fbc89b870084b
+\end{shell}
+\end{itemize}
+
+With the saved input, the test case can be executed with the same crashing input again:
+
+\begin{shell}
+$ ./fuzzer crash-17ba0791499db908433b80f37c5fbc89b870084b
+\end{shell}
+
+This helps identify the problem as we can use the saved input as a direct reproducer to fix whatever problems that may arise. However, only using random data is often not very helpful in every situation. If you try to fuzz test the tinylang lexer or parser, then pure random data leads to immediate rejection of the input because no valid token can be found.
+
+In such cases, it is more useful to provide a small set of valid input, called the corpus. In this situation, the files of the corpus are randomly mutated and used as input. You can think of the input as mostly valid, with just a few bits flipped. This also works great with other input, which must have a certain format. For example, for a library that processes JPEG and PNG files, you will provide some small JPEG and PNG files as corpus.
+
+An example of providing the corpus looks like this. You can save the corpus files in one or more directories and you can create a simple corpus for our fuzz test with the help of the printf command:
+
+\begin{shell}
+$ mkdir corpus
+$ printf "012345\0" >corpus/12345.txt
+$ printf "987\0" >corpus/987.txt
+\end{shell}
+
+When running the test, you must provide the directory on the command line:
+
+\begin{shell}
+$ ./fuzzer corpus/
+\end{shell}
+
+The corpus is then used as the base for generating random input, as the report tells you:
+
+\begin{shell}
+INFO: seed corpus: files: 2 min: 4b max: 7b total: 11b rss: 29Mb
+\end{shell}
+
+Furthermore, if you are testing a function that works on tokens or other magic values, such as a programming language, then you can speed up the process by providing a dictionary with the tokens. For a programming language, the dictionary would contain all the keywords and special symbols used in the language. Moreover, the dictionary definitions follow a simple key-value style. For example, to define the if keyword in the dictionary, you can add the following:
+
+\begin{shell}
+kw1="if"
+\end{shell}
+
+However, the key is optional, and you can leave it out. Now, you can specify the dictionary file on the command line with the –dict= option.
+
+Now that we’ve covered using libFuzzer to find bugs, let’s look at the limitations and alternatives for the libFuzzer implementation.
+
 \mySubsubsection{10.3.1.}{Limitations and alternatives}
+
+The libFuzzer implementation is fast but poses several restrictions on the test target. They are as follows:
+
+\begin{itemize}
+\item
+The function under test must accept the input as an array in memory. Some library functions require a file path to the data instead, and they cannot be tested with libFuzzer.
+
+\item
+The exit() function should not be called.
+
+\item
+The global state should not be altered.
+
+\item
+Hardware random number generators should not be used.
+\end{itemize}
+
+The first two restrictions are an implication of the implementation of libFuzzer as a library. The latter two restrictions are needed to avoid confusion in the evaluation algorithm. If one of these restrictions is not met, then two identical calls to the fuzz target can yield different results.
+
+The best-known alternative tool for fuzz testing is AFL, which can be found at \url{https://github.com/google/AFL}. AFL requires an instrumented binary (an LLVM plugin for instrumentation is provided) and requires the application to take the input as a file path on the command line. AFL and libFuzzer can share the same corpus and the same dictionary files. Thus, it is possible to test an application with both tools. Furthermore, where libFuzzer is not applicable, AFL may be a good alternative.
+
+There are many more ways of influencing the way libFuzzer works. You can read the reference page at \url{https://llvm.org/docs/LibFuzzer.html} for more details.
+
+In the next section, we look at a different problem an application can have – we’ll try to identify performance bottlenecks while using the XRay tool.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

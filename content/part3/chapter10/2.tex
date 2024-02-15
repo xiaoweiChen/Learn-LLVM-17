@@ -84,22 +84,113 @@ The address sanitizer is very useful because it catches a category of bugs that 
 
 \mySubsubsection{10.2.2.}{Finding uninitialized memory accesses with the memory sanitizer}
 
+Using uninitialized memory is another category of bugs that are hard to find. In C and C++, the general memory allocation routines do not initialize the memory buffer with a default value. The same is true for automatic variables on the stack.
 
+There are lots of opportunities for errors, and the memory sanitizer helps find these bugs. If you are interested in the implementation details, you can find the source for the memory sanitizer pass in the llvm/lib/Transforms/Instrumentation/MemorySanitizer.cpp file. The comment at the top of the file explains the ideas behind the implementation.
 
+Let’s run a small example and save the following source as the memory.c file. Note that the x variable is not initialized and is used as a return value:
 
+\begin{cpp}
+int main(int argc, char *argv[]) {
+    int x;
+    return x;
+}
+\end{cpp}
 
+Without the sanitizer, the application will run just fine. However, you will get an error report if you use the -fsanitize=memory option:
+
+\begin{shell}
+$ clang -fsanitize=memory -g memory.c -o memory
+$ ./memory
+==1206==WARNING: MemorySanitizer: use-of-uninitialized-value
+    #0 0x10a8f49 in main /home/kai/sanitizers/memory.c:3:3
+    #1 0x1053481 in _start /usr/src/lib/csu/amd64/crt1.c:76:7
+SUMMARY: MemorySanitizer: use-of-uninitialized-value /home/kai/
+sanitizers/memory.c:3:3 in main
+Exiting
+\end{shell}
+
+Like the address sanitizer, the memory sanitizer stops the application at the first error that’s found. As shown here the memory sanitizer provides a use of initialized value warning.
+
+Finally, in the next section, we’ll look at how we can use the thread sanitizer to detect data races in multi-threaded applications.
 
 \mySubsubsection{10.2.3.}{Pointing out data races with the thread sanitizer}
 
+To leverage the power of modern CPUs, applications now use multiple threads. This is a powerful technique, but it also introduces new sources of errors. A very common problem in multi-threaded applications is that the access to global data is not protected, for example, with a mutex or semaphore.
 
+This is called a data race. The thread sanitizer can detect data races in Pthreads-based applications and in applications using the LLVM libc++ implementation. You can find the implementation in the llvm/lib/Transforms/Instrumentation/ThreadSanitizer.cpp file.
+To demonstrate the functionality of the thread sanitizer, we will create a very simple producerconsumer-style application. The producer thread increments a global variable, while the consumer thread decrements the same variable. Access to the global variable is not protected, so this is a data race.
 
+You’ll need to save the following source in the thread.c file:
 
+\begin{cpp}
+#include <pthread.h>
 
+int data = 0;
 
+void *producer(void *x) {
+    for (int i = 0; i < 10000; ++i) ++data;
+    return x;
+}
 
+void *consumer(void *x) {
+    for (int i = 0; i < 10000; ++i) --data;
+    return x;
+}
 
+int main() {
+    pthread_t t1, t2;
+    pthread_create(&t1, NULL, producer, NULL);
+    pthread_create(&t2, NULL, consumer, NULL);
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+    return data;
+}
+\end{cpp}
 
+In the preceding code, the data variable is shared between two threads. Here, it is of the int type to make the example simple since often, a data structure such as the std::vector class or similar would be used. Furthermore, these two threads run the producer() and consumer() functions.
 
+The producer() function only increments the data variable, while the consumer() function decrements it. No access protection is implemented, so this constitutes a data race. The main() function starts both threads with the pthread\_create() function, waits for the end of the threads with the pthread\_join() function, and returns the current value of the data variable.
+
+If you compile and run this application, then you will note no error – that is, the return value is always zero. An error – in this case, a return value not equal to zero – will appear if the number of loops that are performed is increased by a factor of 100. At this point, you will begin to notice other values appear.
+
+We can use the thread sanitizer to identify the data race within our program. To compile with the thread sanitizer enabled, you’ll need to pass the -fsanitize=thread option to clang. Adding debug symbols with the –g options gives you line numbers in the report, which is also helpful. Note that you also need to link the pthread library:
+
+\begin{shell}
+$ clang -fsanitize=thread -g thread.c -o thread -lpthread
+$ ./thread
+==================
+WARNING: ThreadSanitizer: data race (pid=1474)
+    Write of size 4 at 0x000000cdf8f8 by thread T2:
+        #0 consumer /home/kai/sanitizers/thread.c:11:35 (thread+0x2b0fb2)
+
+    Previous write of size 4 at 0x000000cdf8f8 by thread T1:
+        #0 producer /home/kai/sanitizers/thread.c:6:35 (thread+0x2b0f22)
+
+    Location is global 'data' of size 4 at 0x000000cdf8f8
+(thread+0x000000cdf8f8)
+
+    Thread T2 (tid=100437, running) created by main thread at:
+        #0 pthread_create /usr/src/contrib/llvm-project/compiler-rt/lib/
+tsan/rtl/tsan_interceptors_posix.cpp:962:3 (thread+0x271703)
+        #1 main /home/kai/sanitizers/thread.c:18:3 (thread+0x2b1040)
+
+Thread T1 (tid=100436, finished) created by main thread at:
+    #0 pthread_create /usr/src/contrib/llvm-project/compiler-rt/lib/
+tsan/rtl/tsan_interceptors_posix.cpp:962:3 (thread+0x271703)
+    #1 main /home/kai/sanitizers/thread.c:17:3 (thread+0x2b1021)
+
+SUMMARY: ThreadSanitizer: data race /home/kai/sanitizers/
+thread.c:11:35 in consumer
+==================
+ThreadSanitizer: reported 1 warnings
+\end{shell}
+
+The report points us to lines 6 and 11 of the source file, where the global variable is accessed. It also shows that two threads named T1 and T2 accessed the variable and the file and line number of the respective calls to the pthread\_create() function.
+
+With that, we’ve learned how to use three different types of sanitizers to identify common problems in applications. The address sanitizer helps us identify common memory access errors, such as out-of-bounds accesses or using memory after it’s been freed. Using the memory sanitizer, we can find access to uninitialized memory, and the thread sanitizer helps us identify data races.
+
+In the next section, we’ll try to trigger the sanitizers by running our application on random data. This process is known as fuzz testing.
 
 
 

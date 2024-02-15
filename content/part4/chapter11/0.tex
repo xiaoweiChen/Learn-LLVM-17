@@ -1,0 +1,51 @@
+LLVM has a very flexible architecture. You can also add a new target backend to it. The core of a backend is the target description, from which most of the code is generated. In this chapter, you will learn how to add support for a historical CPU.
+
+In this chapter, you will cover the following:
+
+\begin{itemize}
+\item
+Setting the stage for a new backend introduces you to the M88k CPU architecture and shows you where to find the required information
+
+\item
+Adding the new architecture to the Triple class teaches you how to make LLVM aware of a new CPU architecture
+
+\item
+Extending the ELF file format definition in LLVM shows you how to add support for the M88kspecific relocations to the libraries and tools that handle ELF object files
+
+\item
+Creating the target description applies your knowledge of the TableGen language to model the register file and instructions in the target description
+
+\item
+Adding the M88k backend to LLVM explains the minimal infrastructure required for an LLVM backend
+
+\item
+Implementing an assembler parser shows you how to develop the assembler
+
+\item
+Creating the disassembler teaches you how to create the disassembler
+\end{itemize}
+
+By the end of the chapter, you will know how to add a new backend to LLVM. You will acquire the knowledge to develop the register file definition and instruction definition in the target description, and you will know how to create the assembler and disassembler from that description.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
