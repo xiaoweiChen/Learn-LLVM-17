@@ -1,194 +1,198 @@
 
-With the build tools ready, you can now check out all LLVM projects from GitHub and build LLVM. This process is essentially the same on all platforms:
+准备好构建工具后，可以从GitHub中下载LLVM项目，并构建LLVM。这一过程在所有平台上都是相同的:
 
 \begin{enumerate}
-\item 
-Configure Git.
+\item
+配置Git
 
-\item 
-Clone the repository.
+\item
+克隆库
 
-\item 
-Create the build directory.
+\item
+创建构建目录
 
-\item 
-Generate the build system files.
+\item
+生成构建系统文件
 
-\item 
-Finally, build and install LLVM.
+\item
+最后，编译和安装LLVM
 \end{enumerate}
 
-Let’s begin with configuring Git.
+先从配置Git开始吧！
 
-\mySubsubsection{1.3.1.}{Configuring Git}
+\mySubsubsection{1.3.1.}{配置Git}
 
-The LLVM project uses Git for version control. If you have not used Git before, then you should do some basic configuration of Git first before continuing: to set the username and email address. Both pieces of information are used if you commit changes.
+LLVM项目使用Git进行版本控制。若以前没有使用过Git，那么在继续之前应该先做一些Git的基本配置:设置用户名和电子邮件地址。提交更改，将使用这两个信息。
 
-One can check whether they previously had an email and username already configured in Git with the following commands:
+可以使用以下命令检查是否已经在Git中配置了电子邮件和用户名:
 
 \begin{shell}
 $ git config user.email
 $ git config user.name
 \end{shell}
 
-The preceding commands will output the respective email and username that you already have set when using Git. However, in the event that you are setting the username and email for the first time, the following commands can be entered for first-time configuration. In the following commands, you can simply replace Jane with your name and jane@email.org with your email:
+前面的命令将输出在使用Git时已经设置的电子邮件和用户名，但若是第一次设置用户名和电子邮件，可以输入以下命令进行第一次配置。在以下命令中，可以简单地将Jane替换为您的姓名，将jane@email.org替换为您的电子邮件:
 
 \begin{shell}
 $ git config --global user.email "jane@email.org"
 $ git config --global user.name "Jane"
 \end{shell}
 
-These commands change the global Git configuration. Inside a Git repository, you can locally overwrite those values by not specifying the -{}-global option.
+这些命令更改全局Git配置。在Git存储库中，可以通过不指定-{}-global选项在本地覆盖这些值。
 
-By default, Git uses the vi editor for commit messages. If you prefer another editor, then you can change the configuration in a similar way. To use the nano editor, you type the following:
+默认情况下，Git使用vi编辑器提交消息。若喜欢其他编辑器，可以以类似的方式更改配置。例如：要使用nano编辑器，可以输入以下命令:
 
 \begin{shell}
 $ git config --global core.editor nano
 \end{shell}
 
-For more information about Git, please see the Git Version Control Cookbook (\url{https:// www.packtpub.com/product/git-version-control-cookbook-secondedition/9781789137545}).
+有关Git的更多信息，请参阅Git版本控制手册(\url{https:// www.packtpub.com/product/git-version-control-cookbook-secondedition/9781789137545})。
 
-Now you are ready to clone the LLVM repository from GitHub.
+现在可以从GitHub克隆LLVM了。
 
-\mySubsubsection{1.3.2.}{Cloning the repository}
+\mySubsubsection{1.3.2.}{克隆库}
 
-The command to clone the repository is essentially the same on all platforms. Only on Windows, it is recommended to turn off the auto-translation of line endings.
+克隆库的命令在所有平台上基本上是相同的。仅在Windows上，建议关闭行结束符的自动翻译。
 
-On all non-Windows platforms, you type the following command to clone the repository:
+在所有非windows平台上，输入以下命令克隆库:
 
 \begin{shell}
 $ git clone https://github.com/llvm/llvm-project.git
 \end{shell}
 
-Only on Windows, add the option to disable auto-translation of line endings. Here, you type the following:
+仅在Windows上，添加禁用行结束符自动翻译的选项，可输入以下内容:
 
 \begin{shell}
 $ git clone --config core.autocrlf=false \
   https://github.com/llvm/llvm-project.git
 \end{shell}
 
-This Git command clones the latest source code from GitHub into a local directory named llvmproject. Now change the current directory into the new llvm-project directory with the following command:
+这个Git命令将最新的源代码从GitHub克隆到一个名为llvmproject的本地目录中。现在使用以下命令，将当前目录更改为llvm-project目录:
 
 \begin{shell}
 $ cd llvm-project
 \end{shell}
 
-Inside the directory are all LLVM projects, each one in its own directory. Most notably, the LLVM core libraries are in the llvm subdirectory. The LLVM project uses branches for subsequent release development (“release/17.x”) and tags (“llvmorg-17.0.1”) to mark a certain release. With the preceding clone command, you get the current development state. This book uses LLVM 17. To check out the first release of LLVM 17 into a branch called llvm-17, you type the following:
+目录中是所有LLVM项目，每个项目都在自己的目录中。最值得注意的是，LLVM核心库位于LLVM子目录中。LLVM项目使用分支用于后续版本开发(“release/17.x”)和标签(“llvmg -17.0.1”)来标记某个版本。使用前面的clone命令，可以获得当前的开发状态。本书使用LLVM 17。要将LLVM 17的第一个版本检出到一个名为llvm-17的分支中，可以输入以下命令:
 
 \begin{shell}
 $ git checkout -b llvm-17 llvmorg-17.0.1
 \end{shell}
 
-With the previous steps, you cloned the whole repository and created a branch from a tag. This is the most flexible approach.
-Git also allows you to clone only a branch or a tag (including history). With git clone -{}-branch release/17.x https://github.com/llvm/llvm-project, you only clone the release/17.x branch and its history. You then have the latest state of the LLVM 17 release branch, so you only need to create a branch from the release tag like before if you need the exact release version.
+通过前面的步骤，就克隆了整个库，并从标记创建了分支。这是最灵活的方法。
 
-With the additional –{}-depth=1 option, which is known as a shallow clone with Git, you prevent the cloning of the history, too. This saves time and space but obviously limits what you can do locally, including checking out a branch based on the release tags.
+Git还允许只克隆一个分支或标记(包括历史记录)。使用git clone -{}-branch release/X https://github.com/llvm/llvm-project，您只克隆版本release/17.x分支及其历史。然后，就可以看到LLVM 17发布分支的最新状态。若需要确切的发布版本，只需要像之前一样从发布标签创建一个分支。
 
-\mySubsubsection{1.3.3.}{Creating a build directory}
+使用-{}-depth=1选项，就是Git的浅克隆，可以避免下载太多历史记录。这节省了时间和空间，但显然限制了在本地可以做的事情，包括根据发布标记签出分支。
 
-Unlike many other projects, LLVM does not support inline builds and requires a separate build directory. Most easily, this is created inside the llvm-project directory, which is your current directory. Let us name the build directory, build, for simplicity. Here, the commands for Unix and Windows systems differ. On a Unix-like system, you use the following:
+\mySubsubsection{1.3.3.}{创建构建目录}
+
+LLVM不支持内联构建，并且需要一个单独的构建目录。最简单的方法是在llvm-project目录中创建，这是当前目录。简单起见，我们将构建目录命名为build。这里，Unix和Windows系统的命令不同。在类Unix系统上，可以使用以下命令:
 
 \begin{shell}
 $ mkdir build
 \end{shell}
 
-And on Windows, use the following:
+在Windows上，使用以下命令:
 
 \begin{shell}
 $ md build
 \end{shell}
 
-Now you are ready to create the build system files with the CMake tool inside this directory.
+现在，就已经准备好使用该目录下的CMake工具创建构建系统文件了。
 
-\mySubsubsection{1.3.4.}{Generating the build system files}
+\mySubsubsection{1.3.4.}{生成构建系统文件}
 
-In order to generate build system files to compile LLVM and clang using Ninja, you run the following:
+为了使用Ninja生成编译LLVM和clang的构建系统文件，可以运行以下命令:
 
 \begin{shell}
 $ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DLLVM_ENABLE_PROJECTS=clang -B build -S llvm
 \end{shell}
 
-The -G option tells CMake for which system to generate build files. Often-used values for that option are as follows:
+-G选项告诉CMake为哪个系统生成构建文件。该选项的常用值如下:
 
 \begin{itemize}
-\item 
+\item
 Ninja – for the Ninja build system
 
-\item 
+\item
 Unix Makefiles – for GNU Make
 
-\item 
+\item
 Visual Studio 17 VS2022 – for Visual Studio and MS Build
 
-\item 
+\item
 Xcode – for Xcode projects
 \end{itemize}
 
-With the –B option, you tell CMake the path of the build directory. Similarly, you specify the source directory with the –S option. The generation process can be influenced by setting various variables with the –D option. Usually, they are prefixed with CMAKE\_ (if defined by CMake) or LLVM\_ (if defined by LLVM).
+使用-B选项，告诉CMake构建目录的路径。类似地，可以使用-S选项指定源目录。可以通过使用-D选项设置各种变量来影响生成过程，通常以CMAKE\_(由CMAKE定义)或LLVM\_(由LLVM定义)为前缀。
 
-As mentioned previously, we are also interested in compiling clang alongside LLVM. With the LLVM\_ENABLE\_PROJECTS=clang variable setting, this allows CMake to generate the build files for clang in addition to LLVM. Furthermore, the CMAKE\_BUILD\_TYPE=Release variable tells CMake that it should generate build files for a release build.
+如前所述，我们也对与LLVM一起编译clang感兴趣。使用LLVM\_ENABLE\_PROJECTS=clang，允许CMake除了为LLVM生成构建文件外，还为clang生成构建文件。此外，CMAKE\_BUILD\_TYPE=Release变量告诉CMAKE它应该为“发布”构建生成构建文件。
 
-The default value for the –G option depends on your platform, and the default value for the build type depends on the toolchain. However, you can define your own preference with environment variables. The CMAKE\_GENERATOR variable controls the generator, and the CMAKE\_BUILD\_TYPE variable specifies the build type. If you use bash or a similar shell, then you can set the variables with the following:
+-G选项的默认值取决于平台，而构建类型的默认值取决于工具链，但可以使用环境变量定义自己的首选项。CMAKE\_GENERATOR变量控制生成器，CMAKE\_BUILD\_TYPE变量指定构建类型。若使用bash或类似的shell，可以这样设置变量:
 
 \begin{shell}
 $ export CMAKE_GENERATOR=Ninja
 $ export CMAKE_BUILD_TYPE=Release
 \end{shell}
 
-If you are using the Windows command prompt instead, then you set the variables with the following:
+若使用的是Windows命令提示符，可以这样设置变量:
 
 \begin{shell}
 $ set CMAKE_GENERATOR=Ninja
 $ set CMAKE_BUILD_TYPE=Release
 \end{shell}
 
-With these settings, the command to create the build system files becomes the following, which is easier to type:
+有了这些设置，创建构建系统文件的命令就变成了下面这样，这样更容易输入:
 
 \begin{shell}
 $ cmake -DLLVM_ENABLE_PROJECTS=clang -B build -S llvm
 \end{shell}
 
-You will find more about CMake variables in the Customizing the build process section.
+将在自定义构建过程一节中找到更多关于CMake变量的信息。
 
-\mySubsubsection{1.3.5.}{Compiling and installing LLVM}
+\mySubsubsection{1.3.5.}{编译和安装LLVM}
 
-After the build files are generated, LLVM and clang can be compiled with the following:
+生成构建文件后，可以使用以下命令编译LLVM和clang:
 
 \begin{shell}
 $ cmake –-build build
 \end{shell}
 
-This command runs Ninja under the hood because we told CMake to generate Ninja files in the configuration step. However, if you generate build files for a system such as Visual Studio, which supports multiple build configurations, then you need to specify the configuration to use for the build with the -{}-config option. Depending on the hardware resources, this command runs for between 15 minutes (server with lots of CPU cores, memory, and fast storage) and several hours (dual-core Windows notebook with limited memory).
+因为我们告诉CMake在配置步骤中生成Ninja文件，所以这个命令在底层运行Ninja。但若为支持多构建配置的生成器(如Visual Studio)生成构建文件，则需要使用-{}-config选项指定要用于构建的配置。根据硬件资源的不同，该命令的运行时间从15分钟(具有大量CPU内核、内存和快速存储的服务器)到几个小时(具有有限内存的双核Windows笔记本)不等。
 
-By default, Ninja utilizes all available CPU cores. This is good for the speed of compilation but may prevent other tasks from running; for example, on a Windows-based notebook, it is almost impossible to surf the internet while Ninja is running. Fortunately, you can limit the resource usage with the –j option.
+默认情况下，Ninja使用所有可用的CPU内核。这有利于提高编译速度，但可能会阻止其他任务的运行;例如，在Windows操作系统的笔记本电脑上，几乎不可能在运行Ninja时上网。幸运的是，可以使用-j选项限制资源使用。
 
-Let’s assume you have four CPU cores available and Ninja should only use two (because you have parallel tasks to run); you then use this command for compilation:
+假设有四个可用的CPU内核，而Ninja应该只使用两个(因为你有并行任务要运行)。就使用以下命令进行编译:
 
 \begin{shell}
 $ cmake --build build –j2
 \end{shell}
 
-After compilation is finished, a best practice is to run the test suite to check whether everything works as expected:
+编译完成后，最佳实践是运行测试套件以检查是否一切都如预期的那样工作:
 
 \begin{shell}
 $ cmake --build build --target check-all
 \end{shell}
 
-Again, the runtime of this command varies widely with the available hardware resources. The checkall Ninja target runs all test cases. Targets are generated for each directory containing test cases. Using check-llvm instead of check-all runs the LLVM tests but not the clang tests; checkllvm-codegen runs only the tests in the CodeGen directory from LLVM (that is, the llvm/test/CodeGen directory).
+同样，该命令的运行时随着可用硬件资源的不同而变化很大。checkall Ninja目标运行所有测试用例。为每个包含测试用例的目录生成目标。使用check-llvm而不是check-all会运行LLVM测试，但不会运行clang测试，checkllvm-codegen仅从LLVM(即llvm/test/CodeGen目录)运行CodeGen目录中的测试。
 
-You can also do a quick manual check. One of the LLVM applications is llc, the LLVM compiler. If you run it with the -version option, it shows the LLVM version, the host CPU, and all supported architectures:
+也可以进行快速手动检查。LLVM应用程序之一是LLVM编译器llc。若使用-version选项运行，会显示LLVM的版本，主机CPU和所有支持的架构:
 
 \begin{shell}
 $ build/bin/llc --version
 \end{shell}
 
-If you have trouble getting LLVM compiled, then you should consult the Common Problems section of the Getting Started with the LLVM System documentation \url{https://releases.llvm.org/17.0.1/ docs/GettingStarted.html#common-problems}) for solutions to typical problems.
+若在编译LLVM时遇到困难，那么您应该查阅入门LLVM系统文档(\url{https://releases.llvm.org/17.0.1/docs/GettingStarted.html#common-problems})中的常见问题部分，了解常见问题的解决方案。
 
-As the last step, you can install the binaries:
+最后一步，可以安装二进制文件:
 
 \begin{shell}
 $ cmake --install build
 \end{shell}
 
-On a Unix-like system, the install directory is /usr/local. On Windows, C:\verb|\|Program Files\verb|\|LLVM is used. This can be changed, of course. The next section explains how.
+类Unix系统上，安装目录是/usr/local。在Windows上，使用C:\verb|\|Program Files\verb|\|LLVM。这是可以改变的，下一节将解释如何实现。
+
+
+

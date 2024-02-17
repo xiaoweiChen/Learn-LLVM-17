@@ -1,104 +1,130 @@
 
-The CMake system uses a project description in the CMakeLists.txt file. The top-level file is in the llvm directory, llvm/CMakeLists.txt. Other directories also have CMakeLists.txt files, which are recursively included during the generation process.
+CMake系统使用CMakeLists.txt文件中的项目描述。顶层文件位于llvm目录“llvm/CMakeLists.txt”。其他目录也有CMakeLists.txt文件，这些文件在生成过程中递归包含。
 
-Based on the information provided in the project description, CMake checks which compilers are installed, detects libraries and symbols, and creates the build system files, for example, build.ninja or Makefile (depending on the chosen generator). It is also possible to define reusable modules, for example, a function to detect whether LLVM is installed. These scripts are placed in the special cmake directory (llvm/cmake), which is searched automatically during the generation process.
+根据项目描述中提供的信息，CMake检查安装了哪些编译器，检测库和符号，并创建构建系统文件，例如build.ninja或Makefile(取决于所选择的生成器)。也可以定义可重用的模块，例如:检测LLVM是否已安装的函数。这些脚本放在特殊的cmake目录(llvm/cmake)中，在生成过程中会自动搜索该目录。
 
-The build process can be customized with the definition of CMake variables. The command-line option –D is used to set a variable to a value. The variables are used in the CMake scripts. Variables defined by CMake itself are almost always prefixed with CMAKE\_ and these variables can be used in all projects. Variables defined by LLVM are prefixed with LLVM\_ but they can only be used if the project definition includes the use of LLVM.
+构建过程可以通过定义CMake变量来定制。命令行选项-D用于将变量设置为一个值，这些变量在CMake脚本中使用。CMake自己定义的变量几乎总是以CMAKE\_为前缀，这些变量可以在所有项目中使用。由LLVM定义的变量以LLVM\_为前缀，但它们只能在项目定义中包含LLVM时使用。
 
+\mySubsubsection{1.4.1.}{可定义的CMake变量}
 
-\mySubsubsection{1.4.1.}{Variables defined by CMake}
+有些变量是用环境变量的值初始化的。最值得注意的是CC和CXX，定义了用于构建的C和C++编译器。CMake尝试使用当前shell搜索路径自动定位C和C++编译器，会选择找到的第一个编译器。若本地安装了多个编译器，例如gcc和clang或不同版本的clang，那么这可能不是您构建LLVM所需的编译器。
 
-Some variables are initialized with the value of environment variables. Most notable are CC and CXX, which define the C and C++ compilers to be used for building. CMake tries to locate a C and a C++ compiler automatically, using the current shell search path. It picks the first compiler found. If you have several compilers installed, for example, gcc and clang or different versions of clang, then this might not be the compiler you want for building LLVM.
-
-Suppose you like to use clang17 as a C compiler and clang++17 as a C++ compiler. Then, you can invoke CMake in a Unix shell in the following way:
+假设使用clang17作为C编译器，clang++17作为C++编译器。可以在Unix shell中调用CMake，方法如下:
 
 \begin{shell}
 $ CC=clang17 CXX=clang++17 cmake –B build –S llvm
 \end{shell}
 
-This sets the value of the environment variables only for the invocation of cmake. If necessary, you can specify an absolute path for the compiler executables.
+这只会为cmake的调用设置环境变量的值。若有必要，可以为编译器可执行文件指定一个绝对路径。
 
-CC is the default value of the CMAKE\_C\_COMPILER CMake variable, and CXX is the default value of the CMAKE\_CXX\_COMPILER CMake variable. Instead of using the environment variables, you can set the CMake variables directly. This is equivalent to the preceding call:
+CC是CMAKE\_C\_COMPILER CMAKE变量的默认值，CXX是CMAKE\_CXX\_COMPILER CMAKE变量的默认值。可以直接设置CMake变量，而不是使用环境变量。这相当于:
 
 \begin{shell}
 $ cmake –DCMAKE_C_COMPILER=clang17 \
   -DCMAKE_CXX_COMPILER=clang++17 –B build –S llvm
 \end{shell}
 
-Other useful variables defined by CMake are as follows:
+CMake定义的其他相关变量如下所示:
 
 % Please add the following required packages to your document preamble:
 % \usepackage{longtable}
 % Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
 \begin{longtable}{|l|l|}
 \hline
-\textbf{Variable name} &
-\textbf{Purpose} \\ \hline
+\textbf{变量名} &
+\textbf{功能} \\ \hline
 \endfirsthead
 %
 \endhead
 %
 CMAKE\_INSTALL\_PREFIX &
-\begin{tabular}[c]{@{}l@{}}This is a path prefix that is prepended to every path during\\ installation. The default is /usr/local on Unix and C:\textbackslash\\ Program Files\textbackslash{}\textless{}Project\textgreater on Windows. To install\\ LLVM in the /opt/llvm directory, you specify -DCMAKE\_\\ INSTALL\_PREFIX=/opt/llvm. The binaries are copied to /\\ opt/llvm/bin, library files to /opt/llvm/lib, and so on.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+这是安装过程中每个安装路径的前缀。Unix上默认为/usr/local和\\ Windows上默认为C:\textbackslash Program Files\textbackslash{}\textless{}Project\textgreater。要在/opt/llvm目录\\ 下安装LLVM，需要设置-DCMAKE\_INSTALL\_PREFIX=/opt/llvm。\\ 二进制文件将复制到/opt/llvm/bin文件夹下，库文件将复制到\\ /opt/llvm/lib文件夹下，以此类推。
+\end{tabular} \\ \hline
 CMAKE\_BUILD\_TYPE &
-\begin{tabular}[c]{@{}l@{}}Different types of build require different settings. For example, a\\ debug build needs to specify options to generate debug symbols\\ and usually link against debug versions of system libraries.\\ In contrast, a release build uses optimization flags and links\\ against production versions of libraries. This variable is only\\ used for build systems that can only handle one build type, for\\ example, Ninja or Make. For IDE build systems, all variants\\ are generated and you have to use the mechanism of the IDE\\ to switch between build types. Possible values are as follows:\\ DEBUG: build with debug symbols\\ RELEASE: build with optimization for speed\\ RELWITHDEBINFO: release build with debug symbols\\ MINSIZEREL: build with optimization for size\\ The default build type is taken from the CMAKE\_BUILD\_TYPE\\ environment variable. If this variable is not set, then the default\\ depends on the used toolchain and is often empty. In order to\\ generate build files for a release build, you specify -DCMAKE\_\\ BUILD\_TYPE=RELEASE.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+不同类型的构建需要不同的设置。例如，调试构建需要指定生成调\\ 试符号的选项，通常链接到系统库的调试版本。相比之下，发布版\\本使用针对库的生产版本的优化标志和链接。此变量仅用于只能处\\ 理一种构建类型的构建系统，例如:Ninja或Make。对于IDE构建系\\ 统，将生成所有配置，并且需要使用IDE在构建类型之间进行切换。\\ 取值范围如下所示: \\
+\\
+DEBUG:构建带有调试符号 \\
+RELEASE:构建优化运行速度 \\
+RELWITHDEBINFO:构建发布版本，但带有调试符号 \\
+MINSIZEREL:构建会生成尺寸最小的二进制文件(也是一种优化) \\
+\\
+默认构建类型由CMAKE\_BUILD\_TYPE变量设置。若未设置此变\\量，则默认值取决于所使用的工具链，并且通常为空。为了生成\\ 发布版本的构建，可以设置-DCMAKE\_BUILD\_TYPE=RELEASE。
+\end{tabular} \\ \hline
 \begin{tabular}[c]{@{}l@{}}CMAKE\_C\_FLAGS \\ CMAKE\_CXX\_FLAGS\end{tabular} &
-\begin{tabular}[c]{@{}l@{}}These are extra flags used when compiling C and C++ source files.\\ The initial values are taken from the CFLAGS and CXXFLAGS\\ environment variables, which can be used as an alternative.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+这些是编译C和C++源文件时使用的编译选项，初始值取自\\ CFLAGS和CXXFLAGS环境变量。
+\end{tabular} \\ \hline
 CMAKE\_MODULE\_PATH &
-\begin{tabular}[c]{@{}l@{}}This specifies additional directories that are searched for CMake\\ modules. The specified directories are searched before the default\\ ones. The value is a semicolon-separated list of directories.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+指定CMake模块搜索的其他目录。在默认目录之前搜索指定的目\\ 录，以分号分隔的目录列表。
+\end{tabular} \\ \hline
 PYTHON\_EXECUTABLE &
-\begin{tabular}[c]{@{}l@{}}If the Python interpreter is not found or if the wrong one is\\ picked in case you have installed multiple versions, you can\\ set this variable to the path of the Python binary. This variable\\ only has an effect if the Python module of CMake is included\\ (which is the case for LLVM).\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+若没有找到Python解释器，或者在安装了多个版本的情况下选择了\\ 错误的解释器，则可以将此变量设置为Python二进制文件的路径。\\ 这个变量只有在包含CMake的Python模块时才有效(LLVM就是这\\ 种情况)。
+\end{tabular} \\ \hline
 \end{longtable}
 
 \begin{center}
-Table 1.1 - Additional useful variables provided by CMake
+表1.1 - CMake定义的其他相关变量
 \end{center}
 
-CMake provides built-in help for variables. The -{}-help-variable var option prints help for the var variable. For instance, you can type the following to get help for CMAKE\_BUILD\_TYPE:
+CMake为变量提供了内置帮助。{}-help-variable var选项打印var变量的帮助信息。可以输入以下命令来获取CMAKE\_BUILD\_TYPE的信息:
 
 \begin{shell}
 $ cmake --help-variable CMAKE_BUILD_TYPE
 \end{shell}
 
-You can also list all variables with the following command:
+也可以用下面的命令列出所有的变量:
 
 \begin{shell}
 $ cmake --help-variable-list
 \end{shell}
 
-This list is very long. You may want to pipe the output to more or a similar program.
+这个清单很长，可能将输出管道传输到相应的处理程序中会更合适。
 
-\mySubsubsection{1.4.2.}{Using LLVM-defined build configuration variables}
+\mySubsubsection{1.4.2.}{使用LLVM定义的构建配置变量}
 
-The build configuration variables defined by LLVM work in the same way as those defined by CMake except that there is no built-in help. The most useful variables are found in the following tables, where they are divided into variables that are useful for first-time users installing LLVM, and also variables for more advanced LLVM users.
+除了没有内置帮助之外，LLVM定义的构建配置变量的工作方式与CMake定义的相同。最有用的变量如下表所示，对首次安装LLVM的用户有用的变量和对更高级的LLVM用户有用的变量。
 
-Variables useful for first-time users installing LLVM
+对于首次安装LLVM的用户有用的变量
 
 % Please add the following required packages to your document preamble:
 % \usepackage{longtable}
 % Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
 \begin{longtable}{|l|l|}
 \hline
-\textbf{variable name} &
-\textbf{Purpose} \\ \hline
+\textbf{变量名} &
+\textbf{功能} \\ \hline
 \endfirsthead
 %
 \endhead
 %
 LLVM\_TARGETS\_TO\_BUILD &
-\begin{tabular}[c]{@{}l@{}}LLVM supports code generation for different CPU\\ architectures. By default, all these targets are built. Use this\\ variable to specify the list of targets to build, separated by\\ semicolons. The current targets are AArch64, AMDGPU,\\ ARM, AVR, BPF, Hexagon, Lanai, LoongArch,\\ Mips, MSP430, NVPTX, PowerPC, RISCV, Sparc,\\ SystemZ, VE, WebAssembly, X86, and XCore.\\ all can be used as shorthand for all targets. The names\\ are case-sensitive. To only enable the PowerPC and the\\ System Z target, you specify -DLLVM\_TARGETS\_TO\_\\ BUILD="PowerPC;SystemZ".\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+LLVM支持不同CPU架构的代码生成。默认\\ 情况下，所有这些目标都已构建。使用此变\\ 量指定要构建的目标列表，以分号分隔。目\\ 前支持的目标有AArch64、AMDGPU、\\ ARM、AVR、BPF、Hexagon、Lanai、\\ LoongArch、Mips、MSP430、NVPTX、\\ PowerPC、RISCV、Sparc、SystemZ、VE、\\ WebAssembly、X86和XCore。\\
+\\
+all可以作为所有目标的简写。名称区分大小\\ 写。要只启用PowerPC和SystemZ目标，可\\ 以指定-DLLVM\_TARGETS\_TO\_BUILD=\\ "PowerPC;SystemZ"。
+\end{tabular} \\ \hline
 LLVM\_EXPERIMENTAL\_TARGETS\_TO\_BUILD &
-\begin{tabular}[c]{@{}l@{}}In addition to the official targets, the LLVM source tree\\ also contains experimental targets. These targets are\\ under development and often do not yet support the full\\ functionality of a backend. The current list of experimental\\ targets is ARC, CSKY, DirectX, M68k, SPIRV, and\\ Xtensa. To build the M68k target, you specify -D\\ LLVM\_EXPERIMENTAL\_TARGETS\_TO\_BUILD=M68k.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+除了官方支持的架构外，LLVM源代码树还\\ 包含实验目标。这些目标还在开发中，通常\\ 还不支持后端的全部功能。目前的实验得架\\ 构有ARC、CSKY、DirectX、M68k、SPIRV\\ 和Xtensa。要构建M68k目标，可以设置\\ -DLLVM\_EXPERIMENTAL\_TARGETS\_TO\\ \_BUILD=M68k。
+\end{tabular} \\ \hline
 LLVM\_ENABLE\_PROJECTS &
-\begin{tabular}[c]{@{}l@{}}This is a list of the projects you want to build, separated\\ by semicolons. The source for the projects must be on the\\ same level as the llvm directory (side-by-side layout). The\\ current list is bolt, clang, clang-tools-extra,\\ compiler-rt, cross-project-tests, libc,\\ libclc, lld, lldb, mlir, openmp, polly, and\\ pstl. all can be used as shorthand for all projects in\\ this list. Additionally, you can specify the flang project\\ here. Due to some special build requirements, it is not\\ yet part of the all list.\\ To build clang and bolt together with LLVM, you\\ specify -DLLVM\_ENABLE\_PROJECT="clang;bolt".\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+这是要构建的项目列表，以分号分隔。项目\\ 的源代码必须与llvm目录在同一级(并排布\\ 局)。当前的列表是bolt、clang、\\ clang-tools-extra、compiler-rt、\\ cross-project-tests、libc、libclc、lld、lldb、\\ mlir、openmp、polly和pstl。\\
+\\all可以用作此列表中所有项目的简写，可以\\ 在这里指定flang项目。由于一些特殊的构建\\ 需求，它还不是all列表的一部分。\\
+\\
+要将clang和bolt与LLVM一起构建，可以\\ 设置-DLLVM\_ENABLE\_PROJECT=\\ "clang;bolt"。
+\end{tabular} \\ \hline
 \end{longtable}
 
 \begin{center}
-Table 1.2 - Useful variables for first-time LLVM users
+表1.2 - 对于首次安装LLVM的用户有用的变量
 \end{center}
 
-Variables for advanced users of LLVM
-
+LLVM高级用户的变量
 
 % Please add the following required packages to your document preamble:
 % \usepackage[normalem]{ulem}
@@ -107,42 +133,64 @@ Variables for advanced users of LLVM
 % Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
 \begin{longtable}{|l|l|}
 \hline
-\textbf{variable name} &
-\textbf{Purpose} \\ \hline
+\textbf{变量名} &
+\textbf{功能} \\ \hline
 \endfirsthead
 %
 \endhead
 %
 LLVM\_ENABLE\_ASSERTIONS &
-\begin{tabular}[c]{@{}l@{}}If set to ON, then assertion checks are enabled. These\\ checks help to find errors and are very useful during\\ development. The default value is ON for a DEBUG build\\ and otherwise OFF. To turn assertion checks on (e.g. for\\ a RELEASE build), you specify –DLLVM\_ENABLE\_\\ ASSERTIONS=ON.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+若设置为ON，则启用断言检查。这些检查有助于发现错\\ 误，在开发过程中非常有用。对于DEBUG版本，默认值\\ 为ON，否则为OFF。要打开断言检查(例如，对于\\ RELEASE版本)，可以设置\\ -DLLVM\_ENABLE\_ASSERTIONS=ON。
+\end{tabular} \\ \hline
 LLVM\_ENABLE\_EXPENSIVE\_CHECKS &
-\begin{tabular}[c]{@{}l@{}}This enables some expensive checks that can really slow\\ down compilation speed or consume large amounts of\\ memory. The default value is OFF. To turn these checks\\ on, you specify -DLLVM\_ENABLE\_EXPENSIVE\_\\ CHECKS=ON.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+这将启用一些大开销的检查，这些检查可能会减慢编译速\\ 度或消耗大量内存，默认值为OFF。要打开这些检查，可\\ 以指定-DLLVM\_ENABLE\_EXPENSIVE\_CHECKS=ON。
+\end{tabular} \\ \hline
 LLVM\_APPEND\_VC\_REV &
-\begin{tabular}[c]{@{}l@{}}LLVM tools such as llc display the LLVM version they\\ are based on besides other information if the –version\\ command-line option is given. This version information\\ is based on the LLVM\_REVISION C macro. By default,\\ not only the LLVM version but also the current Git hash\\ is part of the version information. This is handy in case\\ you are following the development of the master branch\\ because it makes clear on which Git commit the tool is\\ based. If not needed, then this can be turned off with –\\ DLLVM\_APPEND\_VC\_REV=OFF.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+若使用-version命令行选项，llc等LLVM工具除了显示其\\ 他信息外，还会显示它们所基于的LLVM版本。该版本\\ 信息基于C代码中的LLVM\_REVISION宏。默认情况下，\\ 不仅LLVM版本，而且当前Git哈希值也是版本信息的一\\ 部分。若正在跟踪主分支的开发，就能清楚地表明该工具\\ 基于哪个Git提交。若不需要，则可以使用\\ -DLLVM\_APPEND\_VC\_REV=OFF关闭此功能。
+\end{tabular} \\ \hline
 LLVM\_ENABLE\_THREADS &
-\begin{tabular}[c]{@{}l@{}}LLVM automatically includes thread support if a threading\\ library is detected (usually the pthreads library). Further,\\ LLVM assumes in this case that the compiler supports\\ TLS (thread-local storage). If you don’t want thread\\ support or your compiler does not support TLS, then you\\ can turn it off with -DLLVM\_ENABLE\_THREADS=OFF.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+若检测到线程库(通常是pthread库)，LLVM会自动包含线\\ 程支持。在这种情况下，LLVM会假定编译器支持TLS\\ (线程本地存储)。若不想要线程支持或者本地编译器不支\\ 持TLS，那么可以设置-DLLVM\_ENABLE\_THREADS=OFF\\ 关闭该功能。
+\end{tabular} \\ \hline
 LLVM\_ENABLE\_EH &
-\begin{tabular}[c]{@{}l@{}}The LLVM projects do not use C++ exception handling\\ and therefore turn exception support off by default. This\\ setting can be incompatible with other libraries your\\ project is linking with. If needed, you can enable exception\\ support by specifying –DLLVM\_ENABLE\_EH=ON.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+LLVM项目不使用C++异常处理，因此在默认情况下关闭\\ 异常支持。此设置可能与项目所链接的其他库不兼容。若\\ 需要，可以通过指定-DLLVM\_ENABLE\_EH=ON来启用异\\ 常支持。
+\end{tabular} \\ \hline
 LLVM\_ENABLE\_RTTI &
-\begin{tabular}[c]{@{}l@{}}LLVM uses a lightweight, self-build system for runtime type\\ information. The generation of C++ RTTI is turned off by\\ default. Like the exception handling support, this may be\\ incompatible with other libraries. To turn generation of\\ C++ RTTI on, you specify –DLLVM\_ENABLE\_RTTI=ON.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+LLVM使用一个轻量级的自构建系统来获取运行时类型信\\ 息，C++ RTTI的生成在默认情况下是关闭的。与异常处理\\ 支持一样，这可能与其他库不兼容。要开启C++ RTTI的生\\ 成，可以设置-DLLVM\_ENABLE\_RTTI=ON。
+\end{tabular} \\ \hline
 LLVM\_ENABLE\_WARNINGS &
-\begin{tabular}[c]{@{}l@{}}Compiling LLVM should generate no warning messages if\\ possible. The option to print warning messages is therefore\\ turned on by default. To turn it off, you specify –DLLVM\_\\ ENABLE\_WARNINGS=OFF.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+可能的话，编译LLVM应该不会生成任何警告消息，所以\\ 打印警告消息的选项在默认情况下是打开的。要关闭它，\\ 可以设置-DLLVM\_ENABLE\_WARNINGS=OFF。
+\end{tabular} \\ \hline
 LLVM\_ENABLE\_PEDANTIC &
-\begin{tabular}[c]{@{}l@{}}The LLVM source should be C/C++ language standard\\ conforming; hence, pedantic checking of the source is\\ enabled by default. If possible, compiler-specific extensions\\ are also disabled. To reverse this setting, you specify –\\ DLLVM\_ENABLE\_PEDANTIC=OFF.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+LLVM源代码应符合C/C++语言标准，默认情况下启用对\\ 源代码进行严格检查。若可能的话，还会禁用特定于编译\\ 器的扩展。要关闭此设置，可以设置\\ -DLLVM\_ENABLE\_PEDANTIC=OFF。
+\end{tabular} \\ \hline
 LLVM\_ENABLE\_WERROR &
-\begin{tabular}[c]{@{}l@{}}If set to ON, then all warnings are treated as errors –\\ the compilation aborts as soon as warnings are found.\\ It helps to find all remaining warnings in the source.\\ By default, it is turned off. To turn it on, you specify –\\ DLLVM\_ENABLE\_WERROR=ON.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+若设置为ON，那么所有警告都被视为错误——发现警告，\\ 编译就会中止。这有助于在源代码中找到所有剩余的警告。\\ 默认情况下，它是关闭的。要打开它，可以设置\\ -DLLVM\_ENABLE\_WERROR=ON。
+\end{tabular} \\ \hline
 LLVM\_OPTIMIZED\_TABLEGEN &
-\begin{tabular}[c]{@{}l@{}}Usually, the tablegen tool is built with the same options\\ as all other parts of LLVM. At the same time, tablegen is\\ used to generate large parts of the code generator. As a\\ result, tablegen is much slower in a debug build, increasing\\ the compile time noticeably. If this option is set to ON,\\ then tablegen is compiled with optimization turned on\\ even for a debug build, possibly reducing compile time.\\ The default is OFF. To turn it on, you specify –DLLVM\_\\ OPTIMIZED\_TABLEGEN=ON.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+通常，tablegen工具与LLVM的其他部分使用相同的选项\\ 构建。同时，tablegen是用来生成大部分代码的生成器。\\ 因此，tablegen在调试构建中要慢得多，显著增加了编译\\ 时间。若将此选项设置为ON，则即使在调试构建中，\\ tablegen也会在编译时打开优化，这可能会减少编译时间。\\ 默认为OFF。要打开它，可以指定\\ -DLLVM\_OPTIMIZED\_TABLEGEN=ON。
+\end{tabular} \\ \hline
 LLVM\_USE\_SPLIT\_DWARF &
-\begin{tabular}[c]{@{}l@{}}If the build compiler is gcc or clang, then turning on\\ this option will instruct the compiler to generate the\\ DWARF debug information in a separate file. The reduced\\ size of the object files reduces the link time of debug\\ builds significantly. The default is OFF. To turn it on, you\\ specify -LLVM\_USE\_SPLIT\_DWARF=ON.\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}
+若构建编译器是gcc或clang，那么打开该选项将指示编译\\ 器在单独的文件中生成DWARF调试信息。目标文件大小\\ 的减小，减少了调试构建的链接时间，默认为OFF。要打\\ 开它，可以设置-DLLVM\_USE\_SPLIT\_DWARF=ON。
+\end{tabular} \\ \hline
 \end{longtable}
 
 \begin{center}
-Table 1.3 - Useful variables for advanced LLVM users
+表1.3 - LLVM高级用户的变量
 \end{center}
 
 \begin{myNotic}{Note}
-LLVM defines many more CMake variables. You can find the complete list in the LLVM documentation about CMake \url{https://releases.llvm.org/17.0.1/docs/CMake.   html#llvm-specific-variables}. The preceding list contains only the ones you are most likely to need.
+LLVM定义了更多的CMake变量，可以在关于CMake的LLVM文档\url{https://releases.llvm.org/17.0.1/docs/CMake.html#llvm-specific-variables}中找到完整的列表。前面的列表只包含最可能需要的部分。
 \end{myNotic}
 
 
