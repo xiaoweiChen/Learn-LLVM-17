@@ -1,48 +1,48 @@
-Constructing a compiler is a complex and fascinating task. The LLVM project provides reusable components for your compiler and the LLVM core libraries implement a world-class optimizing code generator, which translates a source language-independent intermediate representation of machine code for all popular CPU architectures. The compilers for many programming languages already take advantage of LLVM technology.
+构造编译器是一项复杂而迷人的任务。LLVM项目为编译器提供了可重用的组件，LLVM核心库实现了世界级的优化代码生成器，可以为所有流行的CPU体系结构翻译与源语言无关的机器码中间表示。许多编程语言的编译器已经在使用LLVM。
 
-This book teaches you how to implement your own compiler and how to use LLVM to achieve it. You will learn how the frontend of a compiler turns source code into an abstract syntax tree, and how to generate Intermediate Representation (IR) from it. Furthermore, you will also explore adding an optimization pipeline to your compiler, which allows you to compile the IR to performant machine code.
+本书将介绍如何实现自己的编译器，以及如何使用LLVM来实现它。您将了解编译器的前端如何将源代码转换为抽象语法树，以及如何从中生成中间表示(IR)。此外，还将探索在编译器中添加一个优化管道，可将IR编译为高性能的机器码。
 
-The LLVM framework can be extended in several ways, and you will learn how to add new passes, and even a completely new backend to LLVM. Advanced topics such as compiling for a different CPU architecture and extending clang and the clang static analyzer with your own plugins and checkers are also covered. This book follows a practical approach and is packed with example source code, which makes it easy to apply the gained knowledge within your own projects.
+LLVM框架可以通过多种方式进行扩展，读者将了解如何向LLVM添加新的通道，甚至是一个全新的后端。高级主题，如编译不同的CPU架构和扩展clang和clang静态分析器与自己的插件和检查器也包括在内。本书遵循一种实用的方法，并附有示例源代码，读者可以在自己的项目中应用相应的代码。
 
 \mySubsubsection{}{新版本增加的内容}
 
-Learn LLVM 17 now features a new chapter dedicated to introducing the concept and syntax of the TableGen language used within LLVM, in which readers can leverage to define classes, records, and an entire LLVM backend. Furthermore, this book also presents an emphasis on backend development, which discusses various new backend concepts that can be implemented for an LLVM backend, such as implementing the GlobalISel instruction framework and developing machine function passes.
+现在有一个新的章节专门介绍在LLVM中使用的TableGen语言的概念和语法，读者可以利用它来定义类，记录和整个LLVM后端。此外，本书还介绍了后端开发的重点，其中讨论了可以为LLVM后端实现的各种新后端概念，例如：实现GlobalISel指令框架和开发机器功能通道。
 
 \mySubsubsection{}{适读人群}
 
-This book is for compiler developers, enthusiasts, and engineers who are interested in learning about the LLVM framework. It is also useful for C++ software engineers looking to use compiler-based tools for code analysis and improvement, as well as casual users of LLVM libraries who want to gain more knowledge of LLVM essentials. Intermediate-level experience with C++ programming is mandatory to understand the concepts covered in this book more effectively.
+本书是为有兴趣学习LLVM框架的编译器开发人员、爱好者和工程师编写的。对于希望使用基于编译器的工具进行代码分析和改进的C++软件工程师，以及希望获得更多LLVM基本知识的LLVM库的工程师。要更有效地理解本书所涵盖的概念，必须具有C++中级编程经验。
 
 \mySubsubsection{}{本书内容}
 
-Chapter 1, Installing LLVM, explains how to set up and use your development environment. At the end of the chapter, you will have compiled the LLVM libraries and learned how to customize the build process.
+\textit{第1章，安装LLVM}，解释了如何设置和使用你的开发环境。可以了解如何自行编译LLVM库，以及自定义构建过程。
 
-Chapter 2, The Structure of a Compiler, gives you an overview of the components of a compiler. At the end of the chapter, you will have implemented your first compiler producing LLVM IR.
+\textit{第2章，编译器的结构}，对编译器组件的概述，最后可以实现第一个生成LLVM IR的编译器。
 
-Chapter 3, Turning the Source File into an Abstract Syntax Tree, teaches you in detail how to implement the frontend of a compiler. You will create your own frontend for a small programming language, ending with the construction of an abstract syntax tree.
+\textit{第3章，将源码文件转换为抽象语法树}，详细介绍了如何实现编译器的前端。将为一种小型编程语言创建前端编译器，最后构建抽象语法树。
 
-Chapter 4, Basics of IR Code Generation, shows you how to generate LLVM IR from an abstract syntax tree. At the end of the chapter, you will have implemented a compiler for the example language, emitting assembly text or object code files as a result.
+\textit{第4章，生成IR代码的基础知识}，展示了如何从抽象语法树生成LLVM IR。将实现示例语言的编译器，从而生成汇编文本或目标代码文件。
 
-Chapter 5, IR Generation for High-Level Language Constructs, illustrates how you translate source language features commonly found in high-level programming languages to LLVM IR. You will learn about the translation of aggregate data types, the various options to implement class inheritance and virtual functions, and how to comply with the application binary interface of your system.
+\textit{第5章，高级语言结构生成的IR}，说明了如何将高级编程语言中常见的源语言特性转换为LLVM IR。您将了解聚合数据类型的转换、实现类继承和虚函数的各种选项，以及如何遵循系统的应用程序二进制接口。
 
-Chapter 6, Advanced IR Generation, shows you how to generate LLVM IR for exception-handling statements in the source language. You will also learn how to add metadata for type-based alias analysis, and how to add debug information to the generated LLVM IR, and you will extend your compiler-generated metadata.
+\textit{第6章，生成IR代码的进阶知识}，展示了如何在源语言中为异常处理语句生成LLVM IR。还将学习如何为基于类型的别名分析添加元数据，以及如何向生成的LLVM IR添加调试信息，并扩展编译器生成的元数据。
 
-Chapter 7, Optimizing IR, explains the LLVM pass manager. You will implement your own pass, both as part of LLVM and as a plugin, and you will learn how to add your new pass to the optimizing pass pipeline.
+\textit{第7章，优化IR}，解释了LLVM通道管理器。您将实现自己的通道，既作为LLVM的一部分，也作为插件，将了解如何将新的通道添加到优化的通道流水线中。
 
-Chapter 8, The TableGen Language, introduces LLVM’s own domain-specific language called TableGen. This language is used to reduce the coding effort of the developer, and you will learn about the different ways you can define data in the TableGen language, and how it can be leveraged in the backend.
+\textit{第8章，TableGen语言}，介绍了LLVM自己的领域特定语言TableGen。该语言用于减少开发人员的编码工作，您将了解在TableGen语言中定义数据的不同方法，以及如何在后端使用。
 
-Chapter 9, JIT Compilation, discusses how you can use LLVM to implement a just-in-time (JIT) compiler. By the end of the chapter, you will have implemented your own JIT compiler for LLVM IR in two different ways.
+\textit{第9章，JIT编译}，讨论了如何使用LLVM实现一个即时(JIT)编译器。将以两种不同的方式为LLVM IR实现自己的JIT编译器。
 
-Chapter 10, Debugging Using LLVM Tools, explores the details of various libraries and components of LLVM, which helps you to identify bugs in your application. You will use the sanitizers to identify buffer overflows and other bugs. With the libFuzzer library, you will test functions with random data as input, and XRay will help you find performance bottlenecks. You will use the clang static analyzer to identify bugs at the source level, and you will learn that you can add your own checker to the analyzer. You will also learn how to extend clang with your own plugin.
+\textit{第10章，使用LLVM工具进行调试}，探讨了LLVM的各种库和组件的细节，可以帮助你识别应用程序中的错误，使用消毒器来识别缓冲区溢出和其他错误；使用libFuzzer库，使用随机数据作为输入来测试函数；XRay将帮助程序找到性能瓶颈。您将使用clang静态分析器在源代码级别识别错误，并且将了解到可以向分析器添加自己的检查器。您还将了解如何使用自己的插件对clang进行扩展。
 
-Chapter 11, The Target Description, explains how you can add support for a new CPU architecture. This chapter discusses the necessary and optional steps like defining registers and instructions, developing instruction selection, and supporting the assembler and disassembler.
+\textit{第11章，目标描述}，解释了如何添加对新的CPU架构的支持。本章讨论了必要的和可选的步骤，如定义寄存器和指令，开发指令选择，以及支持汇编和反汇编程序。
 
-Chapter 12, Instruction Selection, demonstrates two different approaches to instruction selection, specifically explaining how SelectionDAG and GlobalISel work and showing how to implement these functionalities in a target, based on the example from the previous chapter. In addition, you will learn how to debug and test instruction selection.
+\textit{第12章，指令选择}，演示了两种不同的指令选择方法，特别解释了SelectionDAG和GlobalISel是如何工作的，并展示了如何在目标中实现这些功能，基于前一章的例子。此外，您将了解如何对指令选择进行调试和测试。
 
-Chapter 13, Beyond Instruction Selection, explains how you complete the backend implementation by exploring concepts beyond instruction selection. This includes adding new machine passes to implement target-specific tasks and points you to advanced topics that are not necessary for a simple backend but may be interesting for highly optimizing backends, such as cross-compilation to another CPU architecture.
+\textit{第13章，超越指令选择}，解释了如何通过探索超越指令选择的概念来完成后端实现。这包括添加新的机器通道来实现特定于目标的任务，这些主题对于简单后端来说是不必要的，但对于高度优化的后端来说是有趣的，例如：交叉编译到另一个CPU架构。
 
 \mySubsubsection{}{编译环境}
 
-You need a computer running Linux, Windows, Mac OS X, or FreeBSD, with the development toolchain installed for the operating system. Please see the table for the required tools. All tools should be in the search path of your shell.
+您需要一台运行Linux、Windows、Mac OS X或FreeBSD的计算机，并为操作系统安装了开发工具链。所需工具请参见表格，所有工具都需要配置到shell的搜索路径中。
 
 % Please add the following required packages to your document preamble:
 % \usepackage{longtable}
@@ -54,15 +54,15 @@ You need a computer running Linux, Windows, Mac OS X, or FreeBSD, with the devel
 %
 \endhead
 %
-\begin{tabular}[c]{@{}l@{}}A C/C++ compiler:\\ gcc 7.1.0或更高版本, clang 3.0或更高版本,\\ Apple clang 10.0 或更高版本,\\ Visual Studio 2019 16.7或更高版本\end{tabular} &
-\begin{tabular}[c]{@{}l@{}}Linux(any), Windows,\\ Mac OS X, or FreeBSD\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}C/C++编译器:\\ gcc 7.1.0或更高版本, clang 3.0或更高版本,\\ Apple clang 10.0 或更高版本,\\ Visual Studio 2019 16.7或更高版本\end{tabular} &
+\begin{tabular}[c]{@{}l@{}}Linux(any), Windows,\\ Mac OS X或FreeBSD\end{tabular} \\ \hline
 CMake 3.20.0或更高版本                          \\ \hline
 Ninja 1.11.1                                   &                          \\ \hline
 Python 3.6或更高版本                            &                          \\ \hline
 Git 2.39或更高版本                   \\ \hline
 \end{longtable}
 
-To create the flame graph in Chapter 10, Debugging Using LLVM Tools, you need to install the scripts from \href{https://github.com/brendangregg/FlameGraph}. To run the script, you also need a recent version of Perl installed, and to view the graph you need a web browser capable of displaying SVG files, which all modern browsers do. To see the Chrome Trace Viewer visualization in the same chapter, you need to have the Chrome browser installed.
+要创建第10章“使用LLVM工具调试”中的火焰图，需要从\url{https://github.com/brendangregg/FlameGraph}获取安装脚本。要运行安装脚本，还需要安装最新版本的Perl。要查看图形，还需要能够显示SVG文件的Web浏览器，这是所有现代浏览器都能做到的。要在同一章中查看Chrome Trace Viewer可视化，需要安装Chrome浏览器。
 
 \textbf{如果正在使用本书的数字版本，我们建议您自己输入代码或通过GitHub存储库访问代码(下一节提供链接)，将避免复制和粘贴代码。}
 

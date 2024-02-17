@@ -227,10 +227,10 @@
       \huge
       \textbf{Learn LLVM 17}
       \\[9pt]
-      A beginner’s guide to learning LLVM compiler tools and core libraries with C++
+      {\Large 学习LLVM编译器工具和核心库的初学者指南(C++版)}
       \\[9pt]
       \normalsize
-      作者: Kai Nacke, Amy Kwan
+      作者: Kai Nacke 和 Amy Kwan
       \\[8pt]
       \normalsize
       译者：\href{https://github.com/xiaoweiChen/The-CXX-Library-Fourth-Edition-include-CXX23}{陈晓伟}
@@ -259,134 +259,134 @@
     \mySection{}{前言}{content/chapter0/3.tex}
     \newpage
 
-    \myPart{第一部分}{The Basics of Compiler Construction with LLVM}{content/part1/part1.tex}
+    \myPart{第一部分}{使用LLVM构建编译器的基础知识}{content/part1/part1.tex}
     \newpage
 
     \mySection{第1章}{安装LLVM}{content/part1/chapter1/0.tex}
-    \mySubsection{1.1.}{Compiling LLVM versus installing binaries}{content/part1/chapter1/1.tex}
-    \mySubsection{1.2.}{Getting the prerequisites ready}{content/part1/chapter1/2.tex}
-    \mySubsection{1.3.}{Cloning the repository and building from source}{content/part1/chapter1/3.tex}
-    \mySubsection{1.4.}{Customizing the build process}{content/part1/chapter1/4.tex}
+    \mySubsection{1.1.}{编译与直接安装LLVM}{content/part1/chapter1/1.tex}
+    \mySubsection{1.2.}{配置环境}{content/part1/chapter1/2.tex}
+    \mySubsection{1.3.}{使用代码库源码进行构建}{content/part1/chapter1/3.tex}
+    \mySubsection{1.4.}{自定义构建}{content/part1/chapter1/4.tex}
     \mySubsection{1.5.}{总结}{content/part1/chapter1/5.tex}
     \newpage
 
-    \mySection{第2章}{The Structure of a Compiler}{content/part1/chapter2/0.tex}
-    \mySubsection{2.1.}{Building blocks of a compiler}{content/part1/chapter2/1.tex}
-    \mySubsection{2.2.}{An arithmetic expression language}{content/part1/chapter2/2.tex}
-    \mySubsection{2.3.}{Lexical analysis}{content/part1/chapter2/3.tex}
-    \mySubsection{2.4.}{Syntactical analysis}{content/part1/chapter2/4.tex}
-    \mySubsection{2.5.}{Semantic analysis}{content/part1/chapter2/5.tex}
-    \mySubsection{2.6.}{Generating code with the LLVM backend}{content/part1/chapter2/6.tex}
+    \mySection{第2章}{编译器的结构}{content/part1/chapter2/0.tex}
+    \mySubsection{2.1.}{编译器的构建块}{content/part1/chapter2/1.tex}
+    \mySubsection{2.2.}{算术表达式语言}{content/part1/chapter2/2.tex}
+    \mySubsection{2.3.}{词法分析}{content/part1/chapter2/3.tex}
+    \mySubsection{2.4.}{语法分析}{content/part1/chapter2/4.tex}
+    \mySubsection{2.5.}{语义分析}{content/part1/chapter2/5.tex}
+    \mySubsection{2.6.}{使用LLVM后端生成代码}{content/part1/chapter2/6.tex}
     \mySubsection{2.7.}{总结}{content/part1/chapter2/7.tex}
     \newpage
 
-    \myPart{第二部分}{From Source to Machine Code Generation}{content/part2/part2.tex}
+    \myPart{第二部分}{从源码到机器码}{content/part2/part2.tex}
     \newpage
 
-    \mySection{第3章}{Turning the Source File into an Abstract Syntax Tree}{content/part2/chapter3/0.tex}
-    \mySubsection{3.1.}{Defining a real programming language}{content/part2/chapter3/1.tex}
-    \mySubsection{3.2.}{Creating the project layout}{content/part2/chapter3/2.tex}
-    \mySubsection{3.3.}{Managing the input files for the compiler}{content/part2/chapter3/3.tex}
-    \mySubsection{3.4.}{Handling messages for the user}{content/part2/chapter3/4.tex}
-    \mySubsection{3.5.}{Structuring the lexer}{content/part2/chapter3/5.tex}
-    \mySubsection{3.6.}{Constructing a recursive descent parser}{content/part2/chapter3/6.tex}
-    \mySubsection{3.7.}{Performing semantic analysis}{content/part2/chapter3/7.tex}
+    \mySection{第3章}{将源码文件转换为抽象语法树}{content/part2/chapter3/0.tex}
+    \mySubsection{3.1.}{定义一种编程语言}{content/part2/chapter3/1.tex}
+    \mySubsection{3.2.}{创建项目布局}{content/part2/chapter3/2.tex}
+    \mySubsection{3.3.}{管理编译器的输入文件}{content/part2/chapter3/3.tex}
+    \mySubsection{3.4.}{处理用户信息}{content/part2/chapter3/4.tex}
+    \mySubsection{3.5.}{构造词法分析器}{content/part2/chapter3/5.tex}
+    \mySubsection{3.6.}{构建递归下降语法分析器}{content/part2/chapter3/6.tex}
+    \mySubsection{3.7.}{执行语义分析}{content/part2/chapter3/7.tex}
     \mySubsection{3.8.}{总结}{content/part2/chapter3/8.tex}
     \newpage
 
-    \mySection{第4章}{Basics of IR Code Generation}{content/part2/chapter4/0.tex}
-    \mySubsection{4.1.}{Generating IR from the AST}{content/part2/chapter4/1.tex}
-    \mySubsection{4.2.}{Using AST numbering to generate IR code in SSA form}{content/part2/chapter4/2.tex}
-    \mySubsection{4.3.}{Setting up the module and the driver}{content/part2/chapter4/3.tex}
+    \mySection{第4章}{生成IR代码的基础知识}{content/part2/chapter4/0.tex}
+    \mySubsection{4.1.}{AST生成IR}{content/part2/chapter4/1.tex}
+    \mySubsection{4.2.}{使用AST编号生成SSA格式的IR代码}{content/part2/chapter4/2.tex}
+    \mySubsection{4.3.}{设置模块和驱动程序}{content/part2/chapter4/3.tex}
     \mySubsection{4.4.}{总结}{content/part2/chapter4/4.tex}
     \newpage
 
-    \mySection{第5章}{IR Generation for High-Level Language Constructs}{content/part2/chapter5/0.tex}
-    \mySubsection{5.1.}{Technical requirements}{content/part2/chapter5/1.tex}
-    \mySubsection{5.2.}{Working with arrays, structs, and pointers}{content/part2/chapter5/2.tex}
-    \mySubsection{5.3.}{Getting the application binary interface right}{content/part2/chapter5/3.tex}
-    \mySubsection{5.4.}{Creating IR code for classes and virtual functions}{content/part2/chapter5/4.tex}
+    \mySection{第5章}{高级语言结构生成的IR}{content/part2/chapter5/0.tex}
+    \mySubsection{5.1.}{环境要求}{content/part2/chapter5/1.tex}
+    \mySubsection{5.2.}{处理数组、结构体和指针}{content/part2/chapter5/2.tex}
+    \mySubsection{5.3.}{获得应用程序二进制接口}{content/part2/chapter5/3.tex}
+    \mySubsection{5.4.}{为类和虚函数创建IR}{content/part2/chapter5/4.tex}
     \mySubsection{5.5.}{总结}{content/part2/chapter5/5.tex}
     \newpage
 
-    \mySection{第6章}{Advanced IR Generation}{content/part2/chapter6/0.tex}
-    \mySubsection{6.1.}{Throwing and catching exceptions}{content/part2/chapter6/1.tex}
-    \mySubsection{6.2.}{Generating metadata for type-based alias analysis}{content/part2/chapter6/2.tex}
-    \mySubsection{6.3.}{Adding debug metadata}{content/part2/chapter6/3.tex}
+    \mySection{第6章}{生成IR代码的进阶知识}{content/part2/chapter6/0.tex}
+    \mySubsection{6.1.}{抛出和捕获异常}{content/part2/chapter6/1.tex}
+    \mySubsection{6.2.}{为基于类型的别名分析生成元数据}{content/part2/chapter6/2.tex}
+    \mySubsection{6.3.}{添加调试元数据}{content/part2/chapter6/3.tex}
     \mySubsection{6.4.}{总结}{content/part2/chapter6/4.tex}
     \newpage
 
-    \mySection{第7章}{Optimizing IR}{content/part2/chapter7/0.tex}
-    \mySubsection{7.1.}{Technical requirements}{content/part2/chapter7/1.tex}
-    \mySubsection{7.2.}{The LLVM pass manager}{content/part2/chapter7/2.tex}
-    \mySubsection{7.3.}{Implementing a new pass}{content/part2/chapter7/3.tex}
-    \mySubsection{7.4.}{Using the ppprofiler pass with LLVM tools}{content/part2/chapter7/4.tex}
-    \mySubsection{7.5.}{Adding an optimization pipeline to your compiler}{content/part2/chapter7/5.tex}
+    \mySection{第7章}{优化IR}{content/part2/chapter7/0.tex}
+    \mySubsection{7.1.}{环境要求}{content/part2/chapter7/1.tex}
+    \mySubsection{7.2.}{LLVM通道管理器}{content/part2/chapter7/2.tex}
+    \mySubsection{7.3.}{实现一个新的通道}{content/part2/chapter7/3.tex}
+    \mySubsection{7.4.}{使用ppprofiler}{content/part2/chapter7/4.tex}
+    \mySubsection{7.5.}{向编译器添加优化管道}{content/part2/chapter7/5.tex}
     \mySubsection{7.6.}{总结}{content/part2/chapter7/6.tex}
     \newpage
 
 
-    \myPart{第三部分}{Taking LLVM to the Next Level}{content/part3/part3.tex}
+    \myPart{第三部分}{LLVM的进阶}{content/part3/part3.tex}
     \newpage
 
-    \mySection{第8章}{The TableGen Language}{content/part3/chapter8/0.tex}
-    \mySubsection{8.1.}{Technical requirements}{content/part3/chapter8/1.tex}
-    \mySubsection{8.2.}{Understanding the TableGen language}{content/part3/chapter8/2.tex}
-    \mySubsection{8.3.}{Experimenting with the TableGen language}{content/part3/chapter8/3.tex}
-    \mySubsection{8.4.}{Generating C++ code from a TableGen file}{content/part3/chapter8/4.tex}
-    \mySubsection{8.5.}{Drawbacks of TableGen}{content/part3/chapter8/5.tex}
+    \mySection{第8章}{TableGen语言}{content/part3/chapter8/0.tex}
+    \mySubsection{8.1.}{环境要求}{content/part3/chapter8/1.tex}
+    \mySubsection{8.2.}{了解TableGen语言}{content/part3/chapter8/2.tex}
+    \mySubsection{8.3.}{实验TableGen语言}{content/part3/chapter8/3.tex}
+    \mySubsection{8.4.}{使用TableGen文件生成C++代码}{content/part3/chapter8/4.tex}
+    \mySubsection{8.5.}{TableGen的缺点}{content/part3/chapter8/5.tex}
     \mySubsection{8.6.}{总结}{content/part3/chapter8/6.tex}
     \newpage
 
-    \mySection{第9章}{JIT Compilation}{content/part3/chapter9/0.tex}
-    \mySubsection{9.1.}{Technical requirements}{content/part3/chapter9/1.tex}
-    \mySubsection{9.2.}{LLVM’s overall JIT implementation and use cases}{content/part3/chapter9/2.tex}
-    \mySubsection{9.3.}{Using JIT compilation for direct execution}{content/part3/chapter9/3.tex}
-    \mySubsection{9.4.}{Implementing our own JIT compiler with LLJIT}{content/part3/chapter9/4.tex}
-    \mySubsection{9.5.}{Building a JIT compiler class from scratch}{content/part3/chapter9/5.tex}
+    \mySection{第9章}{JIT编译}{content/part3/chapter9/0.tex}
+    \mySubsection{9.1.}{环境要求}{content/part3/chapter9/1.tex}
+    \mySubsection{9.2.}{LLVM的整体JIT的实现和用例}{content/part3/chapter9/2.tex}
+    \mySubsection{9.3.}{使用JIT直接执行}{content/part3/chapter9/3.tex}
+    \mySubsection{9.4.}{用LLJIT实现JIT编译器}{content/part3/chapter9/4.tex}
+    \mySubsection{9.5.}{从头开始构建JIT编译器类}{content/part3/chapter9/5.tex}
     \mySubsection{9.6.}{总结}{content/part3/chapter9/6.tex}
     \newpage
 
-    \mySection{第10章}{Debugging Using LLVM Tools}{content/part3/chapter10/0.tex}
-    \mySubsection{10.1.}{Technical requirements}{content/part3/chapter10/1.tex}
-    \mySubsection{10.2.}{Instrumenting an application with sanitizers}{content/part3/chapter10/2.tex}
-    \mySubsection{10.3.}{Finding bugs with libFuzzer}{content/part3/chapter10/3.tex}
-    \mySubsection{10.4.}{Performance profiling with XRay}{content/part3/chapter10/4.tex}
-    \mySubsection{10.5.}{Checking the source with the clang static analyzer}{content/part3/chapter10/5.tex}
-    \mySubsection{10.6.}{Creating your own clang-based tool}{content/part3/chapter10/6.tex}
+    \mySection{第10章}{使用LLVM工具进行调试}{content/part3/chapter10/0.tex}
+    \mySubsection{10.1.}{环境要求}{content/part3/chapter10/1.tex}
+    \mySubsection{10.2.}{用消毒程序检测应用程序}{content/part3/chapter10/2.tex}
+    \mySubsection{10.3.}{使用libFuzzer查找bug}{content/part3/chapter10/3.tex}
+    \mySubsection{10.4.}{使用XRay进行性能分析}{content/part3/chapter10/4.tex}
+    \mySubsection{10.5.}{使用clang静态分析器检查源代码}{content/part3/chapter10/5.tex}
+    \mySubsection{10.6.}{创建基于clang的工具}{content/part3/chapter10/6.tex}
     \mySubsection{10.7.}{总结}{content/part3/chapter10/7.tex}
     \newpage
 
-    \myPart{第四部分}{Roll Your Own Backend}{content/part4/part4.tex}
+    \myPart{第四部分}{创建自定义后端}{content/part4/part4.tex}
     \newpage
 
-    \mySection{第11章}{The Target Description}{content/part4/chapter11/0.tex}
-    \mySubsection{11.1.}{Setting the stage for a new backend}{content/part4/chapter11/1.tex}
-    \mySubsection{11.2.}{Adding the new architecture to the Triple class}{content/part4/chapter11/2.tex}
-    \mySubsection{11.3.}{Extending the ELF file format definition in LLVM}{content/part4/chapter11/3.tex}
-    \mySubsection{11.4.}{Creating the target description}{content/part4/chapter11/4.tex}
-    \mySubsection{11.5.}{Adding the M88k backend to LLVM}{content/part4/chapter11/5.tex}
-    \mySubsection{11.6.}{Implementing the assembler parser}{content/part4/chapter11/6.tex}
-    \mySubsection{11.7.}{Creating the disassembler}{content/part4/chapter11/7.tex}
+    \mySection{第11章}{目标描述}{content/part4/chapter11/0.tex}
+    \mySubsection{11.1.}{为新后端搭建舞台}{content/part4/chapter11/1.tex}
+    \mySubsection{11.2.}{将新架构添加到Triple类中}{content/part4/chapter11/2.tex}
+    \mySubsection{11.3.}{扩展LLVM中的ELF文件格式定义}{content/part4/chapter11/3.tex}
+    \mySubsection{11.4.}{创建目标描述}{content/part4/chapter11/4.tex}
+    \mySubsection{11.5.}{为LLVM添加M88k后端}{content/part4/chapter11/5.tex}
+    \mySubsection{11.6.}{实现汇编解析器}{content/part4/chapter11/6.tex}
+    \mySubsection{11.7.}{创建反汇编器}{content/part4/chapter11/7.tex}
     \mySubsection{11.8.}{总结}{content/part4/chapter11/8.tex}
     \newpage
 
-    \mySection{第12章}{Instruction Selection}{content/part4/chapter12/0.tex}
-    \mySubsection{12.1.}{Defining the rules of the calling convention}{content/part4/chapter12/1.tex}
-    \mySubsection{12.2.}{Instruction selection via the selection DAG}{content/part4/chapter12/2.tex}
-    \mySubsection{12.3.}{Adding register and instruction information}{content/part4/chapter12/3.tex}
-    \mySubsection{12.4.}{Putting an empty frame lowering in place}{content/part4/chapter12/4.tex}
-    \mySubsection{12.5.}{Emitting machine instructions}{content/part4/chapter12/5.tex}
-    \mySubsection{12.6.}{Creating the target machine and the sub-target}{content/part4/chapter12/6.tex}
-    \mySubsection{12.7.}{Global instruction selection}{content/part4/chapter12/7.tex}
-    \mySubsection{12.8.}{How to further evolve the backend}{content/part4/chapter12/8.tex}
+    \mySection{第12章}{指令选择}{content/part4/chapter12/0.tex}
+    \mySubsection{12.1.}{定义调用约定规则}{content/part4/chapter12/1.tex}
+    \mySubsection{12.2.}{通过DAG进行指令选择}{content/part4/chapter12/2.tex}
+    \mySubsection{12.3.}{添加寄存器和指令信息}{content/part4/chapter12/3.tex}
+    \mySubsection{12.4.}{将空框架降低到位}{content/part4/chapter12/4.tex}
+    \mySubsection{12.5.}{发出机器指令}{content/part4/chapter12/5.tex}
+    \mySubsection{12.6.}{创建目标机器和子目标}{content/part4/chapter12/6.tex}
+    \mySubsection{12.7.}{全局指令的选择}{content/part4/chapter12/7.tex}
+    \mySubsection{12.8.}{进化后端}{content/part4/chapter12/8.tex}
     \mySubsection{12.9.}{总结}{content/part4/chapter12/9.tex}
     \newpage
 
-    \mySection{第13章}{Beyond Instruction Selection}{content/part4/chapter13/0.tex}
-    \mySubsection{13.1.}{Adding a new machine function pass to LLVM}{content/part4/chapter13/1.tex}
-    \mySubsection{13.2.}{Integrating a new target into the clang frontend}{content/part4/chapter13/2.tex}
-    \mySubsection{13.3.}{Targeting a different CPU architecture}{content/part4/chapter13/3.tex}
+    \mySection{第13章}{超越指令选择}{content/part4/chapter13/0.tex}
+    \mySubsection{13.1.}{为LLVM添加新机器功能通道}{content/part4/chapter13/1.tex}
+    \mySubsection{13.2.}{将新目标集成到clang前端}{content/part4/chapter13/2.tex}
+    \mySubsection{13.3.}{针对不同的CPU架构}{content/part4/chapter13/3.tex}
     \mySubsection{13.4.}{总结}{content/part4/chapter13/4.tex}
     \newpage
 
