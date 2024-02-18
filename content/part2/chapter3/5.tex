@@ -1,10 +1,10 @@
-As we know from the previous chapter, we need a Token class and a Lexer class. Additionally, a TokenKind enumeration is required to give each token class a unique number. Having an all-inone header and implementation file does not scale, so let’s move the items. TokenKind can be used universally and is placed in the Basic component. The Token and Lexer classes belong to the Lexer component but are placed in different headers and implementation files.
+正如前一章所知，我们需要一个Token类和一个Lexer类。此外，需要TokenKind枚举来为每个令牌类提供唯一的编号。拥有一个集所有功能于一体的头文件和实现文件并不能扩展，所以让我们移动这些项。TokenKind可以普遍使用，并放置在Basic组件中。Token和Lexer类属于Lexer组件，但位于不同的头文件和实现文件中。
 
-There are three different classes of tokens: keywords, punctuators, and tokens, which represent sets of many values. Examples are the CONST keyword, the; delimiter, and the ident token, respectively, each of which represents identifiers in the source. Each token needs a member name for the enumeration. Keywords and punctuators have natural display names that can be used for messages.
+有三种不同类型的标记:关键字、标点符号和标记，它们表示许多值的集合。例如CONST关键字，;分隔符和标识标记，它们分别表示源中的标识符。每个令牌都需要枚举的成员名。关键字和标点符号具有可以用于消息的自然显示名称。
 
-Like in many programming languages, the keywords are a subset of the identifiers. To classify a token as a keyword, we need a keyword filter, which checks if the found identifier is indeed a keyword. This is the same behavior as in C or C++, where keywords are also a subset of identifiers. Programming languages evolve and new keywords may be introduced. As an example, the original K\&R C language had no enumerations defined with the enum keyword. Due to this, a flag indicating the language level of a keyword should be present.
+与许多编程语言一样，关键字是标识符的子集。要将标记分类为关键字，我们需要一个关键字过滤器，它检查找到的标识符是否确实是关键字。这与C或C++中的行为相同，其中关键字也是标识符的子集。编程语言不断发展，可能会引入新的关键字。例如，最初的K\&R C语言没有用enum关键字定义枚举，所以应该出现一个标志来指示关键字的语言级别。
 
-We collected several pieces of information, all of which belong to a member of the TokenKind enumeration: the label for the enumeration member, the spelling of punctuators, and a flag for keywords. For the diagnostic messages, we centrally store the information in a .def file called include/tinylang/Basic/TokenKinds.def, which looks like this. One thing to note is that keywords are prefixed with kw\_:
+我们收集了几条信息，它们都属于TokenKind枚举的一个成员:枚举成员的标签、标点符号的拼写和关键字的标志。对于诊断消息，我们将信息集中存储在一个名为include/tinylang/Basic/tokenkind.def的.def文件中，该文件如下所示。需要注意的一点是，关键字的前缀是kw\_:
 
 \begin{cpp}
 #ifndef TOK
@@ -35,7 +35,7 @@ KEYWORD(CONST , KEYALL)
 #undef TOK
 \end{cpp}
 
-With these centralized definitions, it’s easy to create the TokenKind enumeration in the include/ tinylang/Basic/TokenKinds.h file. Again, the enumeration is put into its own namespace, tok:
+有了这些集中的定义，就可以很容易地在include/tinylang/Basic/TokenKind.h文件中创建TokenKind枚举。同样，枚举会放入自己的命名空间中，例如:
 
 \begin{cpp}
 #ifndef TINYLANG_BASIC_TOKENKINDS_H
@@ -49,7 +49,7 @@ namespace tinylang {
     };
 \end{cpp}
 
-The pattern to fill the array should be familiar by now. The TOK macro is defined to only return ID. As a useful addition, we also define NUM\_TOKENS as the last member of the enumeration, which denotes the number of defined tokens:
+现在应该熟悉填充数组的模式了，TOK宏定义为只返回ID。另外，还将NUM\_TOKENS定义为枚举的最后一个成员，用于表示已定义的标记的数量:
 
 \begin{cpp}
         const char *getTokenName(TokenKind Kind);
@@ -61,7 +61,7 @@ The pattern to fill the array should be familiar by now. The TOK macro is define
 #endif
 \end{cpp}
 
-The implementation file, lib/Basic/TokenKinds.cpp, also uses the .def file to retrieve the names:
+实现文件lib/Basic/tokenkind.cpp也使用.def文件来检索名称:
 
 \begin{cpp}
 #include "tinylang/Basic/TokenKinds.h"
@@ -77,11 +77,11 @@ static const char * const TokNames[] = {
 };
 \end{cpp}
 
-The textual name of a token is derived from its enumeration label, ID. There are two particularities:
+标记的文本名称源自其枚举标签ID。有两个特点:
 
 \begin{itemize}
 \item
-First, some operators share the same prefix – for example, < and <=. When the current character we look at is <, then we must check the next character before deciding which token we found. Remember that the input needs to end with a null byte. Therefore, the next character can always be used if the current character is valid:
+首先，一些操作符共享相同的前缀，例如<和<=。若当前查看的字符是<，则必须先检查下一个字符，再决定找到哪个标记。请记住，输入需要以空字节结束。所以，若当前字符有效，则可以始终使用下一个字符:
 
 \begin{cpp}
     case '<':
@@ -94,7 +94,7 @@ First, some operators share the same prefix – for example, < and <=. When the 
 \end{cpp}
 
 \item
-The other detail is that there are far more keywords now. How can we handle this? A simple and fast solution is to populate a hash table with the keywords, which are all stored in the TokenKinds.def file. This can be done during the instantiation of the Lexer class. With this approach, it is also possible to support different levels of the language as the keywords can be filtered with the attached flag. Here, this flexibility is not needed yet. In the header file, the keyword filter is defined as follows, using an instance of llvm::StringMap for the hash table:
+另一个是，现在有更多的关键字。我们该如何处理?一个简单而快速的解决方案是用关键字填充散列表，这些关键字都存储在tokenkind.def文件中。这可以在Lexer类的实例化期间完成。使用这种方法，因为可以使用附加标志过滤关键字，还可以支持不同级别的语言。在这里，还不需要这种灵活性。在头文件中，关键字过滤器定义如下，使用llvm::StringMap实例作为哈希表:
 
 \begin{cpp}
     class KeywordFilter {
@@ -105,7 +105,7 @@ The other detail is that there are far more keywords now. How can we handle this
         void addKeywords();
 \end{cpp}
 
-The getKeyword() method returns the token kind of the given string, or a default value if the string does not represent a keyword:
+getKeyword()返回给定字符串的标记类型，若字符串不代表关键字则返回默认值:
 
 \begin{cpp}
     tok::TokenKind getKeyword(
@@ -119,7 +119,7 @@ The getKeyword() method returns the token kind of the given string, or a default
 };
 \end{cpp}
 
-In the implementation file, the keyword table is filled:
+在实现文件中，填充关键字表:
 
 \begin{cpp}
 void KeywordFilter::addKeyword(StringRef Keyword,
@@ -136,7 +136,7 @@ void KeywordFilter::addKeywords() {
 
 \end{itemize}
 
-With the techniques you’ve just learned about, it’s not difficult to write an efficient lexer class. As compilation speed matters, many compilers use a handwritten lexer, with one example being clang.
+使用刚学到的技术，编写一个高效的词法分析器类并不困难。由于编译速度很重要，许多编译器使用手写词法分析器，其中一个例子就是clang。
 
 
 

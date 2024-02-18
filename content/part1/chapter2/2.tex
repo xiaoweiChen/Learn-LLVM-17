@@ -1,19 +1,19 @@
 
-Arithmetic expressions are a part of every programming language. Here is an example of an arithmetic expression calculation language called calc. The calc expressions are compiled into an application that evaluates the following expression:
+算术表达式是每一种编程语言的一部分。下面是一个算术表达式计算语言calc的例子，calc表达式会编译成一个计算以下表达式的应用程序:
 
 \begin{shell}
 with a, b: a * (4 + b)
 \end{shell}
 
-The used variables in the expression must be declared with the keyword, with. This program is compiled into an application that asks the user for the values of the a and b variables and prints the result.
+表达式中使用的变量必须用关键字with声明。该程序会编译成一个应用程序，该程序向用户询问a和b变量的值，并输出结果。
 
-Examples are always welcome but, as a compiler writer, you need a more thorough specification than this for implementation and testing. The vehicle for the syntax of the programming language is the grammar.
+示例总是简单并容易理解的，但作为编译器作者，需要比这更全面的实现和测试规范。首先，编程语言的载体是语法。
 
-\mySubsubsection{2.2.1.}{Formalism for specifying the syntax of a programming language}
+\mySubsubsection{2.2.1.}{描述程序设计语言语法的形式}
 
-The elements of a language, for example, keywords, identifiers, strings, numbers, and operators, are called tokens. In this sense, a program is a sequence of tokens, and the grammar specifies which sequences are valid.
+语言中的元素，例如关键字、标识符、字符串、数字和操作符，称为标记(token)。从这个意义上说，程序是一个标记序列，语法指定了哪些序列是有效的。
 
-Usually, grammar is written in the extended Backus-Naur form (EBNF). A rule in grammar has a left and a right side. The left side is just a single symbol called non-terminal. The right side of a rule consists of non-terminals, tokens, and meta-symbols for alternatives and repetitions. Let’s have a look at the grammar of the calc language:
+通常，语法是以扩展的Backus-Naur形式(EBNF)编写的。语法规则有左边和右边，左边只有一个符号，叫做非终结符；右侧由非终结符、记号和用于替代和重复的元符号组成。让我们来看看calc语言的语法:
 
 \begin{shell}
 calc : ("with" ident ("," ident)* ":")? expr ;
@@ -24,12 +24,12 @@ ident : ([a-zAZ])+ ;
 number : ([0-9])+ ;
 \end{shell}
 
-In the first line, calc is a non-terminal. If not otherwise stated, then the first non-terminal of a grammar is the start symbol. The colon (:) is the separator between the left and the right side of the rule. Here, "with", "," and ":" are tokens that represent this string. Parentheses are used for grouping. A group can be optional or repeated. A question mark (?) after the closing parenthesis denotes an optional group. A star * denotes zero or more repetitions and a plus + denotes one or more repetitions. Ident and expr are non-terminals. For each of them, another rule exists. The semicolon (;) marks the end of a rule. The pipe |, in the second line, denotes an alternative. And last, the brackets [ ], in the last two lines, denote a character class. The valid characters are written inside the brackets. For example, the character class [a-zA-Z] matches an upper- or lower-case letter, and ([a-zA-Z])+ matches one or more of these letters. This corresponds to a regular expression.
+第一行中，calc是非终结符。若没有特别说明，则语法的第一个非终结符是开始符号。冒号(:)是规则左右两边之间的分隔符，" with"、"和":"是表示这个字符串的标记，括号用于分组。组可以是可选的，也可以是重复的。右括号后的问号(?)表示一个可选的组。星号*表示零次或多次重复，加号+表示一次或多次重复。ident和expr是非终结符，处理它们使用的是另一种规则。分号(;)表示规则的结束，第二行中的管道|表示另一种选择。最后，最后两行的括号[]表示字符类。有效字符写在括号内。例如，字符类[a-zA-Z]匹配一个大写或小写字母，而([a-zA-Z])+匹配这些字母中的一个或多个。看起来，这就是一个正则表达式。
 
-\mySubsubsection{2.2.2.}{How does grammar help the compiler writer?}
+\mySubsubsection{2.2.2.}{语法如何帮助编译器作者?}
 
-Such grammar may look like a theoretical toy, but it is of value to the compiler writer. First, all the tokens are defined, which is needed to create the lexical analyzer. The rules of the grammar can be translated into the parser. And of course, if questions arise about whether the parser works correctly, then the grammar serves as a good specification.
+这样的语法看起来像一个玩具，但它对编译器作者很有意义。首先，定义所有标记，这是创建词法分析器所需的，语法规则可以转化为解析器。当然，若有解析器是否正确工作的问题，则语法就可以作为标准进行衡量。
 
-However, grammar does not define all aspects of a programming language. The meaning – the semantics – of the syntax must also be defined. Formalisms for this purpose were developed, too, but very often, they are specified in plain text, as they were usually drawn up at the initial introduction of the language.
+然而，语法并不能定义编程语言的所有方面。语法的含义——语义——也必须定义。为此目的的形式也开发出来了，因为它们是在最初引入该语言时拟定的，所以通常在纯文本中指定。
 
-Equipped with this knowledge, the next two sections show how the lexical analysis turns the input into a sequence of tokens and how the grammar is coded in C++ for the syntactical analysis.
+了解了这些知识，接下来的两节将介绍词法分析如何将输入转换为标记序列，以及语法如何使用C++进行语法分析。

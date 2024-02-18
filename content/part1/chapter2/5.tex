@@ -1,6 +1,6 @@
-The semantic analyzer walks the AST and checks various semantic rules of the language, e.g. a variable must be declared before use or types of variables must be compatible in an expression. The semantic analyzer can also print out warnings if it finds a situation that can be improved. For the example expression language, the semantic analyzer must check that each used variable is declared because that is what the language requires. A possible extension (which is not implemented here) is to print a warning if a declared variable is not used.
+语义分析器遍历AST并检查语言的各种语义规则，例如：变量必须在使用前声明，或者变量的类型必须在表达式中兼容。若语义分析器发现可以改进的情况，还可以输出警告。对于示例表达式语言，语义分析器必须检查是否声明了每个使用的变量(这是该语言所要求的)。一个可能的扩展(这里没有实现)是，在声明的变量未使用时输出警告。
 
-The semantic analyzer is implemented in the Sema class, which is performed by the semantic() method. Here is the complete Sema.h header file:
+语义分析器在Sema类中实现，由semantic()方法执行。下面是完整的Sema.h头文件内容:
 
 \begin{cpp}
 #ifndef SEMA_H
@@ -17,7 +17,7 @@ class Sema {
 #endif
 \end{cpp}
 
-The implementation is in the Sema.cpp file. The interesting part is the semantic analysis, which is implemented using a visitor. The basic idea is that the name of each declared variable is stored in a set. During the creation of the set, each name can be checked for uniqueness, and later it can be checked that the given name is in the set:
+实现在Sema.cpp文件中。有趣的部分是语义分析，使用访问者实现。其基本思想是，每个声明变量的名称存储在一个集合中。在创建集合时，可以检查每个名字的唯一性，再检查给定的名字是否在集合中:
 
 \begin{cpp}
 #include "Sema.h"
@@ -39,7 +39,7 @@ public:
     bool hasError() { return HasError; }
 \end{cpp}
 
-As in the Parser class, a flag is used to indicate that an error occurred. The names are stored in a set called Scope. On a Factor node that holds a variable name, it is checked that the variable name is in the set:
+与Parser类中一样，使用一个标志来指示发生了错误。这些名称存储在一个名为Scope的集合中。在包含变量名的Factor节点上，检查变量名是否在集合中:
 
 \begin{cpp}
 virtual void visit(Factor &Node) override {
@@ -50,7 +50,7 @@ virtual void visit(Factor &Node) override {
 };
 \end{cpp}
 
-For a BinaryOp node, there is nothing to check other than that both sides exist and are visited:
+对于BinaryOp节点，除了两边都存在并访问之外，没有什么需要检查的:
 
 \begin{cpp}
 virtual void visit(BinaryOp &Node) override {
@@ -65,7 +65,7 @@ virtual void visit(BinaryOp &Node) override {
 };
 \end{cpp}
 
-On a WithDecl node, the set is populated and the walk over the expression is started:
+在WithDecl节点上，填充该集合并开始遍历表达式:
 
 \begin{cpp}
     virtual void visit(WithDecl &Node) override {
@@ -83,7 +83,7 @@ On a WithDecl node, the set is populated and the walk over the expression is sta
 }
 \end{cpp}
 
-The semantic() method only starts the tree walk and returns the error flag:
+semantic()方法只启动树遍历，并返回错误标志:
 
 \begin{cpp}
 bool Sema::semantic(AST *Tree) {
@@ -95,7 +95,7 @@ bool Sema::semantic(AST *Tree) {
 }
 \end{cpp}
 
-If required, much more could be done here. It would also be possible to print a warning if a declared variable is not used. We leave this for you to implement as an exercise. If the semantic analysis finishes without error, then we can generate the LLVM IR from the AST. This is done in the next section.
+这里还可以做得更多。若没有使用声明的变量，也可以打印警告。我们把这个留给读者当做练习来实现。若语义分析没有错误，则可以从AST生成LLVM IR。这将在下一节中完成。
 
 
 

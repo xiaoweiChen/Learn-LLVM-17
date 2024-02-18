@@ -1,10 +1,9 @@
-The project layout for tinylang follows the approach we laid out in Chapter 1, Installing LLVM.
-The source code for each component is in a subdirectory of the lib directory, and the header files are in a subdirectory of include/tinylang. The subdirectory is named after the component. In Chapter 1, Installing LLVM, we only created the Basic component.
+tinylang的项目布局遵循我们在第1章安装LLVM中列出的方法。每个组件的源代码位于lib目录的子目录中，头文件位于include/tinylang的子目录中。子目录以组件命名。在第1章安装LLVM中，我们只创建了基本组件。
 
-From the previous chapter, we know that we need to implement a lexer, a parser, an AST, and a semantic analyzer. Each is a component of its own, called Lexer, Parser, AST, and Sema, respectively. The directory layout that will be used in this chapter looks like this:
+前一章中，我们知道我们需要实现词法分析器、解析器、AST和语义分析器。每个都是自己的组件，分别称为Lexer、Parser、AST和Sema。本章将要使用的目录布局是这样的:
 
-\myGraphic{0.3}{content/part2/chapter3/images/1.png}{Figure 3.1 – The directory layout of the tinylang project}
+\myGraphic{0.3}{content/part2/chapter3/images/1.png}{图3.1 - tinylang项目的目录布局}
 
-The components have clearly defined dependencies. Lexer depends only on Basic. Parser depends on Basic, Lexer, AST, and Sema. Sema only depends on Basic and AST. The welldefined dependencies help us reuse the components.
+组件具有明确定义的依赖关系。Lexer只依赖于Basic，解析器依赖于Basic、Lexer、AST和Sema，Sema只依赖于Basic和AST。定义良好的依赖关系有助于我们重用组件。
 
-Let’s have a closer look at the implementation!
+让我们仔细看看实现吧!

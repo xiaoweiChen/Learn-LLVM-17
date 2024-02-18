@@ -1,24 +1,24 @@
 
-The task of the backend is to create optimized machine code from the LLVM IR of a module. The IR is the interface to the backend and can be created using a C++ interface or in textual form. Again, the IR is generated from the AST.
+后端的任务是从模块的LLVM IR中创建优化的机器码。IR是后端接口，可以使用C++接口或以文本形式创建。同样，IR也是从AST生成的。
 
-\mySubsubsection{2.6.1.}{Textual representation of LLVM IR}
+\mySubsubsection{2.6.1.}{LLVM IR的文本表示}
 
 \begin{enumerate}
 \item
-Ask the user for the value of each variable.
+向用户询问每个变量的值。
 
 \item
-Calculate the value of the expression.
+计算表达式的值。
 
 \item
-Print the result.
+输出结果。
 \end{enumerate}
 
-To ask the user to provide a value for a variable and to print the result, two library functions are used: calc\_read() and calc\_write().  For the with a: 3*a expression, the generated IR is as follows:
+为了让用户提供一个变量的值并打印结果，使用了两个库函数:calc\_read()和calc\_write()。对于with a: 3*a表达式，生成的IR如下所示:
 
 \begin{enumerate}
 \item
-The library functions must be declared, like in C. The syntax also resembles C. The type before the function name is the return type.   The type names surrounded by parenthesis are the argument types. The declaration can appear anywhere in the file:
+必须声明库函数，就像在c中一样，语法也类似于C。函数名之前的类型是返回类型。用括号括起来的类型名是参数类型。声明可以出现在文件的任何地方:
 
 \begin{shell}
 declare i32 @calc_read(ptr)
@@ -26,49 +26,49 @@ declare void @calc_write(i32)
 \end{shell}
 
 \item
-The calc\_read() function takes the variable name as a parameter. The following construct defines a constant, holding a and the null byte used as a string terminator in C:
+calc\_read()函数将变量名作为参数。下面的构造定义了一个常量，保存a和空字节作为C中的字符串结束符:
 
 \begin{shell}
 @a.str = private constant [2 x i8] c"a\00"
 \end{shell}
 
 \item
-It follows the main() function. The parameter names are omitted because they are not used. Just as in C, the body of the function is enclosed in braces:
+其遵循main()函数。省略参数名，因为没有使用。和C语言一样，函数体用大括号括起来:
 
 \begin{shell}
 define i32 @main(i32, ptr) {
 \end{shell}
 
 \item
-Each basic block must have a label. Because this is the first basic block of the function, we name it entry:
+每个基本块必须有一个标签，这是函数的第一个基本块，将其命名为entry:
 
 \begin{shell}
 entry:
 \end{shell}
 
 \item
-The calc\_read() function is called to read the value for the a variable. The nested getelemenptr instruction performs an index calculation to compute the pointer to the first element of the string constant. The function result is assigned to the unnamed \%2 variable.
+calc\_read()用来读取a变量的值。嵌套的getelemenptr指令执行索引计算，以计算指向字符串常量第一个元素的指针。函数结果被赋值给未命名的\%2变量。
 
 \begin{shell}
     %2 = call i32 @calc_read(ptr @a.str)
 \end{shell}
 
 \item
-Next, the variable is multiplied by 3:
+接下来，将变量乘以3:
 
 \begin{shell}
     %3 = mul nsw i32 3, %2
 \end{shell}
 
 \item
-The result is printed on the console via a call to the calc\_write() function:
+结果通过调用calc\_write()函数输出在控制台上:
 
 \begin{shell}
     call void @calc_write(i32 %3)
 \end{shell}
 
 \item
-Last, the main() function returns 0 to indicate a successful execution:
+最后，main()函数返回0，表示执行成功:
 
 \begin{shell}
     ret i32 0
@@ -77,17 +77,17 @@ Last, the main() function returns 0 to indicate a successful execution:
 
 \end{enumerate}
 
-Each value in the LLVM IR is typed, with i32 denoting the 32-bit bit integer type and ptr denoting a pointer.
+LLVM IR中的每个值都是有类型的，i32表示32位整数类型，ptr表示指针。
 
 \begin{myNotic}{Note}
-Previous versions of LLVM used typed pointers. For example, a pointer to a byte was expressed as i8* in LLVM. Since LLVM 16, opaque pointers are the default. An opaque pointer is just a pointer to memory, without carrying any type information about it. The notation in LLVM IR is ptr.
+以前版本的LLVM使用类型化指针。例如：在LLVM中，指向字节的指针表示为i8*。从LLVM 16开始，不透明指针是默认的。不透明指针只是一个指向内存的指针，不携带关于类型的信息。LLVM IR中的符号是ptr。
 \end{myNotic}
 
-Since it is now clear what the IR looks like, let’s generate it from the AST.
+既然现在已经清楚了IR的样子，让我们使用AST生成它吧。
 
-\mySubsubsection{2.6.2.}{Generating the IR from the AST}
+\mySubsubsection{2.6.2.}{使用AST生成IR}
 
-The interface, provided in the CodeGen.h header file, is very small:
+CodeGen.h头文件中提供的接口非常少:
 
 \begin{cpp}
 #ifndef CODEGEN_H
@@ -103,11 +103,11 @@ class CodeGen
 #endif
 \end{cpp}
 
-Because the AST contains the information, the basic idea is to use a visitor to walk the AST. The CodeGen.cpp file is implemented as follows:
+AST包含了这些信息，所以基本思想是使用一个访问器来遍历AST。CodeGen.cpp文件的实现如下所示:
 
 \begin{enumerate}
 \item
-The required includes are at the top of the file:
+所需的包含在文件的顶部:
 
 \begin{cpp}
 #include "CodeGen.h"
@@ -118,16 +118,16 @@ The required includes are at the top of the file:
 \end{cpp}
 
 \item
-The namespace of the LLVM libraries is used for name lookups:
+LLVM库的命名空间用于名称查找:
 
 \begin{cpp}
 using namespace llvm;
 \end{cpp}
 
 \item
-First, some private members are declared in the visitor. Each compilation unit is represented in LLVM by the Module class and the visitor has a pointer to the module called M. For easy IR generation, the Builder (of type IRBuilder<>) is used. LLVM has a class hierarchy to represent types in IR. You can look up the instances for basic types such as i32 from the LLVM context.
+首先，在访问者中声明一些私有成员。在LLVM中，每个编译单元都由Module类表示，访问者有一个指向模块M的指针。为了便于生成IR，使用了Builder (IRBuilder<>类型)。LLVM有一个类层次结构来表示IR中的类型，可以从LLVM上下文中查找i32等基本类型的实例。
 
-These basic types are used very often. To avoid repeated lookups, we cache the needed type instances: VoidTy, Int32Ty, PtrTy, and Int32Zero. The V member is the current calculated value, which is updated through the tree traversal. And last, nameMap maps a variable name to the value returned from the calc\_read() function:
+这些基本类型经常使用。为了避免重复查找，这里缓存了所需的类型实例:VoidTy、Int32Ty、PtrTy和Int32Zero。成员V是当前计算的值，通过树遍历更新。最后，nameMap将变量名映射到calc\_read()函数返回的值:
 
 \begin{cpp}
 namespace {
@@ -143,7 +143,7 @@ class ToIRVisitor : public ASTVisitor {
 \end{cpp}
 
 \item
-The constructor initializes all members:
+构造函数初始化所有成员:
 
 \begin{cpp}
 public:
@@ -157,7 +157,7 @@ public:
 \end{cpp}
 
 \item
-or each function, a FunctionType instance must be created. In C++ terminology, this is a function prototype. A function itself is defined with a Function instance. The run() method defines the main() function in the LLVM IR first:
+对于每个函数，必须创建一个FunctionType实例。在C++术语中，这是一个函数原型。函数本身是用function实例定义的。run()方法首先在LLVM IR中定义main()函数:
 
 \begin{cpp}
     void run(AST *Tree) {
@@ -169,7 +169,7 @@ or each function, a FunctionType instance must be created. In C++ terminology, t
 \end{cpp}
 
 \item
-Then we create the BB basic block with the entry label, and attach it to the IR builder:
+然后用entry标签创建BB基本块，并将其附加到IR构建器:
 
 \begin{cpp}
         BasicBlock *BB = BasicBlock::Create(M->getContext(),
@@ -178,15 +178,14 @@ Then we create the BB basic block with the entry label, and attach it to the IR 
 \end{cpp}
 
 \item
-With this preparation done, the tree traversal can begin:
+准备工作完成后，就可以开始遍历树了:
 
 \begin{cpp}
             Tree->accept(*this);
 \end{cpp}
 
 \item
-After the tree traversal, the computed value is printed via a call to the calc\_write() function. Again, a function prototype (an instance of FunctionType) has to be created.
-The only parameter is the current value, V:
+遍历树之后，通过调用calc\_write()函数打印计算值，必须创建函数原型(FunctionType的实例)。唯一的参数是当前值V:
 
 \begin{cpp}
             Tree->accept(*this);FunctionType *CalcWriteFnTy =
@@ -198,7 +197,7 @@ The only parameter is the current value, V:
 \end{cpp}
 
 \item
-The generation finishes by returning 0 from the main() function:
+生成以main()函数，并返回0结束:
 
 \begin{cpp}
             Builder.CreateRet(Int32Zero);
@@ -206,7 +205,7 @@ The generation finishes by returning 0 from the main() function:
 \end{cpp}
 
 \item
-A WithDecl node holds the names of the declared variables. First, we create a function prototype for the calc\_read() function:
+WithDecl节点保存声明的变量的名称。首先，为calc\_read()函数创建一个函数原型:
 
 \begin{cpp}
     virtual void visit(WithDecl &Node) override {
@@ -218,7 +217,7 @@ A WithDecl node holds the names of the declared variables. First, we create a fu
 \end{cpp}
 
 \item
-The method loops through the variable names:
+该方法循环遍历变量名:
 
 \begin{cpp}
         for (auto I = Node.begin(), E = Node.end(); I != E;
@@ -226,7 +225,7 @@ The method loops through the variable names:
 \end{cpp}
 
 \item
-For each variable, a string with a variable name is created:
+对于每个变量，创建一个带有变量名的字符串:
 
 \begin{cpp}
         StringRef Var = *I;
@@ -240,7 +239,7 @@ For each variable, a string with a variable name is created:
 \end{cpp}
 
 \item
-Then the IR code to call the calc\_read() function is created. The string created in the previous step is passed as a parameter:
+创建调用calc\_read()函数的IR代码，在上一步中创建的字符串作为参数传递:
 
 \begin{cpp}
         CallInst *Call =
@@ -248,7 +247,7 @@ Then the IR code to call the calc\_read() function is created. The string create
 \end{cpp}
 
 \item
-The returned value is stored in the mapNames map for later use:
+返回值存储在mapNames映射中供以后使用:
 
 \begin{cpp}
         nameMap[Var] = Call;
@@ -256,7 +255,7 @@ The returned value is stored in the mapNames map for later use:
 \end{cpp}
 
 \item
-The tree traversal continues with the expression:
+树的遍历将继续使用下面的表达式:
 
 \begin{cpp}
     Node.getExpr()->accept(*this);
@@ -264,7 +263,7 @@ The tree traversal continues with the expression:
 \end{cpp}
 
 \item
-A Factor node is either a variable name or a number. For a variable name, the value is looked up in the mapNames map. For a number, the value is converted to an integer and turned into a constant value:
+Factor节点可以是变量名，也可以是数字。对于变量名，将在mapNames映射中查找该值。对于数字，将值转换为整数并转换为常数值:
 
 \begin{cpp}
 virtual void visit(Factor &Node) override {
@@ -279,7 +278,7 @@ virtual void visit(Factor &Node) override {
 \end{cpp}
 
 \item
-And last, for a BinaryOp node, the right calculation operation must be used:
+最后，对于BinaryOp节点，必须使用正确的计算操作:
 
 \begin{cpp}
 virtual void visit(BinaryOp &Node) override {
@@ -303,7 +302,7 @@ virtual void visit(BinaryOp &Node) override {
 \end{cpp}
 
 \item
-With this, the visitor class is complete. The compile() method creates the global context and the module, runs the tree traversal, and dumps the generated IR to the console:
+至此，访问者类就完成了。compile()方法创建全局上下文和模块，运行树遍历，并将生成的IR转储到控制台:
 
 \begin{cpp}
 void CodeGen::compile(AST *Tree) {
@@ -317,15 +316,15 @@ void CodeGen::compile(AST *Tree) {
 
 \end{enumerate}
 
-We now have implemented the frontend of the compiler, from reading the source up to generating the IR. Of course, all these components must work together on user input, which is the task of the compiler driver. We also need to implement the functions needed at runtime. Both are topics of the next section.
+现在已经实现了编译器的前端，从读取源代码到生成IR。当然，所有这些组件必须在用户输入时一起工作，这是编译器驱动程序的任务，还需要实现运行时所需的函数。这两个都是下一节的主题。
 
-\mySubsubsection{2.6.3.}{The missing pieces – the driver and the runtime library}
+\mySubsubsection{2.6.3.}{缺失的部分——驱动程序和运行时库}
 
-All the phases from the previous sections are glued together by the Calc.cpp driver, which we implement as follows: a parameter for the input expression is declared, LLVM is initialized, and all the phases from the previous sections are called:
+前几节中的所有阶段都由Calc.cpp驱动程序粘合在一起，实现如下:声明输入表达式的参数，初始化LLVM，并调用前几节中的所有代码:
 
 \begin{enumerate}
 \item
-First, we include the required header files:
+首先，包含所需的头文件:
 
 \begin{cpp}
 #include "CodeGen.h"
@@ -337,7 +336,7 @@ First, we include the required header files:
 \end{cpp}
 
 \item
-LLVM comes with its own system for declaring command-line options. You only need to declare a static variable for each option you need. In doing so, the option is registered with a global command line parser. The advantage of this approach is that each component can add command-line options when needed. We declare an option for the input expression:
+LLVM自带声明命令行选项的系统，只需要为需要的每个选项声明一个静态变量。在此过程中，该选项会注册到一个全局命令行解析器中。这种方法的优点是，每个组件都可以在需要时添加命令行选项。我们为输入表达式声明了一个选项:
 
 \begin{cpp}
 static llvm::cl::opt<std::string>
@@ -347,7 +346,7 @@ static llvm::cl::opt<std::string>
 \end{cpp}
 
 \item
-Inside the main() function, the LLVM libraries are initialized first. You need to call the ParseCommandLineOptions() function to handle the options given on the command line. This also handles the printing of help information. In the event of an error, this method exits the application:
+main()函数中，首先初始化LLVM库。需要ParseCommandLineOptions()来处理命令行上给出的选项。这还处理帮助信息的打印。若发生错误，此方法将退出应用程序:
 
 \begin{cpp}
 int main(int argc, const char **argv) {
@@ -357,7 +356,7 @@ int main(int argc, const char **argv) {
 \end{cpp}
 
 \item
-Next, we call the lexer and the parser. After the syntactical analysis, we check whether any errors occurred. If this is the case, then we exit the compiler with a return code indicating a failure:
+接下来，调用词法分析器和解析器。在语法分析之后，检查是否发生了任何错误。若是这种情况，则退出编译器，并返回一个表示失败的错误码:
 
 \begin{cpp}
     Lexer Lex(Input);
@@ -370,7 +369,7 @@ Next, we call the lexer and the parser. After the syntactical analysis, we check
 \end{cpp}
 
 \item
-And we do the same if there was a semantic error:
+若有语义错误，也会这样做:
 
 \begin{cpp}
     Sema Semantic;
@@ -381,7 +380,7 @@ And we do the same if there was a semantic error:
 \end{cpp}
 
 \item
-As the last step in the driver, the code generator is called:
+作为驱动程序的最后一步，将调用代码生成器:
 
 \begin{cpp}
     CodeGen CodeGenerator;
@@ -392,9 +391,9 @@ As the last step in the driver, the code generator is called:
 
 \end{enumerate}
 
-Now we have successfully created some IR code for the user input. We delegate the object code generation to the LLVM llc static compiler, so this finishes the implementation of our compiler. We link all the components together to create the calc application.
+现在，已经成功地为用户输入创建了一些IR代码。将目标代码生成委托给LLVM llc静态编译器，这样就完成了编译器的实现。我们将所有组件链接在一起以创建calc应用程序。
 
-The runtime library consists of a single file, rtcalc.c. It has the implementation for the calc\_ read() and calc\_write() functions, written in C:
+运行时库由一个文件rtcalc.c组成，实现了calc\_read()和calc\_write()函数，用C语言实现:
 
 \begin{cpp}
 #include <stdio.h>
@@ -406,7 +405,7 @@ void calc_write(int v)
 }
 \end{cpp}
 
-calc\_write() only writes the result value to the terminal:
+calc\_write()只将结果值写入终端:
 
 \begin{cpp}
 int calc_read(char *s)
@@ -424,17 +423,17 @@ int calc_read(char *s)
 }
 \end{cpp}
 
-calc\_read() reads an integer number from the terminal. Nothing prevents the user from entering letters or other characters, so we must carefully check the input. If the input is not a number, we exit the application. A more complex approach would be to make the user aware of the problem and ask for a number again.
+calc\_read()从终端读取一个整数。没有什么可以阻止用户输入字母或其他字符，所以必须仔细检查输入。若输入不是数字，则退出应用程序。更复杂的方法是让用户意识到问题，并再次要求提供一个数字。
 
-The next step is to build and try out our compiler, calc, which is an application that creates IR from an expression.
+下一步是构建并试用我们的编译器calc，这是一个从表达式创建IR的应用程序。
 
-\mySubsubsection{2.6.3.1}{Building and testing the calc application}
+\mySubsubsection{2.6.3.1}{构建和测试calc应用程序}
 
-In order to build calc, we first need to create a new CMakeLists.txt file outside of the original src directory that contains all of the source file implementation:
+为了构建calc，首先需要在原始src目录之外创建一个新的CMakeLists.txt文件，其中包含所有源文件实现:
 
 \begin{enumerate}
 \item
-First, we set the minimum required CMake version to the number required by LLVM, and give the project the name calc:
+首先，将最低所需的CMake版本设置为LLVM所需的值，并将项目名称命名为calc:
 
 \begin{cmake}
 cmake_minimum_required (VERSION 3.20.0)
@@ -442,7 +441,7 @@ project ("calc")
 \end{cmake}
 
 \item
-Next, the LLVM package needs to be loaded, and we add the directory of the CMake modules provided by LLVM to the search path:
+接下来，需要加载LLVM包，将LLVM提供的CMake模块目录添加到搜索路径中:
 
 \begin{cmake}
 find_package(LLVM REQUIRED CONFIG)
@@ -451,7 +450,7 @@ list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR})
 \end{cmake}
 
 \item
-We also need to add the definitions and the include path from LLVM. The used LLVM components are mapped to the library names with a function call:
+还需要从LLVM中添加定义和包含路径，使用的LLVM组件通过函数调用映射到库名:
 
 \begin{cmake}
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
@@ -461,7 +460,7 @@ llvm_map_components_to_libnames(llvm_libs Core)
 \end{cmake}
 
 \item
-Lastly, we indicate that we need to include the src subdirectory in our build, as this is where all of the C++ implementation that was done within this chapter resides:
+最后，还需要在构建中包含src子目录，因为这是本章中完成的所有C++实现的所在:
 
 \begin{cmake}
 add_subdirectory ("src")
@@ -469,7 +468,7 @@ add_subdirectory ("src")
 
 \end{enumerate}
 
-There also needs to be a new CMakeLists.txt file inside of the src subdirectory. This CMake description inside the src directory appears as follows. We simply define the name of the executable, called calc, then list the source files to compile and the library to link against:
+还需要在src子目录中添加一个新的CMakeLists.txt文件。src目录中的CMake描述如下所示，只需定义可执行文件的名称calc，然后列出要编译的源文件和要链接的库:
 
 \begin{cmake}
 add_executable (calc
@@ -477,7 +476,7 @@ add_executable (calc
 target_link_libraries(calc PRIVATE ${llvm_libs})
 \end{cmake}
 
-Finally, we can begin building the calc application. Outside of the src directory, we create a new build directory and change into it. Afterwards, we can run the CMake and build invocation as follows:
+最后，可以开始构建calc应用程序。在src目录之外，创建一个新的构建目录并对其进行修改。之后，就可以运行CMake配置和构建调用，如下所示:
 
 \begin{shell}
 $ cmake -GNinja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
@@ -485,10 +484,9 @@ $ cmake -GNinja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 $ ninja
 \end{shell}
 
-We now should have a newly built, functional calc application that can generate LLVM IR code.
-This can further be used with llc, which is the LLVM static backend compiler, to compile the IR code into an object file.
+我们现在有了一个新构建的、功能性的calc应用程序，可以生成LLVM IR代码。这可以进一步与llc(LLVM静态后端编译器)一起使用，将IR代码编译成目标文件。
 
-You can then use your favorite C compiler to link against the small runtime library. On Unix on X86, you can type the following:
+然后，可以使用喜欢的C编译器来链接小型运行时库。在Unix-x86上，可以键入以下命令:
 
 \begin{shell}
 $ calc "with a: a*3" | llc –filetype=obj -relocation-model=pic –o=expr.o
@@ -498,9 +496,9 @@ Enter a value for a: 4
 The result is: 12
 \end{shell}
 
-On other Unix platforms such as AArch64 or PowerPC, you have to remove the -relocationmodel=pic option.
+在其他Unix平台(如AArch64或PowerPC)上，需要删除-relocationmodel=pic选项。
 
-On Windows, you need to use the cl compiler as follows:
+在Windows上，需要使用cl编译器，如下所示:
 
 \begin{shell}
 $ calc "with a: a*3" | llc –filetype=obj –o=expr.obj
@@ -510,7 +508,7 @@ Enter a value for a: 4
 The result is: 12
 \end{shell}
 
-You have now created your first LLVM-based compiler! Please take some time to play around with various expressions. Especially check that multiplicative operators are evaluated before additive operators and that using parentheses changes the evaluation order, as we would expect from a basic calculator.
+现在，已经创建了第一个基于llvm的编译器!请花点时间练习不同的表达方式。特别要检查乘法运算符是否在加法运算符之前求值，以及使用括号是否改变了求值顺序，如我们对四则运算器期望的那样。
 
 
 

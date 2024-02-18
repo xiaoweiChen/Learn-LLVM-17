@@ -1,7 +1,6 @@
-Real programming brings up more challenges than the simple calc language from the previous chapter.
-To have a look at the details, we will be using a tiny subset of Modula-2 in this and the following chapters. Modula-2 is well-designed and optionally supports generics and object-orientated programming (OOP). However, we are not going to create a complete Modula-2 compiler in this book. Therefore, we will call the subset tinylang.
+与前一章中简单的calc语言相比，真正的编程面临更多挑战。为了了解其中的细节，我们将在本章和后续章节中使用Modula-2的一小部分。Modula-2设计良好，可选支持泛型和面向对象编程(OOP)。然而，在本书中，我们并不打算创建一个完整的Modula-2编译器。因此，我们将这个子集称为tinylang。
 
-Let’s begin with an example of what a program in tinylang looks like. The following function computes the greatest common divisor using the Euclidean algorithm:
+让我们从一个例子开始，看看tinylang编写的程序是什么样的。下面的函数使用欧几里得算法计算最大公约数:
 
 \begin{shell}
 MODULE Gcd;
@@ -23,7 +22,7 @@ END GCD;
 END Gcd.
 \end{shell}
 
-Now that we have a feeling for how a program in the language looks, let’s take a quick tour of the tinylang subset’s grammar as used in this chapter. In the next few sections, we’ll use this grammar to derive the lexer and the parser from it:
+现在我们对使用这种语言编写的程序有了大致的了解，下面来快速了解一下tinylang子集的语法。在接下来的几节中，我们将使用这种语法来派生词法分析器和解析器:
 
 \begin{shell}
 compilationUnit
@@ -33,7 +32,7 @@ Block
     : ( declaration )* ( "BEGIN" statementSequence )? "END" ;
 \end{shell}
 
-A compilation unit in Modula-2 begins with the MODULE keyword, followed by the name of the module. The content of a module can have a list of imported modules, declarations, and a block containing statements that run at initialization time:
+Modula-2中的编译单元以MODULE关键字开头，后面跟着模块的名称。模块的内容可以包含一个导入模块的列表、声明，以及一个包含在初始化时运行的语句的块:
 
 \begin{shell}
 declaration
@@ -42,13 +41,13 @@ declaration
     | procedureDeclaration ";" ;
 \end{shell}
 
-A declaration introduces constants, variables, and procedures. The declaration of constants is prefixed with the CONST keyword. Similarly, variable declarations begin with the VAR keyword. The declaration of a constant is very simple:
+声明引入了常量、变量和过程。常量的声明以CONST关键字作为前缀。类似地，变量声明以VAR关键字开头。常量的声明非常简单:
 
 \begin{shell}
 constantDeclaration : identifier "=" expression ;
 \end{shell}
 
-The identifier is the name of the constant. The value is derived from an expression, which must be computable at compile time. The declaration of variables is a bit more complex:
+标识符的名称不变。该值是从一个表达式派生的，该表达式必须在编译时可计算。变量的声明会有点复杂:
 
 \begin{shell}
 variableDeclaration : identList ":" qualident ;
@@ -56,7 +55,7 @@ qualident : identifier ( "." identifier )* ;
 identList : identifier ( "," identifier)* ;
 \end{shell}
 
-To be able to declare more than one variable in one go, a list of identifiers is used. The type name can potentially come from another module and is prefixed by the module name in this case. This is called a qualified identifier. A procedure requires the most details:
+为了能够一次声明多个变量，需要使用标识符列表。类型名可能来自另一个模块，在本例中以模块名作为前缀，这称为限定标识符(qualified identifier)。一个程序需要很多细节:
 
 \begin{shell}
 procedureDeclaration
@@ -69,14 +68,14 @@ formalParameterList
 formalParameter : ( "VAR" )? identList ":" qualident ;
 \end{shell}
 
-The preceding code shows how constants, variables, and procedures are declared. Procedures can have parameters and a return type. Normal parameters are passed as values, and VAR parameters are passed by reference. The other part missing from the block rule is statementSequence, which is a list of single statements:
+前面的代码展示了如何常量、变量声明和过程。过程可以有参数和返回类型，普通参数以值的形式传递，VAR参数以引用的形式传递。块规则中缺少的另一部分是statementSequence，它是一个单条语句的列表:
 
 \begin{shell}
 statementSequence
     : statement ( ";" statement )* ;
 \end{shell}
 
-A statement is delimited by a semicolon if it is followed by another statement. Again, only a subset of the Modula-2 statements is supported:
+若语句后面跟着另一个语句，则用分号分隔。同样，只支持Modula-2语句的子集:
 
 \begin{shell}
 statement
@@ -84,7 +83,7 @@ statement
     | ifStatement | whileStatement | "RETURN" ( expression )? ;
 \end{shell}
 
-The first part of this rule describes an assignment or a procedure call. A qualified identifier followed by := is an assignment. If it is followed by (, then it is a procedure call. The other statements are the usual control statements:
+该规则的第一部分描述了一个赋值或过程调用。限定标识符后面跟:=是赋值操作。若后面跟着(，那么它就是一个过程调用。其他语句是常见的控制语句:
 
 \begin{shell}
 ifStatement
@@ -92,14 +91,14 @@ ifStatement
         ( "ELSE" statementSequence )? "END" ;
 \end{shell}
 
-The IF statement also has a simplified syntax as it can only have a single ELSE block. With that statement, we can conditionally guard a statement:
+IF语句也有简化的语法，因为它只能有一个ELSE块。使用该语句，可以有条件地保护语句:
 
 \begin{shell}
 whileStatement
     : "WHILE" expression "DO" statementSequence "END" ;
 \end{shell}
 
-The WHILE statement describes a loop that’s guarded by a condition. Together with the IF statement, this enables us to write simple algorithms in tinylang. Finally, the definition of an expression is missing:
+WHILE语句描述了一个由条件保护的循环。与IF语句一起，能够用tinylang编写简单的算法。最后，还缺少了表达式的定义:
 
 \begin{shell}
 expList
@@ -121,11 +120,11 @@ factor
     | qualident ( "(" ( expList )? ")" )? ;
 \end{shell}
 
-The expression syntax is very similar to that of calc in the previous chapter. Only the INTEGER and BOOLEAN data types are supported.
+表达式语法与前一章中的calc非常相似。只支持INTEGER和BOOLEAN数据类型。
 
-Additionally, the identifier and integer\_literal tokens are used. An identifier is a name that begins with a letter or an underscore, followed by letters, digits, and underscores. An integer literal is either a sequence of decimal digits or a sequence of hexadecimal digits, followed by the letter H.
+此外，还使用了标识符和integer\_literal标记。标识符是以字母或下划线开头，后面跟着字母、数字和下划线的名称。整数字面值是一个十进制数字序列或后跟字母H的十六进制数字序列。
 
-These are already a lot of rules, and we’re only covering a part of Modula-2! Nevertheless, it is possible to write small applications in this subset. Let’s implement a compiler for tinylang!
+这些规则已经有很多了，我们只介绍Modula-2的一部分!不过，也可以在这个子集中编写小型应用程序。让我们实现一个tinylang编译器吧!
 
 
 

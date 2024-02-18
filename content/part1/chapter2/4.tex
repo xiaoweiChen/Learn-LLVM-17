@@ -1,11 +1,10 @@
-The syntactical analysis is done by the parser, which we will implement next. The base of this is the grammar and the lexer from the previous sections. The result of the parsing process is a dynamic data structure called an abstract syntax tree (AST). The AST is a very condensed representation of the input and is well-suited for semantic analysis.
+语法分析由解析器完成，接下来我们将实现解析器。它的基础是前面小节中的语法和词法分析器。解析过程的结果是一个动态数据结构，称为抽象语法树(AST)。AST是输入的一个非常紧凑的表示，非常适合语义分析。
 
-First, we will implement the parser, and after that, we will have a look at the parsing process within the AST.
+首先，将实现解析器，再了解AST的解析过程。
 
+\mySubsubsection{2.4.1.}{手写解析器}
 
-\mySubsubsection{2.4.1.}{A hand-written parser}
-
-The interface of the parser is defined in the header file, Parser.h. It begins with some include declarations:
+解析器的接口在头文件Parser.h中定义，以一些include声明开始:
 
 \begin{cpp}
 #ifndef PARSER_H
@@ -16,7 +15,7 @@ The interface of the parser is defined in the header file, Parser.h. It begins w
 #include "llvm/Support/raw_ostream.h"
 \end{cpp}
 
-The AST.h header file declares the interface for the AST and is shown later. The coding guidelines from LLVM forbid the use of the <iostream> library, therefore, the header of the equivalent LLVM functionality is included. It is needed to emit an error message:
+AST.h头文件声明AST的接口，将在后面显示。LLVM的编码指南禁止使用<iostream>库，所以包含了等效LLVM功能的头文件。这里需要发出一个错误消息:
 
 \begin{enumerate}
 \item
@@ -29,10 +28,10 @@ class Parser {
     bool HasError;
 \end{cpp}
 
-Lex and Tok are instances of the classes from the previous section. Tok stores the next token (the look-ahead) and Lex is used to retrieve the next token from the input. The HasError flag indicates whether an error was detected.
+Lex和Tok是前一节中类的实例。Tok存储下一个标记(预检)，Lex用于从输入中检索下一个令牌。HasError标志表示是否检测到错误。
 
 \item
-A couple of methods deal with the token:
+有几个方法处理这个标记:
 
 \begin{cpp}
     void error() {
@@ -59,10 +58,10 @@ A couple of methods deal with the token:
     }
 \end{cpp}
 
-advance() retrieves the next token from the lexer. expect() tests whether the look-ahead has the expected kind and emits an error message if not. Finally, consume() retrieves the next token if the look-ahead has the expected kind. If an error message is emitted, the HasError flag is set to true.
+advance()从词法分析器检索下一个标记。Expect()测试预检是否具有预期的类型，否则发出错误消息。最后，若预检具有预期的类型，则consume()将检索下一个标记。若发出错误消息，则将HasError标志设置为true。
 
 \item
-For each non-terminal of the grammar, a method to parse the rule is declared:
+对于语法的每个非终结符，声明一个解析规则的方法:
 
 \begin{cpp}
     AST *parseCalc();
@@ -72,11 +71,11 @@ For each non-terminal of the grammar, a method to parse the rule is declared:
 \end{cpp}
 
 \begin{myNotic}{Note}
-There are no methods for ident and number. Those rules only return the token and are replaced by the corresponding token.
+没有标识和编号的方法。这些规则只返回标记，并用相应的标记替换。
 \end{myNotic}
 
 \item
-The public interface follows. The constructor initializes all members and retrieves the first token from the lexer:
+接下来是公共接口。构造函数初始化所有成员，并从词法分析器获取第一个标记:
 
 \begin{cpp}
 public:
@@ -86,14 +85,14 @@ public:
 \end{cpp}
 
 \item
-A function is required to get the value of the error flag:
+需要一个函数来获取错误标志的值:
 
 \begin{cpp}
     bool hasError() { return HasError; }
 \end{cpp}
 
 \item
-And finally, the parse() method is the main entry point into parsing:
+最后，parse()方法是解析的主要入口:
 
 \begin{cpp}
     AST *parse();
@@ -104,13 +103,14 @@ And finally, the parse() method is the main entry point into parsing:
 
 \end{enumerate}
 
-\mySubsubsection{2.4.1.1}{Parser implementation}
+\mySubsubsection{2.4.1.1}{解析器的实现}
 
-Let’s dive into the implementation of the parser!
+让我们深入了解解析器的实现!
 
 \begin{enumerate}
 \item
-Our implementation in the Parser.cpp file and begins with the parse() method:
+在Parser.cpp文件中的实现，并以parse()方法开始:
+
 \begin{cpp}
 #include "Parser.h"
 
@@ -121,17 +121,17 @@ AST *Parser::parse() {
 }
 \end{cpp}
 
-The main point of the parse() method is that the whole input has been consumed. Do you remember that the parsing example in the first section added a special symbol to denote the end of the input? We check it here.
+parse()的要点是使用了整个输入。还记得第一节中的解析示例种，添加了一个特殊符号来表示输入的结束吗?需要在这里进行检查。
 
 \item
-The parseCalc() method implements the corresponding rule. It’s worth having a closer look at this method as the other parsing methods follow the same patterns. Let’s recall the rule from the first section:
+parseCalc()实现相应的规则。有必要仔细研究一下这个方法，因为其他解析方法也遵循相同的模式。回顾一下第一节的规则:
 
 \begin{cpp}
 calc : ("with" ident ("," ident)* ":")? expr ;
 \end{cpp}
 
 \item
-The method begins with declaring some local variables:
+该方法首先声明一些局部变量:
 
 \begin{cpp}
 AST *Parser::parseCalc() {
@@ -140,7 +140,7 @@ AST *Parser::parseCalc() {
 \end{cpp}
 
 \item
-The first decision to be made is whether the optional group must be parsed or not. The group begins with the with token, so we compare the token to this value:
+第一个决定是是否必须解析可选组。组以with标记开始，将标记与以下值进行比较:
 
 \begin{cpp}
 if (Tok.is(Token::KW_with)) {
@@ -148,7 +148,7 @@ if (Tok.is(Token::KW_with)) {
 \end{cpp}
 
 \item
-Next, we expect an identifier:
+接下来，需要一个标识符:
 
 \begin{cpp}
     if (expect(Token::ident))
@@ -157,10 +157,10 @@ Next, we expect an identifier:
     advance();
 \end{cpp}
 
-If there is an identifier, then we save it in the Vars vector. Otherwise, it is a syntax error, which is handled separately.
+若存在标识符，则将其保存在Vars vector中。否则，就是一个语法错误，将单独处理。
 
 \item
-Next in the grammar follows a repeating group, which parses more identifiers, separated with commas:
+接下来是一个重复组，解析了更多的标识符，并用逗号分隔:
 
 \begin{cpp}
     while (Tok.is(Token::comma)) {
@@ -172,10 +172,10 @@ Next in the grammar follows a repeating group, which parses more identifiers, se
     }
 \end{cpp}
 
-By now, this should not be surprising. The repetition group begins with the token (,). The test for the token becomes the condition of the while loop, implementing zero or more repetition. The identifier inside the loop is treated as before.
+重复组以标记(，)开头，标记的测试成为while循环的条件，实现零或更多次的重复。循环内的标识符和以前一样进行处理。
 
 \item
-Finally, the optional group requires a colon at the end:
+最后，可选组需要在末尾加一个冒号:
 
 \begin{cpp}
     if (consume(Token::colon))
@@ -184,14 +184,14 @@ Finally, the optional group requires a colon at the end:
 \end{cpp}
 
 \item
-Last, the rule for expr must be parsed:
+最后，必须解析expr规则:
 
 \begin{cpp}
     E = parseExpr();
 \end{cpp}
 
 \item
-With this call, the parsing of the rule is finished successfully. The collected information is now used to create the AST node for this rule:
+有了这个调用，规则的解析就完成了。收集到的信息现在用于为该规则创建AST节点:
 
 \begin{cpp}
     if (Vars.empty()) return E;
@@ -199,19 +199,19 @@ With this call, the parsing of the rule is finished successfully. The collected 
 \end{cpp}
 \end{enumerate}
 
-Now only the error handling is missing. Detecting a syntax error is easy but recovering from it is surprisingly complicated. Here, a simple approach called panic mode is used.
+现在只缺少错误处理。检测语法错误很容易，但从中恢复却异常复杂。这里使用了一种简单的方法，称为恐慌模式。
 
-In panic mode, tokens are deleted from the token stream until one is found that the parser can use to continue its work. Most programming languages have symbols that denote an end, e.g., in C++, a ; (end of a statement) or a \} (end of a block). Such tokens are good candidates to look for.
+恐慌模式下，标记会从标记流中删除，直到找到一个解析器可以使用它继续工作。大多数编程语言都有表示结束的符号，例如：C++中，a;(语句结束)或\}(语句块结束)。这样的标记是很好的候选对象。
 
-On the other hand, the error can be that the symbol we are looking for is missing. In this case, probably a lot of tokens are deleted before the parser can continue. This is not as bad as it sounds. Today, it is more important that a compiler is fast. In the event of an error, the developer looks at the first error message, fixes it, and restarts the compiler. This is quite different from using punch cards, where it was important to get as many error messages as possible, as the next run of the compiler would possibly be only on the next day.
+另一方面，错误可能是正在寻找的符号丢失了。这时，可能在解析器继续之前删除了许多标记。这并不像听起来那么糟糕，现在更重要的是编译器的速度。若出现错误，开发人员查看第一条错误消息，修复它，然后重新启动编译器。这与使用打孔卡完全不同，打孔卡非常重要的是获取尽可能多的错误消息，因为编译器的下一次运行可能要在第二天才可以进行。
 
-\mySubsubsection{2.4.1.2}{Error handling}
+\mySubsubsection{2.4.1.2}{错误处理}
 
-Instead of using some arbitrary tokens to look for, another set of tokens is used here. For each non-terminal, there is a set of tokens that can follow this non-terminal in a rule:
+这里没有使用一些标记来查找，而是使用了另一组标记。对于每个非终结符，在规则中都有一组标记可以跟随该非终结符:
 
 \begin{enumerate}
 \item
-In the case of calc, only the end of input follows this non-terminal. The implementation is trivial:
+在calc中，只有输入的结尾跟在这个非终结符后面。实现很简单:
 
 \begin{cpp}
 _error:
@@ -222,7 +222,7 @@ _error:
 \end{cpp}
 
 \item
-The other parsing methods are similarly constructed. parseExpr() is the translation of the rule for expr:
+其他解析方法的构造也类似。parseExpr()是对expr规则的翻译:
 
 \begin{cpp}
 Expr *Parser ::parseExpr() {
@@ -239,10 +239,10 @@ Expr *Parser ::parseExpr() {
 }
 \end{cpp}
 
-The repeated group inside the rule is translated as a while loop. Note how the use of the isOneOf() method simplifies the check for several tokens.
+规则中的重复组可转换为while循环。注意，使用isOneOf()方法简化了对多个标记的检查。
 
 \item
-The coding of the term rule looks the same:
+术语规则的编码看起来都一样:
 
 \begin{cpp}
 Expr *Parser::parseTerm() {
@@ -259,10 +259,10 @@ Expr *Parser::parseTerm() {
 }
 \end{cpp}
 
-This method is strikingly similar to parseExpr(), and you may be tempted to combine them into one. In a grammar, it is possible to have one rule dealing with multiplicative and additive operators. The advantage of using two rules instead is that then the precedence of the operators fits well with the mathematical order of evaluation. If you combine both rules, then you need to figure out the evaluation order somewhere else.
+此方法与parseExpr()非常相似，有的读者可能想将它们合并为一个方法。在语法中，可以使用一个规则处理乘法和加性操作符。使用两个规则的优点是，操作符的优先级与求值的数学顺序非常吻合。若结合了这两个规则，那么需要在其他地方弄清楚求值顺序。
 
 \item
-Last, you need to implement the rule for factor:
+最后，需要实现解析factor的规则:
 
 \begin{cpp}
 Expr *Parser::parseFactor() {
@@ -273,10 +273,10 @@ Expr *Parser::parseFactor() {
         advance(); break;
 \end{cpp}
 
-Instead of using a chain of if and else if statements, a switch statement seems more suitable here, because each alternative begins with just one token. In general, you should think about which translation patterns you like to use. If you later need to change the parsing methods, then it is an advantage if not every method has a different way of implementing a grammar rule.
+这里不使用if和else if语句链，而使用switch语句，因为每个选项都只以一个标记开头。一般来说，应该考虑喜欢使用哪种翻译模式。若以后需要更改解析方法，那么并不是每个方法都有不同的实现语法规则的方式，这就很方便修改了。
 
 \item
-If you use a switch statement, then error handling happens in the default case:
+若使用switch语句，那么错误处理将在默认情况下发生:
 
 \begin{cpp}
     case Token::ident:
@@ -290,10 +290,10 @@ If you use a switch statement, then error handling happens in the default case:
         if (!Res) error();
 \end{cpp}
 
-We guard emitting the error message here because of the fall-through.
+由于失败，需要在这里避免发出错误消息。
 
 \item
-If there was a syntax error in the parenthesis’s expression, then an error message was already emitted. The guard prevents a second error message:
+若括号表达式中存在语法错误，则已经发出错误消息。这个守卫可以防止第二个错误消息:
 
 \begin{cpp}
         while (!Tok.isOneOf(Token::r_paren, Token::star,
@@ -307,23 +307,23 @@ If there was a syntax error in the parenthesis’s expression, then an error mes
 
 \end{enumerate}
 
-That was easy, wasn’t it? Once you have memorized the patterns used, it is almost tedious work to code the parser based on the grammar rules. This type of parser is called a recursive descent parser.
+这很简单，不是吗?记住使用的模式之后，根据语法规则编写解析器几乎是一项乏味的工作。这种类型的解析器称为递归下降解析器。
 
-\begin{myNotic}{A recursive descent parser can’t be constructed from every grammar}
-A grammar must satisfy certain conditions to be suitable for the construction of a recursive descent parser. This class of grammar is called LL(1). In fact, most grammar that you can find on the internet does not belong to this class of grammar. Most books about the theory of compiler constructions explain the reason for this. The classic book on this topic is the so-called dragon book, Compilers: Principles, Techniques, and Tools by Aho, Lam, Sethi, and Ullman.
+\begin{myNotic}{递归下降解析器不能从语法中构造出来}
+语法必须满足某些条件才能适合于构造递归下降解析器，这类语法称为LL(1)。事实上，能在网上能找到的大多数语法都不属于这类语法。大多数关于编译器结构理论的书籍都解释了这一点的原因。关于这个话题的经典书籍是所谓的“龙书”——《编译器:原则，技术和工具》，由Aho, Lam, Sethi和Ullman编写。
 \end{myNotic}
 
-\mySubsubsection{2.4.2.}{The abstract syntax tree}
+\mySubsubsection{2.4.2.}{抽象语法树}
 
-The result of the parsing process is the AST. The AST is another compact representation of the input program. It captures the essential information. Many programming languages have symbols that are needed as separators but do not carry further meaning. For example, in C++, a semicolon; denotes the end of a single statement. Of course, this information is important for the parser. As soon as we turn the statement into an in-memory representation, the semicolon is not important anymore and can be dropped.
+解析过程的结果是AST，AST是输入程序的另一种紧凑表示，捕获了基本信息。许多编程语言都有作为分隔符的符号，但这些符号没有进一步的含义。例如：在C++中，分号;表示单个语句的结束，这些信息对解析器很重要。当将语句转换为内存中的表示形式后，分号就不再重要了，可以删除了。
 
-If you look at the first rule of the example expression language, then it is clear that the with keyword, the comma (,), and the colon (:) are not important for the meaning of a program. What is important is the list of declared variables, which could be used in the expression. The result is that only a couple of classes are required to record the information: Factor holds a number or an identifier, BinaryOp holds the arithmetic operator and the left and right sides of an expression, and WithDecl stores the list of declared variables and the expression. AST and Expr are only used to create a common class hierarchy.
+看一下示例表达式语言的第一条规则，with关键字、逗号(，)和冒号(:)对于程序的含义并不重要。重要的是声明的变量列表，可以在表达式中使用。结果是只需要两个类来记录信息:Factor保存一个数字或标识符，BinaryOp保存算术运算符和表达式的左右两边，WithDecl存储声明的变量和表达式的列表。AST和Expr仅用于创建公共类层次结构。
 
-In addition to the information from the parsed input, tree traversal using the visitor pattern is also supported. It’s all in AST.h header file:
+除了来自解析输入的信息外，还支持使用访问者模式对树进行遍历。这都在AST.h头文件中有所体现:
 
 \begin{enumerate}
 \item
-It begins with the visitor interface:
+开始于访问者接口:
 
 \begin{cpp}
 #ifndef AST_H
@@ -348,10 +348,10 @@ class ASTVisitor {
 };
 \end{cpp}
 
-The visitor pattern needs to know each class to visit. Because each class also refers to the visitor, we declare all classes at the top of the file. Please note that the visit() methods for AST and Expr have a default implementation, which does nothing.
+访问者模式需要知道要访问的每个类。因为每个类也引用访问者，所以在文件的顶部声明所有类。请注意，AST和Expr的visit()方法有一个默认实现，但不做任何事情。
 
 \item
-The AST class is the root of the hierarchy:
+AST类是层次结构的根:
 
 \begin{cpp}
 class AST {
@@ -362,7 +362,7 @@ public:
 \end{cpp}
 
 \item
-Similarly, Expr is the root for AST classes related to expressions:
+类似地，Expr是与表达式相关的AST类的根:
 
 \begin{cpp}
 class Expr : public AST {
@@ -372,7 +372,7 @@ public:
 \end{cpp}
 
 \item
-The Factor class stores a number or the name of a variable:
+Factor类存储一个数字或一个变量的名称:
 
 \begin{cpp}
 class Factor : public Expr {
@@ -394,10 +394,10 @@ public:
 };
 \end{cpp}
 
-In this example, numbers and variables are treated almost identically, therefore, we decided to create only one AST node class to represent them. The Kind member tells us which of both cases the instances represent. In more complex languages, you usually want to have different AST classes, such as a NumberLiteral class for numbers and a VariableAccess class for a reference to a variable.
+本例中，数字和变量的处理方式几乎相同，所以可以只创建一个AST节点类来表示它们。Kind成员实例代表两种情况中的哪一种。在更复杂的语言中，通常希望使用不同的AST类，例如：用于数字的NumberLiteral类和用于变量引用的VariableAccess类。
 
 \item
-The BinaryOp class holds the data needed for evaluating an expression:
+BinaryOp类保存表达式求值所需的数据:
 
 \begin{cpp}
 class BinaryOp : public Expr {
@@ -421,10 +421,10 @@ public:
 };
 \end{cpp}
 
-In contrast to the parser, the BinaryOp class makes no distinction between multiplicative and additive operators. The precedence of the operators is implicitly available in the tree structure.
+与解析器相反，BinaryOp类不区分乘法运算符和加法运算符。操作符的优先级在树结构中隐式可用。
 
 \item
-And last, the WithDecl class stores the declared variables and the expression:
+最后，WithDecl类存储了声明的变量和表达式:
 
 \begin{cpp}
 class WithDecl : public AST {
@@ -450,4 +450,4 @@ public:
 
 \end{enumerate}
 
-The AST is constructed during parsing. The semantic analysis checks that the tree adheres to the meaning of the language (e.g., that used variables are declared) and possibly augments the tree. After that, the tree is used for code generation.
+AST是在解析过程中构造的。语义分析检查树是否符合语言的含义(例如，使用已声明的变量)，并可能对树进行扩充。之后，树将用于代码生成。

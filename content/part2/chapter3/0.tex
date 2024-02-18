@@ -1,33 +1,33 @@
-As we learned in the previous chapter, a compiler is typically divided into two parts – the frontend and the backend. In this chapter, we will implement the frontend of a programming language – that is, the part that mainly deals with the source language. We will learn about the techniques that realworld compilers use and apply them to our programming languages.
+正如在前一章学到的，编译器通常分为两部分——前端和后端。在本章中，将实现一种编程语言的前端——也就是说，主要处理源语言的部分。我们将学习现实世界的编译器使用的技术，并将其应用到我们的编程语言中。
 
-Our journey will begin with us defining our programming language’s grammar and end with an abstract syntax tree (AST), which will become the base for code generation. You can use this approach for every programming language for which you would like to implement a compiler.
+我们的旅程将从定义编程语言的语法开始，并以抽象语法树(AST)结束，其将成为代码生成的基础。对于想要实现编译器的每种编程语言，都可以使用这种方法。
 
-In this chapter, you will learn about the following:
+在本章中，将了解以下内容:
 
 \begin{itemize}
 \item
-Defining a real programming language, where you will learn about the tinylang language, which is a subset of a real programming language, and for which you will implement a compiler frontend
+定义一个真正的编程语言，将了解tinylang语言，它是真正的编程语言的一个子集，将为它实现一个编译器前端
 
 \item
-Organizing the directory structure of a compiler project
+组织编译器项目的目录结构
 
 \item
-Knowing how to handle multiple input files for the compiler
+了解如何为编译器处理多个输入文件
 
 \item
-The skill of handling user messages and informing them of issues in a pleasant manner
+处理用户信息并以令人愉快的方式通知他们问题的技巧
 
 \item
-Building the lexer using modular pieces
+使用模块化部件构建词法分析器
 
 \item
-Constructing a recursive descent parser from the rules derived from a grammar to perform syntax analysis
+根据从语法导出的规则构造递归下降解析器来执行语法分析
 
 \item
-Performing semantic analysis by creating an AST and analyzing its characteristics
+执行语义分析，通过创建AST并分析其特点
 \end{itemize}
 
-With the skills you’ll acquire in this chapter, you’ll be able to build a compiler frontend for any programming language.
+有了本章的技能，读者们将能够为任何编程语言构建一个编译器前端。
 
 
 

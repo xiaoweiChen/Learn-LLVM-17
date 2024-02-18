@@ -1,8 +1,9 @@
-Since computers became available, thousands of programming languages have been developed. It turns out that all compilers must solve the same tasks and that the implementation of a compiler is best structured according to these tasks. At a high level, there are three components. The frontend turns the source code into an intermediate representation (IR). Then the middle end performs transformations on the IR, with the goal of either improving performance or reducing the size of the code. Finally, the backend produces machine code from the IR. The LLVM core libraries provide a middle end consisting of very sophisticated transformations and backends for all popular platforms.
+自从有了计算机，编程语言就开发了数千种。事实证明，所有编译器都必须解决相同的任务，并且编译器的实现最好根据这些任务进行结构化。总得来说，有三个组成部分。前端将源代码转换为中间表示(IR)，中端在IR上执行转换，其目标是提高性能或减少代码的大小。最后，后端将IR生成为机器码。LLVM核心库为所有主流平台提供了一个由复杂转换和后端组成的中端。
 
-Furthermore, the LLVM core libraries also defines an intermediate representation used as input for the middle end and the backend. This design has the advantage that you only need to care about the frontend for the programming language you want to implement.
-The input for the frontend is the source code, usually a text file. To make sense of it, the frontend first identifies the words of the language, such as numbers and identifiers, which are usually called tokens. This step is performed by the lexer. Next, the syntactical structure formed by the tokens is analyzed. The so-called parser performs this step, and the result is the abstract syntax tree (AST).
+此外，LLVM核心库还定义了一个中间表示，用作中间端和后端的输入。这种设计的优点是，只需要关心编程语言的前端即可。
 
-Last, the frontend needs to check that the rules of the programming language are obeyed, which is done by the semantic analyzer. If no errors were detected, then the AST is transformed into IR and handed over to the middle end.
+前端的输入是源代码，通常是一个文本文件。为了使它更有意义，前端首先标识语言的单词，例如数字和标识符，它们通常称为标记。这一步由词法分析器执行。其次，分析了符号构成的句法结构。所谓的解析器执行这个步骤，结果是生成了抽象语法树(AST)。
 
-In the following sections, we will construct a compiler for an expression language, which produces LLVM IR from its input. The LLVM llc static compiler, representing the backend, can then be used to compile the IR into object code. It all begins with defining the language. Keep in mind that all of the C++ implementation of the files within this chapter will be contained within a directory called src/.
+最后，前端需要由语义分析器检查，代码是否遵守编程语言的规则。若没有检测到错误，则将AST转换为IR，并移交给中端处理。
+
+下面几节中，将为表达式语言构造一个编译器，该编译器将根据其输入生成LLVM IR。LLVM llc静态编译器表示后端，然后将IR编译成目标代码。儿这一切都从定义语言开始的。切记，本章中所有文件的C++实现，都将包含在src/目录中。

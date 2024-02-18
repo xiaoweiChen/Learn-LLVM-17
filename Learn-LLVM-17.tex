@@ -161,17 +161,17 @@
 { \end   { minted } }
 
 \NewDocumentEnvironment { myNotic } { m }
-{ \hspace*{\fill} \\
+{ %\hspace*{\fill} \\
   \begin { tcolorbox } [ breakable,colback = blue!5!white, colframe=blue!55!black ,title={#1}] }
 { \end   { tcolorbox } }
 
 \NewDocumentEnvironment { myTip } { m }
-{ \hspace*{\fill} \\
+{ %\hspace*{\fill} \\
   \begin { tcolorbox } [ breakable,colback = green!5!white, colframe=green!45!black ,title={#1}] }
 { \end   { tcolorbox } }
 
 \NewDocumentEnvironment { myWarning } { m }
-{ \hspace*{\fill} \\
+{ %\hspace*{\fill} \\
   \begin { tcolorbox } [ breakable,colback=red!5!white,colframe=red!55!black,title={#1}] }
 { \end   { tcolorbox } }
 

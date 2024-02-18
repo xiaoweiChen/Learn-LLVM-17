@@ -1,6 +1,6 @@
-Only a centralized definition of messages is missing. In a large piece of software (such as a compiler), you do not want to sprinkle message strings all over the place. If there is a request to change messages or translate them into another language, then you better have them in a central place! A simple approach is that each message has an ID (an enum member), a severity level such as Error or Warning, and a string containing the messages. In your code, you only refer to the message ID.
+只是缺少消息的集中定义。在大型软件(如编译器)中，应该不希望到处散布消息字符串。若有更改消息或将其翻译成另一种语言的请求，那么最好将它们放在一个中心位置!一种简单的方法是，每个消息都有一个ID(枚举成员)、一个严重级别(如Error或Warning)和一个包含消息的字符串。在代码中，只需要引用消息ID即可。
 
-The severity level and message string are only used when the message is printed. These three items (the ID, the security level, and the message) must be managed consistently. The LLVM libraries use the preprocessor to solve this. The data is stored in a file with the .def suffix and is wrapped in a macro name. That file is usually included several times, with different definitions for the macro. The definition is in the include/tinylang/Basic/Diagnostic.def file path and looks as follows:
+严重性级别和消息字符串仅在消息打印时使用，必须一致地管理这三项(ID、安全级别和消息)。LLVM库使用预处理器来解决这个问题，数据存储在一个后缀为.def的文件中，并包装在一个宏名称中。该文件通常包含多次，并对该宏有不同的定义。该定义位于include/tinylang/Basic/Diagnostic.def文件路径中:
 
 \begin{cpp}
 #ifndef DIAG
@@ -12,7 +12,7 @@ DIAG(err_sym_declared, Error, "symbol {0} already declared")
 #undef DIAG
 \end{cpp}
 
-The first macro parameter, ID, is the enumeration label, the second parameter, Level, is the severity, and the third parameter, Msg, is the message text. With this definition at hand, we can define a DiagnosticsEngine class to emit error messages. The interface is in the include/tinylang/ Basic/Diagnostic.h file:
+第一个宏参数ID是枚举标签，第二个参数Level是严重性，第三个参数Msg是消息文本。有了这个定义，我们可以定义一个diagnosticengine类来发出错误消息。接口在include/tinylang/ Basic/Diagnostic.h文件中:
 
 \begin{cpp}
 #ifndef TINYLANG_BASIC_DIAGNOSTIC_H
@@ -29,8 +29,7 @@ The first macro parameter, ID, is the enumeration label, the second parameter, L
 namespace tinylang {
 \end{cpp}
 
-After including the necessary header files, Diagnostic.def can be used to define the enumeration.
-To not pollute the global namespace, a nested namespace called diag is used:
+在包含必要的头文件之后，可以使用Diagnostic.def定义枚举。为了不污染全局命名空间，我们使用了一个叫做diag的嵌套命名空间:
 
 \begin{cpp}
 namespace diag {
@@ -41,7 +40,7 @@ enum {
 } // namespace diag
 \end{cpp}
 
-The DiagnosticsEngine class uses a SourceMgr instance to emit the messages via the report() method. Messages can have parameters. To implement this facility, the variadic-format support provided by LLVM is used. The message text and the severity level are retrieved with the help of the static method. As a bonus, the number of emitted error messages is also counted:
+DiagnosticsEngine类使用SourceMgr实例通过report()方法发送消息。消息可以有参数。为了实现这个功能，我们使用了LLVM提供的可变格式支持。消息文本和严重性级别在静态方法的帮助下检索。作为奖励，还会统计发出的错误消息的数量:
 
 \begin{cpp}
 class DiagnosticsEngine {
@@ -50,8 +49,7 @@ class DiagnosticsEngine {
     getDiagnosticKind(unsigned DiagID);
 \end{cpp}
 
-
-The message string is returned by getDiagnosticText(), while the level is returned by getDiagnosticKind(). Both methods are later implemented in the .cpp file:
+消息字符串由getDiagnosticText()返回，而级别由getDiagnosticKind()返回。这两个方法稍后会在.cpp文件中进行实现:
 
 \begin{cpp}
 SourceMgr &SrcMgr;
@@ -63,8 +61,7 @@ public:
     unsigned nunErrors() { return NumErrors; }
 \end{cpp}
 
-As messages can have a variable number of parameters, the solution in C++ is to use a variadic template.
-Of course, this is also used by the formatv() function provided by LLVM. To get the formatted message, we just need to forward the template parameters:
+由于消息可以具有可变数量的参数，因此C++中的解决方案是使用可变模板。当然，LLVM提供的formatv()函数也会使用这种方法。要获得格式化的消息，只需要转发模板参数即可:
 
 \begin{cpp}
     template <typename... Args>
@@ -84,8 +81,7 @@ Of course, this is also used by the formatv() function provided by LLVM. To get 
 #endif
 \end{cpp}
 
-With that, we have implemented most of the class. Only getDiagnosticText() and getDiagnosticKind()are missing. They are defined in the lib/Basic/Diagnostic.
-cpp file and also make use of the Diagnostic.def file:
+至此，我们已经实现了类的大部分内容，只缺失了getDiagnosticText()和getDiagnosticKind()。它们在lib/Basic/Diagnostic.cpp文件中定义，并使用了Diagnostic.def文件:
 
 \begin{cpp}
 #include "tinylang/Basic/Diagnostic.h"
@@ -99,7 +95,7 @@ const char *DiagnosticText[] = {
 };
 \end{cpp}
 
-As in the header file, the DIAG macro is defined to retrieve the desired part. Here, we define an array that holds the text messages. Therefore, the DIAG macro only returns the Msg part. We use the same approach for the level:
+与头文件中一样，定义DIAG宏来检索所需的部件。这里，定义了一个保存文本消息的数组。因此，DIAG宏只返回Msg部分。我们对于level中使用了相同的方法:
 
 \begin{cpp}
 SourceMgr::DiagKind DiagnosticKind[] = {
@@ -109,7 +105,7 @@ include "tinylang/Basic/Diagnostic.def"
 } // namespace
 \end{cpp}
 
-Not surprisingly, both functions simply index the array to return the desired data:
+毫不奇怪，这两个函数都只是对数组进行索引，并返回所需的数据:
 
 \begin{cpp}
 const char *
@@ -123,7 +119,7 @@ DiagnosticsEngine::getDiagnosticKind(unsigned DiagID) {
 }
 \end{cpp}
 
-The combination of the SourceMgr and DiagnosticsEngine classes provides a good basis for the other components. We’ll use them in the lexer first!
+SourceMgr和DiagnosticsEngine类的组合为其他组件提供了良好的基础。我们将首先在lexer中使用它们!
 
 
 
