@@ -1,8 +1,5 @@
 
-The LLVM code generator takes a module in LLVM IR as input and turns it into object code or assembly
-text. We need to transform the AST representation into IR. To implement an IR code generator, we
-will look at a simple example first and then develop the classes needed for the code generator. The
-complete implementation will be divided into three classes:
+LLVM代码生成器将LLVM IR中的一个模块作为输入，并将其转换为目标代码或汇编文本，需要将AST表示转换为IR。为了实现一个IR代码生成器，将首先看一个简单的例子，然后开发代码生成器所需的类。完整的实现将分为三类:
 
 \begin{itemize}
 \item
@@ -15,15 +12,13 @@ CGModule
 CGProcedure
 \end{itemize}
 
-The CodeGenerator class is the general interface used by the compiler driver. The CGModule
-and CGProcedure classes hold the state required for generating the IR code for a compilation unit
-and a single function.
+CodeGenerator类是编译器驱动程序使用的通用接口，CGModule和CGProcedure类保存为编译单元和单个函数生成IR代码所需的状态。
 
-We’ll begin by looking at the Clang-generated IR.
+我们将从clang生成的IR开始。
 
-\mySubsubsection{4.1.1.}{Understanding the IR code}
+\mySubsubsection{4.1.1.}{理解IR代码}
 
-Before generating the IR code, it’s good to know the main elements of the IR language. In Chapter 2, The Structure of a Compiler, we had a brief look at IR. An easy way to get more knowledge of IR is to study the output from clang. For example, save this C source code, which implements the Euclidean algorithm for calculating the greatest common divisor of two numbers, as gcd.c:
+生成IR代码之前，最好先了解一下IR语言的主要元素。在第2章中，我们简要介绍了IR。获得更多IR知识的一个简单方法是研究clang的输出。例如，保存这个C代码(gcd.c)，其实现了计算两个数的最大公约数的欧几里得算法:
 
 \begin{cpp}
 unsigned gcd(unsigned a, unsigned b) {
@@ -38,17 +33,17 @@ unsigned gcd(unsigned a, unsigned b) {
 }
 \end{cpp}
 
-Then, you can create the gcd.ll IR file by using clang and the following command:
+然后，使用clang创建IR文件(gcd.ll):
 
 \begin{shell}
 $ clang --target=aarch64-linux-gnu -O1 -S -emit-llvm gcd.c
 \end{shell}
 
-The IR code is not target-independent, even if it often looks like it is. The preceding command compiles the source file for an ARM 64-bit CPU on Linux. The -S option instructs clang to output an assembly file, and with the additional specification of -emit-llvm, an IR file is created. The optimization level, -O1, is used to get an easily readable IR code. Clang has many more options, all of which are documented in the command-line argument reference at \url{https://clang.llvm.org/docs/ClangCommandLineReference.html}. Let’s have a look at the generated file and understand how the C source maps to the LLVM IR.
+IR代码与目标有关，说明该命令用于编译Linux下ARM 64位CPU的源文件。-S选项指示clang输出一个程序集文件，通过设置-emit-llvm选项，创建一个IR文件。优化级别-O1，用于获得一个易于阅读的IR代码。Clang有更多的选项，所有这些选项都在\url{https://clang.llvm.org/docs/ClangCommandLineReference.html}的命令行参数引用中进行了记录。来看一下生成的文件，并理解C代码是如何映射到LLVM IR的。
 
-A C file is translated into a module, which holds the functions and the data objects. A function has at least one basic block, and a basic block contains instructions. This hierarchical structure is also reflected in the C++ API. All data elements are typed. Integer types are represented by the letter i, followed by the number of bits. For example, the 64-bit integer type is written as i64. The most basic float types are float and double, denoting the 32-bit and 64-bit IEEE floating-point types. It is also possible to create aggregate types such as vectors, arrays, and structures.
+一个C文件翻译成一个模块，其中包含函数和数据对象。一个函数至少有一个基本块，一个基本块包含指令，这种分层结构也反映在C++ API中。所有数据元素都有类型，整数类型由字母i和位数表示。例如，64位整数类型写为i64。最基本的浮点类型是float和double，分别表示32位和64位IEEE浮点类型。也可以创建聚合类型，如vector、数组和结构体。
 
-Here is what the LLVM IR looks like. At the top of the file, some basic properties are established:
+以下是LLVM IR，在文件的顶部，确定了一些基本属性。
 
 \begin{shell}
 ; ModuleID = 'gcd.c'
@@ -58,43 +53,42 @@ n32:64-S128"
 target triple = "aarch64-unknown-linux-gnu"
 \end{shell}
 
-The first line is a comment informing you about which module identifier was used. In the following line, the filename of the source file is named. With clang, both are the same.
+第一行是一个注释，表面使用了哪个模块标识符。在下一行中，将命名源文件的文件名。对于clang，两者是一样的。
 
-The target datalayout string establishes some basic properties. The different parts are separated by -. The following information is included:
+目标数据布局字符串建立一些基本属性。不同的部分用-号隔开。包括以下信息:
 
 \begin{itemize}
 \item
-A small e means that bytes in memory are stored using the little-endian schema. To specify a big endian, you must use a big E.
+小写e表示内存中的字节使用小端模式存储。要指定大端序，必须使用大写E。
 
 \item
-M: specifies the name mangling that’s applied to symbols. Here, m:e means that ELF name mangling is used.
+M: 指定应用于符号的名称改写。这里，m:e表示使用ELF名称改写。
 
 \item
-The entries in iN:A:P form, such asi8:8:32, specify the alignment of data, given in bits.
-The first number is the alignment required by the ABI, and the second number is the preferred alignment. For bytes (i8), the ABI alignment is 1 byte (8) and the preferred alignment is 4 bytes (32).
+iN:A:P形式，例如i8:8:32，指定了数据的对齐方式，以位表示。第一个数字是ABI要求的对齐方式，第二个数字是首选对齐方式。对于字节(i8)， ABI对齐是1字节(8)，首选对齐是4字节(32)。
 
 \item
-n specifies which native register sizes are available. n32:64 means that 32-bit and 64-bit wide integers are natively supported.
+n指定可用的本机寄存器大小，n32:64表示原生支持32位和64位宽的整数。
 
 \item
-S specifies the alignment of the stack, again in bits. S128 means that the stack maintains a 16-byte alignment.
+S指定了栈的对齐方式，同样以位为单位。S128表示栈保持16字节对齐。
 \end{itemize}
 
 \begin{myNotic}{Note}
-The provided target data layout must match what the backend expects. Its purpose is to communicate the captured information to the target-independent optimization passes. For example, an optimization pass can query the data layout to get the size and alignment of a pointer. However, changing the size of a pointer in the data layout does not change the code generation in the backend.
+所提供的目标数据布局必须与后端期望的匹配，目的是将捕获的信息传递给与目标无关的优化过程。例如，优化过程可以查询数据布局以获得指针的大小和对齐方式。然而，改变数据布局中指针的大小，并不会改变后端代码的生成。
 
-A lot more information is provided with the target data layout. You can find more information in the reference manual at \url{https://llvm.org/docs/LangRef.html#data-layout}.
+目标数据布局提供了更多的信息，可以在\url{https://llvm.org/docs/LangRef.html#data-layout}的参考手册中找到更多信息。
 \end{myNotic}
 
-Last, the target triple string specifies the architecture we are compiling for. This reflects the information we gave on the command line. The triple is a configuration string that usually consists of the CPU architecture, the vendor, and the operating system. More information about the environment is often added. For example, the x86\_64-pc-win32 triple is used for a Windows system running on a 64-bit X86 CPU. x86\_64 is the CPU architecture, pc is a generic vendor, and win32 is the operating system. The parts are connected by a hyphen. A Linux system running on an ARMv8 CPU uses aarch64-unknown-linux-gnu as its triple. aarch64 is the CPU architecture, while the operating system is linux running a gnu environment. There is no real vendor for a Linux-based system, so this part is unknown. Parts that are not known or unimportant for a specific purpose are often omitted: the aarch64-linux-gnu triple describes the same Linux system.
+最后，目标三重字符串指定了我们要编译的架构，这是在命令行上给出的信息。三元组是一个配置字符串，通常由CPU架构、厂商和操作系统组成，通常还会添加更多关于环境的信息。例如，x86\_64-pc-win32三元组用于运行在64位x86 CPU上的Windows系统。x86\_64是CPU架构，pc是通用的供应商，win32是操作系统。各部分用连字符连接。在ARMv8 CPU上运行的Linux系统使用aarch64-unknown-linux-gnu作为它的三元组。aarch64是CPU架构，而操作系统是运行gnu环境的linux。基于linux的系统没有真正的供应商，所以这部分未知。对于特定目的而言，不知道或不重要的部分通常忽略:所以aarch64-linux-gnu和aarch64-unknown-linux-gnu三元组描述了同一个Linux系统。
 
-Next, the gcd function is defined in the IR file:
+接下来，在IR文件中定义gcd函数:
 
 \begin{shell}
 define i32 @gcd(i32 %a, i32 %b) {
 \end{shell}
 
-This resembles the function signature in the C file. The unsigned data type is translated into the 32-bit integer type, i32. The function name is prefixed with @, and the parameter names are prefixed with \%. The body of the function is enclosed in curly braces. The code of the body follows:
+这类似于C文件中的函数签名。无符号数据类型被转换成32位整数类型i32。函数名以@为前缀，参数名以\%为前缀。函数体用大括号括起来，代码如下所示:
 
 \begin{shell}
 entry:
@@ -102,19 +96,19 @@ entry:
     br i1 %cmp, label %return, label %while.body
 \end{shell}
 
-The IR code is organized into so-called basic blocks. A well-formed basic block is a linear sequence of instructions, which begins with an optional label and ends with a terminator instruction. So, each basic block has one entry point and one exit point. LLVM allows malformed basic blocks at construction time. The label of the first basic block is entry. The code in the block is simple: the first instruction compares the \%b parameter against 0. The second instruction branches to the return label if the condition is true and to the while.body label if the condition is false.
+IR代码组织成基本块，一个格式良好的基本块是一个线性指令序列，它以一个可选的标签开始，以一个终止指令结束，所以每个基本块都有一个入口点和一个出口点。LLVM允许在构造时使用畸形的基本块，第一个基本块的标签是entry。代码块中的代码很简单:第一条指令将\%b参数与0进行比较。第二条指令在条件为true时跳转到return标签，然后跳转到while语句。若条件为false，则使用Body标签。
 
-Another characteristic of the IR code is that it is in a static single assignment (SSA) form. The code uses an unlimited number of virtual registers, but each register is only written once. The result of the comparison is assigned to the named virtual register, \%cmp. This register is then used, but it is never written again. Optimizations such as constant propagation and common-sub-expression elimination work very well with the SSA form and all modern compilers are using it.
+IR代码的另一个特点是它采用静态单一赋值(SSA)形式。代码使用无限量的虚拟寄存器，但每个寄存器只写入一次。比较的结果会赋值给指定的虚拟寄存器\%cmp，然后使用这个寄存器，但不再写入。诸如常量传播和公共子表达式消除之类的优化在SSA形式下工作得非常好，所有现代编译器都在使用。
 
 \begin{myTip}{SSA}
-The SSA form was developed in the late 1980s. Since then, it has been widely used in compilers because it simplifies data flow analysis and optimizations. For example, the identification of common sub-expressions inside a loop becomes much easier if the IR is in SSA form. A basic property of SSA is that it establishes def-use and use-def chains: for a single definition, you know of all uses (def-use), and for each use, you know the unique definition (use-def). This knowledge is used a lot, such as in constant propagation: if a definition is determined to be a constant, then all uses of this value can be easily replaced with that constant value.
+SSA是在20世纪80年代后期发展起来的。从那时起，因其简化了数据流分析和优化，所以广泛应用于编译器中。例如，R是SSA形式，循环内部公共子表达式的识别就会容易得多。SSA的一个基本属性是建立了def-use和use-def链:对于单个定义，可知道所有的用法(def-use)，对于每个用法，知道唯一的定义(use-def)。这个信息广泛使用，例如在常量传播中:若一个定义确定为常量，那么所有对该值的使用都可以很容易地替换为该常量值。
 
-To construct the SSA form, the algorithm from Cytron et al. (1989) is very popular, and it is also used in the LLVM implementation. Other algorithms have been developed too. An early observation is that these algorithms become simpler if the source language does not have a goto statement.
+Cytron等人(1989)提出的构造SSA形式的算法非常流行，也用于LLVM的实现。早期的观察发现，若语言没有goto语句，这些算法会变得更简单。
 
-An in-depth treatment of SSA can be found in the book SSA-based Compiler Design, by F.Rastello and F. B. Tichadou, Springer 2022.
+对SSA的深入研究可以在F. rastello和F. B. Tichadou的《基于SSA的编译器设计》一书中找到，Springer 2022。
 \end{myTip}
 
-The next basic block is the body of the while loop:
+下一个基本块是while循环的主体:
 
 \begin{shell}
 while.body:
@@ -127,11 +121,11 @@ while.body:
     br i1 %cmp1, label %return, label %while.body
 \end{shell}
 
-Inside the loop of gcd, the a and b parameters are assigned new values. If a register can be only written once, then this is not possible. The solution is to use the special phi instruction. The phi instruction has a list of basic blocks and values as parameters. A basic block presents the incoming edge from that basic block, and the value is the value from that basic block. At runtime, the phi instruction compares the label of the previously executed basic block with the labels in the parameter list.
+在gcd的循环中，参数a和b会赋新值。若一个寄存器只能写入一次，则是不可能的。解决方案是使用特殊的phi指令，phi指令有一个基本块和值的列表作为参数。基本块表示来自该基本块的传入边，值是来自该基本块的值。在运行时，phi指令将之前执行的基本块的标签与参数列表中的标签进行比较。
 
-The value of the instruction is the value that’s associated with the label. For the first phi instruction, the value is the \%rem register if the previously executed basic block was while.body. The value is \%b if entry was the previously executed basic block. The values are the ones at the start of the basic block. The \%b.loop register gets a value from the first phi instruction. The same register is used in the parameter list of the second phi instruction, but the value is assumed to be the one before it is changed through the first phi instruction.
+指令的值就是与标签相关联的值。对于第一条phi指令，若先前执行的基本块是while.body，则该值为\%rem寄存器。若先前执行的基本块，则值为\%b，这些值是位于基本块开头的值。\%b循环寄存器从第一个phi指令获取一个值。第二个phi指令的参数列表中使用了相同的寄存器，但假定该值是通过第一个phi指令改变之前的值。
 
-After the loop’s body, the return value must be chosen:
+在循环体之后，必须选择返回值:
 
 \begin{shell}
 return:
@@ -141,27 +135,27 @@ return:
 }
 \end{shell}
 
-Again, a phi instruction is used to select the desired value. The ret instruction not only ends this basic block but also denotes the end of this function at runtime. It has the return value as a parameter.
+同样，phi指令用于选择所需的值。ret指令不仅结束了这个基本块，而且在运行时表示这个函数的结束。它有一个返回值作为参数。
 
-There are some restrictions on the use of phi instructions. They must be the first instructions of a basic block. The first basic block is special: it has no previously executed block. Therefore, it cannot begin with a phi instruction.
+使用phi指令有一些限制，必须是基本块的第一个指令。第一个基本块比较特殊:没有之前执行过的块，所以不能以phi指令开始。
 
-\begin{myTip}{LLVM IR reference}
-We’ve only touched the very basics of the LLVM IR. Please visit the LLVM Language Reference Manual at \url{https://llvm.org/docs/LangRef.html} to look up all the details.
+\begin{myTip}{LLVM IR参考}
+我们只触及了LLVM IR的皮毛，访问LLVM语言参考手册\url{https://llvm.org/docs/LangRef.html}，可了解更多细节。
 \end{myTip}
 
-The IR code itself looks a lot like a mix of C and assembly language. Despite this familiar style, it is not clear how we can easily generate the IR code from an AST. The phi instruction in particular looks difficult to generate. But don’t be scared – in the next section, we’ll implement a simple algorithm to just do that!
+IR代码本身看起来很像C语言和汇编语言的混合体。尽管有这种熟悉的风格，但我们还是不清楚如何使用AST生成IR代码，尤其是phi指令看起来很难生成。下一节中，我们将实现一个算法来做到这一点!
 
-\mySubsubsection{4.1.2.}{Learning about the load-and-store approach}
+\mySubsubsection{4.1.2.}{了解加载和存储的方法}
 
-All local optimizations in LLVM are based on the SSA form shown here. For global variables, memory references are used. The IR language knows load and store instructions, which are used to fetch and store those values. You can use this for local variables too. These instructions do not belong to the SSA form, and LLVM knows how to convert them into the required SSA form. Therefore, you can allocate memory slots for each local variable and use load and store instructions to change their value. All you need to remember is the pointer to the memory slot where a variable is stored. The clang compiler uses this approach.
+LLVM中的所有局部优化都是基于这里所示的SSA，使用全局变量的内存引用。IR语言有load和store指令，用于获取和存储这些值，也可以将此用于局部变量。这些指令不属于SSA形式，LLVM知道如何将其转换为所需的SSA，所以可以为每个局部变量分配内存槽，并使用load和store指令来更改它们的值，只需要记住指向存储变量的内存槽的指针。clang编译器使用这种方法。
 
-Let’s look at the IR code for load and store. Compile gcd.c again, but this time without enabling optimization:
+来看一下load和store的IR代码。再次编译gcd.c，但这次没有启用优化:
 
 \begin{shell}
 $ clang --target=aarch64-linux-gnu -S -emit-llvm gcd.c
 \end{shell}
 
-The gcd function now looks different. This is the first basic block:
+gcd函数现在看起来有所不同。这是第一个基本块:
 
 \begin{shell}
 define i32 @gcd(i32, i32) {
@@ -176,42 +170,41 @@ define i32 @gcd(i32, i32) {
     br i1 %8, label %9, label %11
 \end{shell}
 
-The IR code now relies on the automatic numbering of registers and labels. The names of the parameters are not specified. Implicitly, they are \%0 and \%1. The basic block has no label, so 2 is assigned. The first few instructions allocate memory for the four 32-bit values. After that, the \%0 and \%1 parameters are stored in the memory slots pointed to by registers \%4 and \%5. To compare \%1 to 0, the value is explicitly loaded from the memory slot. With this approach, you do not need to use the phi instruction! Instead, you load a value from a memory slot, perform a calculation on it, and store the new value back in the memory slot. The next time you read the memory slot, you get the last computed value. All the other basic blocks for the gcd function follow this pattern.
+IR代码现在依赖于寄存器和标签的自动编号，未指定参数的名称，隐式地为\%0和\%1。基本块没有标签，因此赋值为2，前几条指令为4个32位值分配内存。之后，参数\%0和\%1存储在寄存器\%4和\%5指向的内存槽中。为了比较\%1和0，这个值显式地从内存槽加载。使用这种方法，不需要使用phi指令!相反，可以从内存槽中加载一个值，对它进行计算，然后将新值存储回内存槽中。下次读取内存槽时，就会得到最后一次计算的值。gcd函数的所有其他基本块都遵循这种模式。
 
-The advantage of using load and store instructions in this way is that it is fairly easy to generate the IR code. The disadvantage is that you generate a lot of IR instructions that LLVM will remove with the mem2reg pass in the very first optimization step, after converting the basic block into SSA form.
+以这种方式使用加载和存储指令的优点是，生成IR代码相当容易。缺点是，在将基本块转换为SSA形式后，在第一个优化步骤中，LLVM将使用mem2reg时，会删除大量的IR指令。
 
-Therefore, we generate the IR code in SSA form directly.
-We’ll start developing IR code generation by mapping the control flow to basic blocks.
+因此，我们直接生成SSA形式的IR代码，通过将控制流映射到基本块开始生成IR代码。
 
-\mySubsubsection{4.1.3.}{Mapping the control flow to basic blocks}
+\mySubsubsection{4.1.3.}{控制流映射到基本块}
 
-The conceptual idea of a basic block is that it is a linear sequence of instructions that are executed in that order. A basic block has exactly one entry at the beginning, and it ends with a terminator instruction, which is an instruction that transfers the control flow to another basic block, such as a branch instruction, a switch instruction, or a return instruction. See \url{https://llvm.org/docs/LangRef.html#terminator-instructions} for a complete list of terminator instructions. A basic block can begin with phi instructions, but inside a basic block, neither phi nor branch instructions are allowed. In other words, you can only enter a basic block at the first instruction, and you can only leave a basic block at the last instruction, which is the terminator instruction. It is not possible to branch to an instruction inside a basic block or to branch to another basic block from the middle of a basic block. Please note that a simple function call with the call instruction can occur inside a basic block. Each basic block has exactly one label, marking the first instruction of the basic block. Labels are the targets of branch instructions. You can view branches as directed edges between two basic blocks, resulting in the control flow graph (CFG). A basic block can have predecessors and successors. The first basic block of a function is special in the sense that no predecessors are allowed.
+基本块的概念，是按该顺序执行的指令的线性序列。基本块在开始时只有一个条目，以终止指令结束，终止指令是将控制流转移到另一个基本块的指令，例如分支指令、切换指令或返回指令。请参阅\url{https://llvm.org/docs/LangRef.html#terminator-instructions}获取终止器说明的完整列表。一个基本块可以以phi指令开始，但在一个基本块内，既不允许phi指令，也不允许分支指令。换句话说，只能在第一个指令中输入一个基本块，并且只能在最后一个指令中留下一个基本块，即结束指令。不可能在基本块内分支到指令，也不可能从基本块中间分支到另一个基本块。请注意，带有call指令的简单函数调用可以发生在基本块中。每个基本块只有一个标签，标记基本块的第一条指令，标签是分支指令的目标。可以将分支视为两个基本块之间的有向边，从而生成控制流图(CFG)。一个基本块可以有前身和后继，函数的第一个基本块是特殊的(因为它不允许有前块)。
 
-As a consequence of these restrictions, control statements of the source language, such as WHILE and IF, produce several basic blocks. Let’s look at the WHILE statement. The condition of the WHILE statement controls if the loop body or the next statement is executed. The condition must be generated in a basic block of its own because there are two predecessors:
-
-\begin{itemize}
-\item
-The basic block resulting from the statement before WHILE
-
-\item
-The branch from the end of the loop body back to the condition
-\end{itemize}
-
-There are also two successors:
+由于这些限制，源语言中的控制语句，如WHILE和IF，会产生几个基本块。来看一下WHILE语句。WHILE语句的条件控制是执行循环体还是执行下一个语句，该条件语句必须在一个单独的基本块中生成，因为它的前两个元素:
 
 \begin{itemize}
 \item
-The beginning of the loop body
+由WHILE之前的语句产生的基本块
 
 \item
-The basic block resulting from the statement following WHILE
+从循环体的末端返回到条件的分支
 \end{itemize}
 
-The loop body itself has at least one basic block:
+还有两个后续块:
 
-\myGraphic{0.5}{content/part2/chapter4/images/1.png}{Figure 4.1 – The basic blocks of a WHILE statement}
+\begin{itemize}
+\item
+循环体的开始部分
 
-The IR code generation follows this structure. We store a pointer to the current basic block in the CGProcedure class and use an instance of llvm::IRBuilder<> to insert instructions into the basic block. First, we create the basic blocks:
+\item
+由WHILE后面的语句产生的基本块
+\end{itemize}
+
+循环体本身至少有一个基本块:
+
+\myGraphic{0.5}{content/part2/chapter4/images/1.png}{图4.1 - WHILE语句的基本块}
+
+IR代码生成遵循这种结构。我们在CGProcedure类中存储一个指向当前基本块的指针，并使用llvm::IRBuilder<>的实例将指令插入基本块。首先，创建基本块:
 
 \begin{cpp}
 void emitStmt(WhileStatement *Stmt) {
@@ -223,13 +216,13 @@ void emitStmt(WhileStatement *Stmt) {
         CGM.getLLVMCtx(), "after.while", Fn);
 \end{cpp}
 
-The Fn variable denotes the current function and getLLVMCtx() returns the LLVM context. Both are set later. We end the current basic block with a branch to the basic block, which will hold the condition:
+Fn变量表示当前函数，getLLVMCtx()返回LLVM上下文，两者都会在稍后设定。我们用一个基本块的分支来结束当前的基本块，该分支将保存以下条件:
 
 \begin{cpp}
     Builder.CreateBr(WhileCondBB);
 \end{cpp}
 
-The basic block for the condition becomes the new current basic block. We generate the condition and end the block with a conditional branch:
+该条件的基本块成为新的当前基本块。我们生成条件语句，并以一个条件分支结束代码块:
 
 \begin{cpp}
     setCurr(WhileCondBB);
@@ -237,7 +230,7 @@ The basic block for the condition becomes the new current basic block. We genera
     Builder.CreateCondBr(Cond, WhileBodyBB, AfterWhileBB);
 \end{cpp}
 
-Next, we generate the loop body. Finally, we add a branch back to the basic block of the condition:
+接下来，生成循环体。最后，在条件语句的基本块中添加一个分支:
 
 \begin{cpp}
     setCurr(WhileBodyBB);
@@ -245,21 +238,21 @@ Next, we generate the loop body. Finally, we add a branch back to the basic bloc
     Builder.CreateBr(WhileCondBB);
 \end{cpp}
 
-With that, we have generated the WHILE statement. Now that we’ve generated the WhileCondBB and Curr blocks, we can seal them:
+这样，我们就生成了WHILE语句。现在已经生成了WhileCondBB和Curr块，可以对其进行密封:
 
 \begin{cpp}
     sealBlock(WhileCondBB);
     sealBlock(Curr);
 \end{cpp}
 
-The empty basic block for statements following WHILE becomes the new current basic block:
+WHILE语句后面的空基本块变成了当前基本块:
 
 \begin{cpp}
     setCurr(AfterWhileBB);
 }
 \end{cpp}
 
-Following this schema, you can create an emit() method for each statement of the source language.
+按照这个模式，可以为语言的每个语句创建emit()方法。
 
 
 

@@ -1,11 +1,7 @@
 
-Having created a decorated abstract syntax tree (AST) for your programming language, the next
-task is to generate the LLVM IR code from it. LLVM IR code resembles a three-address code with
-a human-readable representation. Therefore, we need a systematic approach to translate language
-concepts such as control structures into the lower level of LLVM IR.
+为编程语言创建了修饰抽象语法树(AST)之后，下一个任务是从中生成LLVM IR代码。LLVM IR代码类似于具有人类可读表示的三地址码，所以需要一种系统的方法来将语言概念(如控制结构)翻译成低层LLVM IR。
 
-In this chapter, you will learn about the basics of LLVM IR and how to generate IR for control flow
-structures from the AST. You will also learn how to generate LLVM IR for expressions in static single assignment (SSA) form using a modern algorithm. Finally, you will learn how to emit assembler text and object code.
+在本章中，将了解LLVM IR的基础知识，以及如何从AST为控制流结构生成IR，还将了解如何使用现代算法为静态单赋值(SSA)形式的表达式生成LLVM IR。最后，将了解如何生成汇编文本和目标代码。
 
 在本章中，将了解以下内容:
 
@@ -20,6 +16,5 @@ structures from the AST. You will also learn how to generate LLVM IR for express
 设置模块和驱动程序
 \end{itemize}
 
-By the end of this chapter, you will know how to create a code generator for your programming
-language and how to integrate it into your compiler.
+本章结束时，将了解如何为编程语言创建代码生成器，以及如何将其集成到编译器中。
 

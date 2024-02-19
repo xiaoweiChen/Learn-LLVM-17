@@ -1,9 +1,9 @@
 
-We collect all the functions and global variables of a compilation unit in an LLVM module. To ease the IR generation process, we can wrap all the functions from the previous sections into a code generator class. To get a working compiler, we also need to define the target architecture for which we want to generate code, and also add the passes that emit the code. We will implement this in this and the next few chapters, starting with the code generator.
+我们在LLVM模块中收集编译单元的所有函数和全局变量。为了简化IR生成过程，可以将前几节中的所有函数包装到代码生成器类中。为了获得一个工作的编译器，还需要定义想要为其生成代码的目标架构，并添加生成代码的通道。我们将在本章和接下来的几章中实现它，先从代码生成器开始。
 
-\mySubsubsection{4.3.1.}{Wrapping all in the code generator}
+\mySubsubsection{4.3.1.}{代码生成器}
 
-The IR module is the brace around all elements we generate for a compilation unit. At the global level, we iterate through the declarations at the module level, create global variables, and call the code generation for procedures. A global variable in tinylang is mapped to an instance of the llvm::GobalValue class. This mapping is saved in Globals and made available to the code generation for procedures:
+IR模块包含为编译单元生成大括号内的所有元素。在全局级别，我们遍历模块级别的声明，创建全局变量，并调用过程的代码生成。tinylang中的全局变量会映射到llvm::GobalValue类的实例。这种映射保存在全局变量中，可用于过程代码的生成:
 
 \begin{cpp}
 void CGModule::run(ModuleDeclaration *Mod) {
@@ -26,13 +26,13 @@ void CGModule::run(ModuleDeclaration *Mod) {
 }
 \end{cpp}
 
-The module also holds the LLVMContext class and caches the most commonly used LLVM types. The latter ones need to be initialized, for example, for the 64-bit integer type:
+该模块还包含LLVMContext类，并缓存最常用的LLVM类型。后者需要初始化，例如：对于64位整数类型需要这样初始化:
 
 \begin{cpp}
 Int64Ty = llvm::Type::getInt64Ty(getLLVMCtx());
 \end{cpp}
 
-The CodeGenerator class initializes the LLVM IR module and calls the code generation for the module. Most importantly, this class must know for which target architecture we’d like to generate code. This information is passed in the llvm::TargetMachine class, which is set up in the driver:
+CodeGenerator类初始化LLVM IR模块并调用该模块的代码生成。最重要的是，这个类必须知道要为哪个目标架构生成代码。该信息在驱动程序中的llvm::TargetMachine类中:
 
 \begin{cpp}
 std::unique_ptr<llvm::Module>
@@ -48,7 +48,7 @@ CodeGenerator::run(ModuleDeclaration *Mod,
 }
 \end{cpp}
 
-For ease of use, we must also introduce a factory method for the code generator:
+为了方便使用，我们还必须为代码生成器引入一个工厂方法:
 
 \begin{cpp}
 CodeGenerator *
@@ -58,17 +58,17 @@ CodeGenerator::create(llvm::LLVMContext &Ctx,
 }
 \end{cpp}
 
-The CodeGenerator class provides a small interface to create IR code, which is ideal for use in the compiler driver. Before we integrate it, we need to implement the support for machine code generation.
+CodeGenerator类提供了一个用于创建IR代码的接口，适合在编译器驱动程序中使用。在集成它之前，需要实现对机器代码生成的支持。
 
-\mySubsubsection{4.3.2.}{Initializing the target machine class}
+\mySubsubsection{4.3.2.}{初始化目标机型类}
 
-Now, only the target machine is missing. With the target machine, we define the CPU architecture we’d like to generate code for. For each CPU, there are features available that can be used to influence the code generation process. For example, a newer CPU of a CPU architecture family can support vector instructions. With features, we can toggle the use of vector instructions on or off. To support setting all these options from the command line, LLVM provides some supporting code. In the Driver class, we can add the following include variable:
+现在，只有目标机型未知。在目标机型上，需要定义为其生成代码的CPU架构。对于每个CPU，都有一些特性会影响代码的生成过程。例如，CPU架构族中的一个较新的CPU可以支持向量指令。通过这些特性，我们可以切换使用向量指令的标志。支持从命令行设置这些选项，LLVM提供了一些支持代码。在Driver类中，可以包含以下头文件:
 
 \begin{cpp}
 #include "llvm/CodeGen/CommandFlags.h"
 \end{cpp}
 
-This include variable adds common command-line options to our compiler driver. Many LLVM tools also use these command-line options, which have the benefit of providing a common interface to the user. Only the option to specify a target triple is missing. As this is very useful, we’ll add this ourselves:
+这个include将常见的命令行选项添加到编译器驱动程序中。许多LLVM工具也使用这些命令行选项，其好处是为用户提供了一个通用的接口，不过只缺少指定目标三元组的选项:
 
 \begin{cpp}
 static llvm::cl::opt<std::string> MTriple(
@@ -76,11 +76,11 @@ static llvm::cl::opt<std::string> MTriple(
     llvm::cl::desc("Override target triple for module"));
 \end{cpp}
 
-Let’s create the target machine:
+让我们定义目标机型:
 
 \begin{enumerate}
 \item
-To display error messages, the name of the application must be passed to the function:
+要显示错误消息，必须将应用程序的名称传递给该函数:
 
 \begin{cpp}
 llvm::TargetMachine *
@@ -88,7 +88,7 @@ createTargetMachine(const char *Argv0) {
 \end{cpp}
 
 \item
-First, we must collect all the information provided by the command line. These are options for the code generator – that is, the name of the CPU and possible features that should be activated or deactivated, and the triple of the target:
+首先，必须收集命令行提供的所有信息。这些是代码生成器的选项——CPU的名称和应该激活或停用的功能，以及目标的三个值:
 
 \begin{cpp}
     llvm::Triple Triple = llvm::Triple(
@@ -103,7 +103,7 @@ First, we must collect all the information provided by the command line. These a
 \end{cpp}
 
 \item
-Then, we must look up the target in the target registry. If an error occurs, then we will display the error message and bail out. A possible error would be an unsupported triple specified by the user:
+然后，必须在目标注册表中查找目标。若发生错误，将显示错误消息并退出。一个可能的错误是，用户指定的目标不支持:
 
 \begin{cpp}
     std::string Error;
@@ -118,7 +118,7 @@ Then, we must look up the target in the target registry. If an error occurs, the
 \end{cpp}
 
 \item
-With the help of the Target class, we can configure the target machine using all the known options requested by the user:
+在Target类的帮助下，可以使用用户请求的所有已知选项来配置目标机型:
 
 \begin{cpp}
     llvm::TargetMachine *TM = Target->createTargetMachine(
@@ -131,13 +131,13 @@ With the help of the Target class, we can configure the target machine using all
 
 \end{enumerate}
 
-With the target machine instance, we can generate IR code that targets a CPU architecture of our choice. What is missing is the translation to assembly text or the generation of object code files. We’ll add this support in the next section.
+有了目标机型实例，就可以生成相应CPU架构的IR代码。目前缺少的是向汇编文本的转换或目标代码文件的生成，我们将在下一节添加这种支持。
 
-\mySubsubsection{4.3.3.}{Emitting assembler text and object code}
+\mySubsubsection{4.3.3.}{生成汇编程文本和目标代码}
 
-In LLVM, the IR code is run through a pipeline of passes. Each pass performs a single task, such as removing dead code. We’ll learn more about passes in Chapter 7, Optimizing IR. Outputting assembler code or an object file is implemented as a pass too. Let’s add basic support for it!
+在LLVM中，IR代码通过通道运行。每次遍历都只执行一项任务，比如移除无效代码。我们将在第7章中了解更多关于通道的信息。输出汇编代码或目标文件也作为通道实现。让我们为它添加基本支持吧!
 
-We need to include even more LLVM header files. First, we need the llvm::legacy::PassManager class to hold the passes to emit code to a file. We also want to be able to output LLVM IR code, so we also need a pass to emit this. Finally, we’ll use the llvm:: ToolOutputFile class for the file operations:
+我们需要包含更多的LLVM头文件。首先，需要llvm::legacy::PassManager类来保存向文件发出代码的通道。还希望能够输出LLVM IR代码，因此还需要一个通道来生成它。最后，使用llvm::ToolOutputFile类进行文件操作:
 
 \begin{cpp}
 #include "llvm/IR/IRPrintingPasses.h"
@@ -147,7 +147,7 @@ We need to include even more LLVM header files. First, we need the llvm::legacy:
 #include "llvm/Support/ToolOutputFile.h"
 \end{cpp}
 
-Another command-line option for outputting LLVM IR is also needed:
+还需要另一个用于输出LLVM IR的命令行选项:
 
 \begin{cpp}
 static llvm::cl::opt<bool> EmitLLVM(
@@ -156,7 +156,7 @@ static llvm::cl::opt<bool> EmitLLVM(
     llvm::cl::init(false));
 \end{cpp}
 
-Finally, we want to be able to give the output file a name:
+最后，给输出文件一个名字:
 
 \begin{cpp}
 static llvm::cl::opt<std::string>
@@ -165,7 +165,7 @@ static llvm::cl::opt<std::string>
                    llvm::cl::value_desc("filename"));
 \end{cpp}
 
-The first task in the new emit() method is to deal with the name of the output file if it’s not given by the user on the command line. If the input is read from stdin, indicated by the use of the minus symbol, -, then we output the result to stdout. The ToolOutputFile class knows how to handle the special filename, -:
+新emit()方法中的第一个任务是，处理用户在命令行中没有给出的输出文件名。若从标准输入中读取输入，使用减号-表示，则将结果输出到标准输出。ToolOutputFile类了解如何处理特殊的文件名:
 
 \begin{cpp}
 bool emit(StringRef Argv0, llvm::Module *M,
@@ -178,7 +178,7 @@ bool emit(StringRef Argv0, llvm::Module *M,
         }
 \end{cpp}
 
-Otherwise, we drop a possible extension of the input filename and append .ll, .s, or .o as an extension, depending on the command-line options given by the user. The FileType option is defined in the llvm/CodeGen/CommandFlags.inc header file, which we included earlier. This option doesn’t support emitting IR code, so we’ve added the new–emit-llvm option, which only takes effect if it’s used together with the assembly file type:
+否则，删除输入文件名的可能扩展名，并根据用户给出的命令行选项追加.ll、.s或.o作为扩展名。FileType选项在llvm/CodeGen/CommandFlags.inc头文件中定义，我们在前面包含了它。这个选项不支持发出IR代码，所以添加了new-emit-llvm选项，它只有在与汇编文件类型一起使用时才有效:
 
 \begin{cpp}
     else {
@@ -202,7 +202,7 @@ Otherwise, we drop a possible extension of the input filename and append .ll, .s
 }
 \end{cpp}
 
-Some platforms distinguish between text and binary files, so we have to provide the right open flags when opening the output file:
+一些平台区分文本和二进制文件，所以必须在打开输出文件时提供正确的标志:
 
 \begin{cpp}
 std::error_code EC;
@@ -218,7 +218,7 @@ if (EC) {
 }
 \end{cpp}
 
-Now, we can add the required passes to PassManager. The TargetMachine class has a utility method that adds the requested classes. Therefore, we only need to check if the user requests to output the LLVM IR code:
+现在，可以将所需的通道添加到PassManager。TargetMachine类有一个工具方法，用于添加所请求的类，所以只需要检查用户是否请求输出LLVM IR代码即可:
 
 \begin{cpp}
     legacy::PassManager PM;
@@ -234,27 +234,26 @@ Now, we can add the required passes to PassManager. The TargetMachine class has 
     }
 \end{cpp}
 
-With all this preparation done, emitting the file boils down to a single function call:
+所有这些准备工作完成后，生成文件可以归结为一个函数调用:
 
 \begin{cpp}
 PM.run(*M);
 \end{cpp}
 
-The ToolOutputFile class automatically deletes the file if we do not explicitly request that we want to keep it. This makes error handling easier as there are potentially many places where we need to handle errors and only one place is reached if everything goes well. We successfully emitted the code, so we want to keep the file:
+若没有显式地请求保留该文件，那么ToolOutputFile类会自动删除该文件。这使得错误处理更容易，因为可能有许多地方需要处理错误。我们成功地生成了代码，所以想保留这个文件:
 
 \begin{cpp}
 Out->keep();
 \end{cpp}
 
-Finally, we must report success to the caller:
+最后，必须向调用者报告成功与否:
 
 \begin{cpp}
     return true;
 }
 \end{cpp}
 
-Calling the emit() method with llvm::Module, which we created with a call to the CodeGenerator class, emits the code as requested.
-Suppose you have the greatest common divisor algorithm in tinylang stored in the Gcd.mod file:
+使用llvm::Module调用emit()方法(通过调用CodeGenerator类创建了该方法)，将按要求发出代码。假设将tinylang中的最大公约数算法存储在Gcd.mod文件中:
 
 \begin{shell}
 MODULE Gcd;
@@ -276,19 +275,19 @@ END GCD;
 END Gcd.
 \end{shell}
 
-To translate this to the Gcd.o object file, type the following:
+为了把这个翻译成Gcd.o目标文件，需要输入以下内容:
 
 \begin{shell}
 $ tinylang --filetype=obj Gcd.mod
 \end{shell}
 
-If you’d like to inspect the generated IR code directly on the screen, type the following:
+若想直接在屏幕上检查生成的IR代码，请键入以下命令:
 
 \begin{shell}
 $ tinylang --filetype=asm --emit-llvm -o - Gcd.mod
 \end{shell}
 
-With the current state of the implementation, it is not possible to create a complete program in tinylang. However, you can use a small C program called callgcd.c to test the generated object file. Note the use of the mangled name to call the GCD function:
+以tinylang的当前实现状态，无法在tinylang中创建完整的程序，但可以使用一个名为callgcd.c的C程序来测试生成的目标文件。请注意，调用GCD函数时使用了经过修改的名称:
 
 \begin{cpp}
 #include <stdio.h>
@@ -303,7 +302,7 @@ int main(int argc, char *argv[]) {
 }
 \end{cpp}
 
-To compile and run the whole application with clang, type the following:
+要使用clang编译并运行整个应用程序，需要输入以下命令:
 
 \begin{shell}
 $ tinylang --filetype=obj Gcd.mod
@@ -311,7 +310,7 @@ $ clang callgcd.c Gcd.o -o gcd
 $ gcd
 \end{shell}
 
-Let’s celebrate! At this point, we have created a complete compiler by reading the source language up and emitting assembler code or an object file.
+让我们好好庆祝一下吧!至此，通过读取语言源码，并生成了汇编代码或目标文件，我们已经创建了一个完整的编译器。
 
 
 

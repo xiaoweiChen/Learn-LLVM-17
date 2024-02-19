@@ -1,55 +1,54 @@
-For almost all applications, basic types such as INTEGER are not sufficient. For example, to represent mathematical objects such as a matrix or a complex number, you must construct new data types based on existing ones. These new data types are generally known as aggregate or composite.
+对于几乎所有的应用程序来说，只有INTEGER这样的基本类型是不够的。例如，要表示矩阵或复数等数学对象，必须在已有数据类型的基础上构造新的数据类型。这些新数据类型通常称为聚合(aggregate)或组合(composite)。
 
-Arrays are a sequence of elements of the same type. In LLVM, arrays are always static, which means that the number of elements is constant. The tinylang type ARRAY [10] OF INTEGER or the C type long[10] is expressed in IR as follows:
+数组是由相同类型的元素组成的序列。在LLVM中，数组总是静态的，所以元素的数量恒定。tinylang类型ARRAY [10] OF INTEGER或C类型long[10]在IR中表示如下:
 
 \begin{shell}
 [10 x i64]
 \end{shell}
 
-Structures are composites of different types. In programming languages, they are often expressed with named members. For example, in tinylang, a structure is written as RECORD x: REAL; color: INTEGER; y: REAL; END; and the same structure in C is struct { float x; long color; float y; };. In LLVM IR, only the type names are listed:
+结构是不同类型的组合物。在编程语言中，通常用命名成员表示。例如，在tinylang中，结构可写成RECORD x: REAL;  color: INTEGER;  y: REAL;  END; C语言中同样的结构是struct \{ float x; long color; float y; \};。在LLVM IR中，只列出类型名:
 
 \begin{shell}
 { float, i64, float }
 \end{shell}
 
-To access a member, a numerical index is used. Like arrays, the first element has an index number of 0.
+要访问成员，需要使用数字索引。与数组一样，第一个元素的索引号为0。
 
-The members of this structure are arranged in memory according to the specification in the data layout string. For more information regarding the data layout string within LLVM, Chapter 4, Basics of IR Code Generation, describes these details.
+该结构的成员按照数据布局字符串中的规范在内存中排列。有关LLVM中数据布局字符串的更多信息，第4章中介绍了这些细节。
 
-Furthermore, if necessary, unused padding bytes are inserted. If you need to take control of the memory layout, then you can use a packed structure in which all elements have a 1-byte alignment. Within C, we utilize the \_\_packed\_\_ attribute in the struct in the following way:
+若有必要，还会插入未使用的填充字节。若需要控制内存布局，可以使用一个打包结构，其中所有元素都具有1字节对齐方式。在C语言中，可以以下方式利用结构体中的\_\_packed\_\_属性:
 
 \begin{cpp}
 struct __attribute__((__packed__)) { float x; long long color; float y; }
 \end{cpp}
 
-Likewise, the syntax within LLVM IR is slightly different and looks like the following:
+LLVM IR中的语法略有不同:
 
 \begin{shell}
 <{ float, i64, float }>
 \end{shell}
 
-Loaded into a register, arrays, and structs are treated as a unit. It is not possible to refer to a single element of array-valued register \%x as \%x[3], for example. This is due to the SSA form because it is not possible to tell if \%x[i] and \%x[j] refer to the same element or not. Instead, we need special instructions to extract and insert single-element values into an array. To read the second element, we use the following:
+加载到寄存器中，数组和结构体视为一个单元。例如，不可能将数组值寄存器\%x的单个元素引用为\%x[3]。这是由于SSA形式，不能判断\%x[i]和\%x[j]是否指的是同一个元素。相反，我们需要特殊的指令来提取和插入单元素值到数组中。要读取第二个元素，需要使用以下指令:
 
 \begin{shell}
 %el2 = extractvalue [10 x i64] %x, 1
 \end{shell}
 
-We can also update an element such as the first one:
+也可以更新一个元素，比如第一个元素:
 
 \begin{shell}
 %xnew = insertvalue [10 x i64] %x, i64 %el2, 0
 \end{shell}
 
-Both instructions work on structures, too. For example, to access the color member from register
-\%pt, you write the following:
+这两个指令也适用于结构。例如，使用寄存器\%pt访问color成员，可以这样写:
 
 \begin{shell}
 %color = extractvalue { float, float, i64 } %pt, 2
 \end{shell}
 
-There exists an important limitation on both instructions: the index must be a constant. For structures, this is easily explainable. The index number is only a substitute for the name, and languages such as C have no notion of dynamically computing the name of a struct member. For arrays, it is simply that it can’t be implemented efficiently. Both instructions have value in specific cases when the number of elements is small and known. For example, a complex number could be modeled as an array of two floating-point numbers. It’s reasonable to pass this array around, and it is always clear which part of the array must be accessed during a computation.
+这两条指令都有一个重要的限制:索引必须是一个常量。对于结构体来说，这很容易解释。索引号只是名称的替代，而C等语言没有动态计算结构成员名称的概念。对于数组来说，只是无法高效地实现。这两条指令在元素数量较少，且已知的特定情况下都有价值。例如，复数可以建模为两个浮点数组成的数组。传递这个数组是合理的，而且很清楚在计算过程中必须访问数组的哪一部分。
 
-For general use in the front end, we have to resort to pointers to memory. All global values in LLVM are expressed as pointers. Let’s declare a @arr global variable as an array of eight i64 elements. This is the equivalent of the long arr[8] C declaration:
+对于前端的一般使用，必须借助于指向内存的指针。LLVM中的所有全局值都用指针表示。下面将全局变量@arr声明为包含8个i64元素的数组，这等价于C语言中的long arr[8]声明:
 
 \begin{shell}
 define i64 @second() {
@@ -59,11 +58,11 @@ define i64 @second() {
 }
 \end{shell}
 
-The getelementptr instruction is the workhorse for address calculations. As such, it needs some more explanation. The first operand, [8 x i64], is the base type the instruction is operating on. The second operand, ptr @arr, specifies the base pointer. Please note the subtle difference here: we declared an array of eight elements, but because all global values are treated as pointers, we have a pointer to the array. In C syntax, we really work with long (*arr)[8]! The consequence is that we first have to dereference the pointer before we can index the element, such as arr[0][1] in C. The third operand, i64 0, dereferences the pointer, and the fourth operand, i64 1, is the element index. The result of this computation is the address of the indexed element. Please note that no memory is touched by this instruction.
+getelementptr指令是地址计算的主力，所以其需要更多的解释。第一个操作数[8 x i64]是指令所操作的基类型。第二个操作数ptr @arr指定基指针。请注意这里的差别:声明了一个包含八个元素的数组，但由于所有全局值都视为指针，所以有一个指向数组的指针。在C的语法中，实际上使用long (*arr)[8]!其结果是，在对元素进行索引之前，必须先对指针解引用，如C语言中的arr[0][1]。第三个操作数i64 0对指针进行解引用，第四个操作数i64 1是元素索引。计算的结果是索引元素的地址。还需要注意的是，此指令不涉及任何内存。
 
-Except for structs, the index parameters do not need to be constant. Therefore, the getelementptr instruction can be used in a loop to retrieve the elements of an array. Structs are treated differently here: only constants can be used, and the type must be i32.
+除了结构体，索引参数不需要是常量，所以可以在循环中使用getelementptr指令来检索数组的元素。这里对结构体的处理有所不同:只能使用常量，且类型必须为i32。
 
-With this knowledge, arrays are easily integrated into the code generator from Chapter 4, Basics of IR Code Generation. The convertType() method must be extended to create the type. If the Arr variable holds the type denoter of an array, and assuming the number of elements within an array is an integer literal, we then can add the following to the convertType() method to handle arrays:
+有了这些知识，数组可以很容易地集成到第4章的代码生成器中，要创建这个类型，必须扩展convertType()方法。若Arr变量保存数组的类型标识符，并且假设数组中的元素数量为整数字面值，则可以向convertType()方法添加以下代码来处理数组:
 
 \begin{cpp}
 if (auto *ArrayTy =
@@ -83,7 +82,7 @@ if (auto *ArrayTy =
 }
 \end{cpp}
 
-This type can be used to declare global variables. For local variables, we need to allocate memory for the array. We do this in the first basic block of the procedure:
+该类型可用于声明全局变量。对于局部变量，需要为数组分配内存。我们在过程的第一个基本块中这样做:
 
 \begin{cpp}
 for (auto *D : Proc->getDecls()) {
@@ -100,7 +99,7 @@ for (auto *D : Proc->getDecls()) {
 }
 \end{cpp}
 
-To read and write an element, we have to generate the getelementptr instruction. This is added to the emitExpr() (reading a value) and emitStmt() (writing a value) methods. To read an element of an array, the value of the variable is read first. Then, the selectors of the variable are processed. For each index, the expression is evaluated and the value is stored. Based on this list, the address of the referenced element is calculated and the value is loaded:
+为了读写一个元素，必须生成getelementptr指令，这会添加到emitExpr()(读取值)和emitStmt()(写入值)方法中。要读取数组的元素，首先读取变量的值，再处理变量的选择器。对于每个索引，计算表达式并存储其值。基于这个列表，计算引用元素的地址并加载值:
 
 \begin{cpp}
 auto &Selectors = Var->getSelectors();
@@ -129,15 +128,15 @@ for (auto I = Selectors.begin(), E = Selectors.end();
 }
 \end{cpp}
 
-Writing to an array element uses the same code, with the exception that you do not generate a load instruction. Instead, you use the pointer as the target in a store instruction. For records, you use a similar approach. The selector for a record member contains the constant field index, named Idx. You convert this constant into a constant LLVM value:
+写入数组元素使用相同的代码，但不生成加载指令。相反，可以使用指针作为存储指令中的目标。对于记录，可以使用类似的方法。记录成员的选择器包含名为Idx的常量字段索引，可把这个常量转换成一个LLVM常量值:
 
 \begin{cpp}
 llvm::Value *FieldIdx = llvm::ConstantInt::get(Int32Ty, Idx);
 \end{cpp}
 
-Then you can use value in the Builder.CreateGEP() methods as in for arrays.
+然后可以在Builder.CreateGEP()方法中使用value，就像在数组中一样。
 
-Now, you should know how to translate aggregate data types to LLVM IR. Passing values of those types in a system-compliant way requires some care, and you will learn to implement it correctly in the next section.
+现在，应该知道如何将聚合数据类型转换为LLVM IR。以符合系统的方式传递这些类型值要非常谨慎，下一节将介绍如何正确地实现。
 
 
 

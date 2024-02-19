@@ -1,15 +1,15 @@
 
-To generate IR code in SSA form from the AST, we can use an approach called AST numbering. The basic idea is that for each basic block, we store the current value of local variables written in this basic block.
+为了使用AST生成SSA形式的IR代码，可以使用一种称为AST编号的方法。基本思想是，对于每个基本块，我们存储写入该基本块中局部变量的当前值。
 
 \begin{myNotic}{Note}
-The implementation is based on the paper Simple and Efficient Construction of Static Single Assignment Form, by Braun et al., International Conference on CompilerConstruction 2013 (CC 2013), Springer (see \url{http://individual.utoronto.ca/dfr/ece467/braun13.pdf}). In its presented form, it only works for IR code that has a structured controlled flow. The paper also describes the necessary extensions if you need to support arbitrary control flow – for example, a goto statement.
+实现基于Braun et al.的论文《Simple and Efficient Construction of Static Single Assignment Form》，International Conference on CompilerConstruction 2013 (CC 2013)， Springer(见\url{http://individual.utoronto.ca/dfr/ece467/braun13.pdf})。在其呈现的形式中，仅适用于具有结构化受控流的IR代码。若需要支持任意控制流，本文还描述了必要的扩展——例如：goto。
 \end{myNotic}
 
-Although it is simple, we will still need several steps. We will introduce the required data structure first, and after that, we will learn how to read and write values local to a basic block. Then, we will handle values that are used in several basic blocks and conclude by optimizing the created phi instructions.
+虽然很简单，但仍然需要几个步骤。首先介绍所需的数据结构，然后学习如何在基本块的局部读写值。然后，我们将处理几个基本块中使用的值，并通过优化创建的phi指令来结束。
 
-\mySubsubsection{4.2.1.}{Defining the data structure to hold values}
+\mySubsubsection{4.2.1.}{定义数据结构保存值}
 
-We use the BasicBlockDef struct to hold the information for a single block:
+使用BasicBlockDef struct来保存单个块的信息:
 
 \begin{cpp}
 struct BasicBlockDef {
@@ -18,19 +18,19 @@ struct BasicBlockDef {
 };
 \end{cpp}
 
-The llvm::Value LLVN class represents a value in SSA form. The Value class acts like a label on the result of a computation. It is created once, usually through an IR instruction, and then used. Various changes can occur during optimizations. For example, if the optimizer detects that the \%1 and \%2 values are always the same, then it can replace the use of \%2 with \%1. This changes the label but not the computation.
+llvm::Value类表示SSA格式的值，其作用类似于计算结果的标签。通过IR指令创建，然后使用。优化过程中可能会发生各种变化，若优化器检测到\%1和\%2的值始终相同，那么可将\%2替换为\%1。这会改变标签，但不会改变计算。
 
-To be aware of such changes, we cannot use the Value class directly. Instead, we need a value handle. There are value handles with different functionality. To track replacement, we can use the llvm::TrackingVH<> class. As a result, the Defs member maps a declaration of the AST (a variable or a formal parameter) to its current value. Now, we need to store this information for each basic block:
+为了了解这些变化，不能直接使用Value类。相反，这时需要一个值句柄。Value的处理有不同的功能。为了跟踪替换，需要使用llvm::TrackingVH<>类，所以Defs成员将AST的声明(变量或正式参数)映射到其当前值。现在，需要为每个基本块存储这些信息:
 
 \begin{cpp}
 llvm::DenseMap<llvm::BasicBlock *, BasicBlockDef> CurrentDef;
 \end{cpp}
 
-With this data structure, we are now able to handle local values.
+有了这个数据结构，就可以处理局部值了。
 
-\mySubsubsection{4.2.2.}{Defining the data structure to hold values}
+\mySubsubsection{4.2.2.}{定义保存值的数据结构}
 
-To store the current value of a local variable in a basic block, we will create an entry in the maps:
+为了在基本块中存储局部变量的当前值，我们将在map中创建一个条目:
 
 \begin{cpp}
 void writeLocalVariable(llvm::BasicBlock *BB, Decl *Decl,
@@ -39,7 +39,7 @@ void writeLocalVariable(llvm::BasicBlock *BB, Decl *Decl,
 }
 \end{cpp}
 
-The lookup of a variable’s value is a bit more complicated because the value might not be in the basic block. In this case, we need to extend the search to the predecessors using a possible recursive search:
+因为值可能不在基本块中，所以变量值的查找有点复杂。这种情况下，需要使用可能的递归搜索将搜索扩展到前面的节点:
 
 \begin{cpp}
 llvm::Value *
@@ -51,29 +51,29 @@ readLocalVariable(llvm::BasicBlock *BB, Decl *Decl) {
 }
 \end{cpp}
 
-The real work is searching the predecessors, which we’ll implement in the next section.
+实际的工作是搜索前面的块，我们将在下一节中实现。
 
-\mySubsubsection{4.2.3.}{Searching the predecessor blocks for a value}
+\mySubsubsection{4.2.3.}{前块中搜索值}
 
-If the current basic block we are looking at has only one predecessor, then we search there for the value of the variable. If the basic block has several predecessors, then we need to search for the value in all these blocks and combine the results. To illustrate this situation, you can look at the basic block with the condition of a WHILE statement from the previous section.
+若正在查看的当前基本块只有一个前块，则直接在那里搜索变量值。若基本块有多个前块，那么需要在所有这些块中搜索值并组合结果。为了说明这种情况，可以看看前一节中使用WHILE条件语句的基本块。
 
-This basic block has two predecessors – the one resulting from the statement before the WHILE statement and the one resulting from the branch for the end of the body of the WHILE loop. A variable that’s used in the condition should have some initial value and will most likely be changed in the body of the loop. So, we need to collect these definitions and create a phi instruction from it. The basic blocks that are created from the WHILE statement contain a cycle.
+这个基本块有两个前块——一个来自WHILE语句之前的语句，另一个来自WHILE循环主体末尾的分支。在条件中使用的变量应该有一些初始值，并且最有可能在循环体中更改，所以需要收集这些定义并创建phi指令。从WHILE语句创建一个包含循环的基本块。
 
-Because we recursively search the predecessor blocks, we must break this cycle. To do so, we can use a simple trick: we can insert an empty phi instruction and record this as the current value of the variable. If we see this basic block again in our search, then we’ll see that the variable has a value that we can use. The search stops at this point. Once we’ve collected all the values, we must update the phi instruction.
+因为需要递归地搜索前块，所以必须打破这种循环。可以使用一个简单的技巧:插入一个空的phi指令，并将其记录为变量的当前值。若在搜索中再次看到这个基本块，则看到该变量有一个可以使用的值，搜索到这里就停止了。当收集了所有的值，就必须更新phi指令。
 
-However, we will still face a problem. At the time of the lookup, not all predecessors of a basic block may be known. How can this happen? Look at the creation of the basic blocks for the WHILE statement. The IR for the condition of the loop is generated first. However, the branch from the end of the body that goes back to the basic block, which contains the condition, can only be added after the IR for the body is generated. This is because this basic block is not known earlier. If we need to read the value of a variable in the condition, then we are stuck, because not all predecessors are known.
+然而，我们仍然会面临一个问题。在查找的时候，并不是一个基本块的所有前块都是已知的。来看看为WHILE语句创建的基本块，首先生成循环条件的IR，但只有在主体的IR生成之后，才能添加从主体末尾返回到包含条件基本块的分支(这是因为这个基本块之前是未知的)。若需要在条件中读取变量的值，那就卡住了，因为不是所有的前块都已知。
 
-To solve this situation, we must do a little more:
+为了解决这个问题，我们必须做一点什么:
 
 \begin{enumerate}
 \item
-First, we must attach a Sealed flag to the basic block.
+首先，必须在基本块上附加一个密封(Sealed)标志。
 
 \item
-Then, we must define a basic block as sealed if we know all the predecessors of the basic block. If the basic block is not sealed and we need to look up the value of the variable not yet defined in this basic block, then we must insert an empty phi instruction and use it as the value.
+然后，若知道基本块的所有前块，必须将基本块定义为密封。若基本块没有密封，并且需要查找这个基本块中尚未定义变量的值，那么必须插入一个空的phi指令，并将其作为值。
 
 \item
-We also need to remember this instruction. If the block is later sealed, then we need to update the instruction with the real values. To implement this, we must add two more members to struct BasicBlockDef: the IncompletePhis map, which records the phi instructions we need later to update, and the Sealed flag, which indicates if the basic block is sealed:
+也需要记住这个指令。若块稍后密封，则需要用实际值更新指令。为了实现这一点，必须在结构体BasicBlockDef中添加两个成员:IncompletePhis映射，记录了稍后需要更新的phi指令，以及Sealed标志，这表示基本块是否密封:
 
 \begin{cpp}
 llvm::DenseMap<llvm::PHINode *, Decl *> IncompletePhis;
@@ -81,7 +81,7 @@ unsigned Sealed : 1;
 \end{cpp}
 
 \item
-Then, the method can be implemented, as discussed at the beginning of this section:
+然后，该方法的实现，如本节开头所讨论:
 
 \begin{cpp}
 llvm::Value *CGProcedure::readLocalVariableRecursive(
@@ -104,7 +104,7 @@ llvm::Value *CGProcedure::readLocalVariableRecursive(
 \end{cpp}
 
 \item
-The addEmptyPhi() method inserts an empty phi instruction at the beginning of the basic block:
+addEmptyPhi()方法在基本块的开头插入一个空的phi指令:
 
 \begin{cpp}
 llvm::PHINode *
@@ -119,7 +119,7 @@ CGProcedure::addEmptyPhi(llvm::BasicBlock *BB,
 \end{cpp}
 
 \item
-To add the missing operands to the phi instruction, first, we must search all the predecessors of the basic block and add the operand pair value and basic block to the phi instruction. Then, we must try to optimize the instruction:
+要将缺失的操作数添加到phi指令中，必须首先搜索基本块的所有前块，并将操作数值对和基本块添加到phi指令中。然后，需要尝试优化指令:
 
 \begin{cpp}
 llvm::Value *
@@ -135,15 +135,15 @@ CGProcedure::addPhiOperands(llvm::BasicBlock *BB,
 
 \end{enumerate}
 
-This algorithm can generate unneeded phi instructions. One approach to optimize these will be implemented in the next section.
+该算法可以产生不必要的phi指令，有种方法可以用来进行优化，这将在下一节中实现。
 
-\mySubsubsection{4.2.4.}{Optimizing the generated phi instructions}
+\mySubsubsection{4.2.4.}{优化生成的phi指令}
 
-How can we optimize a phi instruction and why should we do it? Although the SSA form is advantageous for many optimizations, the phi instruction is often not interpreted by the algorithms and thus hinders the optimization in general. Therefore, the fewer phi instructions we generate, the better. Let’s take a closer look:
+如何优化指令，为什么要这样做?尽管SSA形式对许多优化都有利，但phi指令通常不能被算法解释，从而阻碍了优化，所以生成的phi指令越少越好:
 
 \begin{enumerate}
 \item
-If the instruction has only one operand or all operands have the same value, then we replace the instruction with this value. If the instruction has no operand, then we replace the instruction with the special Undef value. Only if the instruction has two or more distinct operands do we have to keep the instruction:
+若指令只有一个操作数，或者所有操作数的值都相同，则用这个值替换指令。若该指令没有操作数，则用特殊的Undef值替换该指令。只有当指令有两个或更多不同的操作数时，才必须保留这条指令:
 
 \begin{cpp}
 llvm::Value *
@@ -162,8 +162,7 @@ CGProcedure::optimizePhi(llvm::PHINode *Phi) {
 
 
 \item
-Removing a phi instruction may lead to optimization opportunities in other phi instructions.
-Fortunately, LLVM keeps track of the users and the use of values (which is the use-def chain mentioned in the definition of SSA). We must search for all uses of the value in other phi instructions and try to optimize these instructions too:
+删除一条phi指令可能会给其他phi指令带来优化机会。幸运的是，LLVM会跟踪用户和值的使用(即SSA定义中提到的use-def链)，必须在其他phi指令中搜索该值使用情况，并尝试优化这些指令:
 
 \begin{cpp}
     llvm::SmallVector<llvm::PHINode *, 8> CandidatePhis;
@@ -183,15 +182,15 @@ Fortunately, LLVM keeps track of the users and the use of values (which is the u
 
 \end{enumerate}
 
-If we want, we can improve this algorithm even further. Instead of always iterating the list of values for each phi instruction, we can pick and remember two distinct values. Then, in the optimizePhi function, we can check if these two values are still in the list of the phi instruction. If that is the case, then we know that there is nothing to optimize. But even without this optimization, this algorithm runs very fast, so we are not going to implement this now.
+还可以进一步改进这个算法，可以选择并记住两个不同的值，而不是总是迭代每个phi指令的值列表。在optimizePhi函数中，可以检查这两个值是否仍然在phi指令的列表中。若是这样，则没必要优化。但即使没有这个优化，这个算法也可以运行得也很快，所以现在不进行实现。
 
-We are almost done. The only thing we haven’t done is implement the operation to seal a basic block. We will do this in the next section.
+我们几乎已经完成了，唯一没有做的是实现密封基本块的操作。
 
-\mySubsubsection{4.2.5.}{Sealing a block}
+\mySubsubsection{4.2.5.}{密封块}
 
-As soon as we know that all the predecessors of a block are known, we can seal the block. If the source language contains only structured statements such as tinylang, then it is easy to determine where a block can be sealed. Take another look at the basic blocks that are generated for the WHILE statement.
+知道了一个区块的所有前块，就可以密封这个块了。若语言只包含结构化语句(如tinylang)，那么很容易确定块的位置。再看一下为WHILE语句生成的基本块。
 
-The basic block that contains the condition can be sealed after the branch from the end of the body is added because this was the last missing predecessor. To seal a block, we can simply add the missing operands to the incomplete phi instructions and set the flag:
+包含条件的基本块可以在主体的末端添加分支后进行密封，因为这是缺少的最后一个前块。要密封一个块，可以简单地将缺失的操作数，添加到不完整的phi指令中并设置标志:
 
 \begin{cpp}
 void CGProcedure::sealBlock(llvm::BasicBlock *BB) {
@@ -203,27 +202,27 @@ void CGProcedure::sealBlock(llvm::BasicBlock *BB) {
 }
 \end{cpp}
 
-With these methods, we are now ready to generate the IR code for expressions.
+有了这些方法，就可以为表达式生成IR了。
 
-\mySubsubsection{4.2.6.}{Creating the IR code for expressions}
+\mySubsubsection{4.2.6.}{生成表达式的IR}
 
-In general, you translate expressions, as shown in Chapter 2, The Structure of a Compiler. The only interesting part is how to access variables. The previous section treated local variables, but there are other kinds of variables we can consider. Let’s discuss what we need to do:
+一般来说，要翻译表达式，如第2章所示。唯一有趣的部分是如何访问变量。上一节讨论了局部变量，但我们还要考虑其他类型的变量。这里，就讨论一下接下来需要些做什么:
 
 \begin{itemize}
 \item
-For a local variable of the procedure, we use the readLocalVariable() and writeLocalVariable() methods from the previous section.
+对于过程的局部变量，使用上一节中的readLocalVariable()和writeLocalVariable()方法。
 
 \item
-For a local variable in an enclosing procedure, we need a pointer to the frame of the enclosing procedure. This will be handled later in this chapter.
+对于一个封闭过程中的局部变量，我们需要一个指向封闭过程框架的指针。这将在本章稍后的章节中进行处理。
 
 \item
-For a global variable, we generate load and store instructions.
+对于全局变量，生成加载和存储指令。
 
 \item
-For a formal parameter, we have to differentiate between passing by value and passing by reference (the VAR parameter in tinylang). A parameter that’s passed by value is treated as a local variable, and a parameter passed by reference is treated as a global variable.
+对于形式参数，必须区分按值传递和按引用传递(tinylang中的VAR参数)。通过值传递的参数会被视为局部变量，通过引用传递的参数会当作全局变量。
 \end{itemize}
 
-Putting it all together, we get the following code for reading a variable or formal parameter:
+综上所述，我们得到如下用于读取变量或形参的代码:
 
 \begin{cpp}
 llvm::Value *CGProcedure::readVariable(llvm::BasicBlock *BB,
@@ -247,22 +246,22 @@ Decl *D) {
 }
 \end{cpp}
 
-Writing to a variable or formal parameter is symmetrical – we just need to exchange the method to read with the one to write and use a store instruction instead of a load instruction.
+对变量或形式参数的写入是对称的——只需要将要读的方法与要写的方法交换，并使用存储指令，而非加载指令。
 
-Next, these functions are applied while generating the IR code for the functions.
+接下来，在为这些函数生成IR代码时，应用这些函数。
 
-\mySubsubsection{4.2.7.}{Emitting the IR code for a function}
+\mySubsubsection{4.2.7.}{生成函数的IR}
 
-Most of the IR code will live in a function. A function in IR code resembles a function in C. It specifies in the name, the types of parameters, the return value, and other attributes. To call a function in a different compilation unit, you need to declare the function. This is similar to a prototype in C. If you add basic blocks to the function, then you define the function. We will do all this in the next few sections, but first, we will discuss the visibility of symbol names.
+大多数IR代码都存在于函数中，IR代码中的函数类似于C语言中的函数，通过名称、参数类型、返回值和其他属性指定。要调用不同编译单元中的函数，需要声明该函数，这与C语言中的原型类似。若向函数中添加基本块，就可以定义函数。接下来的几节会介绍这些内容，但首先要讨论的是，符号名称的可见性。
 
 
-\mySubsubsection{4.2.8.}{Controlling visibility with linkage and name mangling}
+\mySubsubsection{4.2.8.}{通过链接和名称修改控制可见性}
 
-Functions (and also global variables) have a linkage style attached. With the linkage style, we define the visibility of a symbol name and what should happen if more than one symbol has the same name. The most basic linkage styles are private and external. A symbol with private linkage is only visible in the current compilation unit, while a symbol with external linkage is globally available.
+函数(以及全局变量)具有附加的链接样式。使用链接方式，我们定义了符号名称的可见性，若多个符号具有相同的名称会发生什么。最基本的链接样式是私有的和外部的，私有链接的符号仅在当前编译单元中可见，而具有外部链接的符号则全局可见。
 
-For a language without a proper module concept, such as C, this is adequate. With modules, we need to do more. Let’s assume that we have a module called Square that provides a Root() function and a Cube module, which also provides a Root() function. If the functions are private, then there is no problem. The function gets the name Root and private linkage. The situation is different if the function is exported so that it can be called from other modules. Using the function name alone is not enough, because this name is not unique.
+对于没有模块概念的语言(如C语言)，这是足够的。对于模块，需要做更多的事情。假设有一个模块Square，提供了一个Root()函数，还有一个模块Cube，也提供了一个Root()函数。若函数私有，那么没什么问题，该函数获取名称Root和私有链接。若导出函数，以便可以从其他模块调用它，情况就不同了。因为函数名不唯一，所以仅使用函数名就不够了。
 
-The solution is to tweak the name to make it globally unique. This is called name mangling. How this is done depends on the requirements and characteristics of the language. In our case, the base idea is to use a combination of the module and the function name to create a globally unique name. Using Square.Root as the name looks like an obvious solution, but it may lead to problems with assemblers as the dot may have a special meaning. Instead of using a delimiter between the name components, we can get a similar effect by prefixing the name components with their length: 6Square4Root. This is no legal identifier for LLVM, but we can fix this by prefixing the whole name with \_t (with t for tinylang): \_t6Square4Root. In this way, we can create unique names for exported symbols:
+解决方案是调整名称使其全局唯一，这称为名称修改，如何做到取决于语言的要求和特点。在我们的示例中，基本思想是使用模块名和函数名的组合来创建全局唯一的名称。使用Square.Root作为名称看起来是一个显而易见的解决方案，但这可能会导致汇编程序的问题，因为点可能具有特殊的含义。不需要在名称组件之间使用分隔符，可以通过在名称组件前加上长度:6Square4Root来获得类似的效果。单这不是LLVM的合法标识符，我们可以通过在整个名称前加上\_t (t表示tinylang)来修复这个问题:\_t6Square4Root。通过这种方式，可以为导出符号创建唯一名称:
 
 \begin{cpp}
 std::string CGModule::mangleName(Decl *D) {
@@ -278,17 +277,15 @@ std::string CGModule::mangleName(Decl *D) {
 }
 \end{cpp}
 
-If your source language supports type overloading, then you need to extend this scheme with type names. For example, to distinguish between the int root(int) and double root(double) C++ functions, the type of the parameter and the return value must be added to the function name.
-You also need to think about the length of the generated name since some linkers place restrictions on the length. With nested namespaces and classes in C++, the mangled names can be rather long.
+若语言支持类型重载，则需要使用类型名扩展此方案。例如，C++中中要区分int root(int)和double root(double)函数，必须将形参类型和返回值添加到函数名中。还需要考虑生成的名称的长度，因为某些链接器对长度进行了限制。在C++中使用嵌套的命名空间和类，修改后的名称可能相当长。
 
-There, C++ defines a compression scheme to avoid repeating name components over and over again.
+这里，C++定义了一个压缩方案，以避免一遍又一遍地重复名称组件。
 
-Next, we’ll look at how to treat parameters.
+接下来，我们就来看看如何处理函数参数。
 
+\mySubsubsection{4.2.9.}{AST描述类型转换为LLVM类型}
 
-\mySubsubsection{4.2.9.}{Converting a type from an AST description into LLVM types}
-
-The parameters of a function also need some consideration. First, we need to map the types of the source language to an LLVM type. As tinylang currently has only two types, this is easy:
+函数的参数也需要考虑。首先，需要将源语言的类型映射到LLVM类型。由于tinylang目前只有两种类型，所以很容易:
 
 \begin{cpp}
 llvm::Type *CGModule::convertType(TypeDeclaration *Ty) {
@@ -300,9 +297,9 @@ llvm::Type *CGModule::convertType(TypeDeclaration *Ty) {
 }
 \end{cpp}
 
-Int64Ty, Int1Ty, and VoidTy are class members that hold the type representation of the i64, i1, and void LLVM types.
+Int64Ty、Int1Ty和VoidTy是类成员，包含i64、i1和void LLVM类型的类型表示。
 
-For a formal parameter passed by reference, this is not enough. The LLVM type of this parameter is a pointer. However, when we want to use the value of the formal parameter, we need to know the underlying type. This is controlled by the HonorReference flag, which has a default value of true. We generalize the function and take the formal parameter into account:
+对于通过引用传递的形式参数，这是不够的。该参数的LLVM类型为指针型，当我们想要使用形式参数的值时，需要知道底层类型。这由HonorReference标志控制，其默认值为true。我们对函数进行推广，并考虑形式参数:
 
 \begin{cpp}
 llvm::Type *CGProcedure::mapType(Decl *Decl,
@@ -320,11 +317,11 @@ llvm::Type *CGProcedure::mapType(Decl *Decl,
 }
 \end{cpp}
 
-With these helpers at hand, we can create the LLVM IR function.
+有了这些辅助程序，我们就可以创建LLVM IR函数了。
 
-\mySubsubsection{4.2.10.}{Creating the LLVM IR function}
+\mySubsubsection{4.2.10.}{创建LLVM IR函数}
 
-To emit a function in LLVM IR, a function type is needed, which is similar to a prototype in C. Creating the function type involves mapping the types and then calling the factory method to create the function type:
+要在LLVM IR中生成一个函数，需要一个函数类型，这类似于C中的原型。创建函数类型包括映射类型，然后使用工厂方法来创建函数类型:
 
 \begin{cpp}
 llvm::FunctionType *CGProcedure::createFunctionType(
@@ -344,7 +341,7 @@ ProcedureDeclaration *Proc) {
 }
 \end{cpp}
 
-Based on the function type, we also create the LLVM function. This associates the function type with the linkage and the mangled name:
+根据函数类型，我们还创建了LLVM函数。这将函数类型与链接修改后的名称进行了关联:
 
 \begin{cpp}
 llvm::Function *
@@ -355,22 +352,21 @@ CGProcedure::createFunction(ProcedureDeclaration *Proc,
         CGM.mangleName(Proc), CGM.getModule());
 \end{cpp}
 
-The getModule() method returns the current LLVM module, which we’ll set up a bit later.
+getModule()方法返回当前的LLVM模块，稍后我们将对其进行设置。
 
-With the function created, we can add some more information about it:
+创建了函数后，我们可以添加更多关于它的信息:
 
 \begin{itemize}
 \item
-First, we can give the parameter’s names. This makes the IR more readable.
+首先，可以给出参数的名称，可使得IR更具可读性。
 
 \item
-Second, we can add attributes to the function and to the parameters to specify some characteristics. As an example, we will do this for parameters passed by reference.
+其次，可以给函数和参数添加属性来指定一些特征。例如，我们将对通过引用传递的参数进行此操作。
 \end{itemize}
 
-At the LLVM level, these parameters are pointers. But from the source language design, these are very restricted pointers. Analogous to references in C++, we always need to specify a variable for a VAR parameter. So, by design, we know that this pointer will never be null and that it is always dereferenceable, meaning that we can read the value that’s being pointed to without risking a general protection fault. Also, by design, this pointer cannot be passed around – in particular, there are no copies of the pointer that outlive the call to the function. Therefore, the pointer is said to not be captured.
+在LLVM级别，这些参数是指针。但是从源语言设计来看，这些是非常受限的指针。与C++中的引用类似，我们总是需要为VAR参数指定一个变量。根据设计，我们知道这个指针永远不会为空，并且它始终是可解引用的，所以可以读取指向的值，而不会有风险。而且，该指针不能传递——特别是，因为没有比函数调用更长的指针副本，所以不能捕获指针。
 
-The llvm::AttributeBuilder class is used to build the set of attributes for a formal parameter.
-To get the storage size of a parameter type, we can simply query the data layout object:
+llvm::AttributeBuilder类用于为形式参数构建属性集。要获取参数类型的存储大小，可以简单地查询数据布局对象:
 
 \begin{cpp}
     for (auto [Idx, Arg] : llvm::enumerate(Fn->args())) {
@@ -391,15 +387,15 @@ To get the storage size of a parameter type, we can simply query the data layout
 }
 \end{cpp}
 
-With that, we have created the IR function. In the next section, we’ll add the basic blocks of the function body to the function.
+这样，就创建了IR函数。下一节中，我们将把函数体的基本块添加到函数中。
 
-\mySubsubsection{4.2.11.}{Emitting the function body}
+\mySubsubsection{4.2.11.}{生成函数体}
 
-We are almost done with emitting the IR code for a function! We only need to put the pieces together to emit a function, including its body:
+我们几乎完成了为函数发出IR代码，只需要把这些片段组合在一起就可以生成函数了，包括它的函数体:
 
 \begin{enumerate}
 \item
-Given a procedure declaration from tinylang, first, we will create the function type and the function:
+给定一个来自tinylang的过程声明。首先，我们将创建函数类型和函数:
 
 \begin{cpp}
 void CGProcedure::run(ProcedureDeclaration *Proc) {
@@ -409,7 +405,7 @@ void CGProcedure::run(ProcedureDeclaration *Proc) {
 \end{cpp}
 
 \item
-Next, we will create the first basic block of the function and make it the current one:
+接下来，将创建函数的第一个基本块，并使其成为当前块:
 
 \begin{cpp}
     llvm::BasicBlock *BB = llvm::BasicBlock::Create(
@@ -418,7 +414,7 @@ Next, we will create the first basic block of the function and make it the curre
 \end{cpp}
 
 \item
-Then, we must step through all formal parameters. To handle VAR parameters correctly, we need to initialize the FormalParams member (used in readVariable()). In contrast to local variables, formal parameters have a value in the first basic block, so we must make these values known:
+然后，必须逐一检查所有的形式参数。为了正确处理VAR参数，需要初始化FormalParams成员(在readVariable()中使用)。与局部变量相比，形式参数在第一个基本块中有一个值，所以些值必须已知:
 
 \begin{cpp}
     for (auto [Idx, Arg] : llvm::enumerate(Fn->args())) {
@@ -430,7 +426,7 @@ Then, we must step through all formal parameters. To handle VAR parameters corre
 \end{cpp}
 
 \item
-After this setup, we can call the emit() method to start generating the IR code for statements:
+设置之后，可以调用emit()方法来生成IR代码:
 
 \begin{cpp}
     auto Block = Proc->getStmts();
@@ -438,7 +434,7 @@ After this setup, we can call the emit() method to start generating the IR code 
 \end{cpp}
 
 \item
-The last block after generating the IR code may not be sealed yet, so we must call sealBlock() now. A procedure in tinylang may have an implicit return, so we must also check if the last basic block has a proper terminator, and add one if not:
+生成IR代码后的最后一个块可能还没有密封，所以现在必须调用sealBlock()。tinylang中的过程可能有隐式返回，因此必须检查最后一个基本块是否有正确的结束符；否则，需要添加一个结束符:
 
 \begin{cpp}
     if (!Curr->getTerminator()) {
@@ -450,7 +446,7 @@ The last block after generating the IR code may not be sealed yet, so we must ca
 
 \end{enumerate}
 
-With that, we’ve finished generating IR code for functions. However, we still need to create the LLVM module, which holds all the IR code together. We’ll do this in the next section.
+至此，我们已经完成了为函数生成IR代码的工作。但仍然需要创建LLVM模块，它将所有IR代码放在一起。我们将在下一节中进行此操作。
 
 
 
