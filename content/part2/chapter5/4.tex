@@ -1,9 +1,9 @@
 
-Many modern programming languages support object orientation using classes. A class is a high-level language construct, and in this section, we will explore how we can map a class construct into LLVM IR.
+许多现代编程语言使用类支持面向对象，类是高级语言结构。本节中，我们将探讨如何将类结构映射到LLVM IR中。
 
-\mySubsubsection{5.4.1.}{Implementing single inheritance}
+\mySubsubsection{5.4.1.}{实现单继承}
 
-A class is a collection of data and methods. A class can inherit from another class, potentially adding more data fields and methods, or overriding existing virtual methods. Let’s illustrate this with classes in Oberon-2, which is also a good model for tinylang. A Shape class defines an abstract shape with a color and an area:
+类是数据和方法的集合。一个类可以从另一个类继承，可能会添加更多的数据字段和方法，或者覆盖现有的虚拟方法。我们用Oberon-2中的类来说明这一点，Oberon-2也是一个很好的tinylang模型。Shape类定义了一个具有颜色和面积的抽象类型:
 
 \begin{shell}
 TYPE Shape = RECORD
@@ -13,21 +13,21 @@ TYPE Shape = RECORD
              END;
 \end{shell}
 
-The GetColor method only returns the color number:
+GetColor方法只返回颜号:
 
 \begin{shell}
 PROCEDURE (VAR s: Shape) GetColor(): INTEGER;
 BEGIN RETURN s.color; END GetColor;
 \end{shell}
 
-The area of an abstract shape cannot be calculated, so this is an abstract method:
+抽象形状的面积无法计算，所以这是一种抽象的方法:
 
 \begin{shell}
 PROCEDURE (VAR s: Shape) Area(): REAL;
 BEGIN HALT; END;
 \end{shell}
 
-The Shape type can be extended to represent a Circle class:
+Shape类型可以扩展为表示Circle类:
 
 \begin{shell}
 TYPE Circle = RECORD (Shape)
@@ -36,80 +36,80 @@ TYPE Circle = RECORD (Shape)
               END;
 \end{shell}
 
-For a circle, the area can be calculated:
+对于一个圆，面积则可以计算:
 
 \begin{shell}
 PROCEDURE (VAR s: Circle) Area(): REAL;
 BEGIN RETURN 2 * radius * radius; END;
 \end{shell}
 
-The type can also be queried at runtime. If the shape is a variable of type Shape, then we can formulate a type test in this way:
+该类型也可以在运行时查询。若形状是Shape类型的变量，则可以这样制定类型测试:
 
 \begin{shell}
 IF shape IS Circle THEN (* … *) END;
 \end{shell}
 
-The different syntax aside, this works much like it does in C++. One notable difference to C++ is that the Oberon-2 syntax makes the implicit this pointer explicit, calling it the receiver of a method.
+除了语法不同之外，它的工作原理与C++非常相似。但显著区别是Oberon-2语法显式声明了this指针，将其称为方法的接收方。
 
-The basic problems to solve are how to lay out a class in memory and how to implement the dynamic call of methods and run time-type checking. For the memory layout, this is quite easy. The Shape class has only one data member, and we can map it to a corresponding LLVM structure type:
+要解决的基本问题是如何在内存中布局类，如何实现方法的动态调用和运行时类型检查。对于内存布局，这非常简单。Shape类只有一个数据成员，可以将其映射到相应的LLVM结构类型:
 
 \begin{shell}
 @Shape = type { i64 }
 \end{shell}
 
-The Circle class adds another data member. The solution is to append the new data member at the end:
+Circle类添加了另一个数据成员，解决方案是在末尾附加新的数据成员:
 
 \begin{shell}
 @Circle = type { i64, float }
 \end{shell}
 
 
-The reason is that a class can have many sub-classes. With this strategy, the data member of the common base class always has the same memory offset and also uses the same index to access the field via the getelementptr instruction.
+原因是一个类可以有很多子类。使用这种策略，公共基类的数据成员始终具有相同的内存偏移量，并且使用相同的索引通过getelementptr指令访问相应的字段。
 
-To implement the dynamic call of a method, we must further extend the LLVM structure. If the Area() function is called on a Shape object, then the abstract method is called, causing the application to halt. If it is called on a Circle object, then the corresponding method to calculate the area of a circle is called. On the other hand, the GetColor() function can be called for objects of both classes.
+为了实现方法的动态调用，必须进一步扩展LLVM结构。若在Shape对象上调用Area()函数，则调用抽象方法，从而导致应用程序停止。若在Circle对象上调用它，则调用相应的方法来计算圆的面积。另一方面，可以为这两个类的对象调用GetColor()函数。
 
-The basic idea to implement this is to associate a table with function pointers with each object. Here, a table would have two entries: one for the GetColor() method and one for the Area() function. The Shape class and the Circle class each have such a table. The tables differ in the entry for the Area() function, which calls different code depending on the type of the object. This table is called the virtual method table, often abbreviated as vtable.
+实现这一点的基本思想是，将一个表与每个对象的函数指针关联起来。这里，一个表有两个信息:一个用于GetColor()方法，另一个用于Area()函数。Shape类和Circle类都有这样一个表。这些表在Area()函数的条目中有所不同，该函数根据对象的类型调用不同的代码。这个表称为虚方法表，通常缩写为vtable。
 
-The vtable alone is not useful. We must connect it with an object. To do so, we always add a pointer to the vtable as the first data member to the structure. At the LLVM level, this is what becomes of the @Shape type:
+虚表本身没有用，必须把它和一个对象关联起来。为此，总是添加指向虚函数表的指针，作为该结构的第一个数据成员。在LLVM级别，@Shape类型是这样的:
 
 \begin{shell}
 @Shape = type { ptr, i64 }
 \end{shell}
 
-The @Circle type is similarly extended.
+@Circle类型也进行了类似的扩展。
 
-The resulting memory structure is shown in Figure 5.1:
+得到的内存结构如图5.1所示:
 
-\myGraphic{0.7}{content/part2/chapter5/images/1.png}{Figure 5.1 – Memory layout of the classes and the virtual method tables}
+\myGraphic{0.7}{content/part2/chapter5/images/1.png}{图5.1 - 类和虚拟方法表的内存布局}
 
-In terms of LLVM IR, the vtable for the Shape class can be visualized as the following, where the two pointers correspond to the GetColor() and GetArea() methods, as represented in Figure 5.1:
+在LLVM IR中，Shape类的虚值表可以可视化为如下表示，其中两个指针对应于GetColor()和GetArea()方法，如图5.1所示:
 
 \begin{shell}
 @ShapeVTable = constant { ptr, ptr } { GetColor(), Area() }
 \end{shell}
 
-Furthermore, LLVM does not have void pointers. Pointers to bytes are used instead. With the introduction of the hidden vtable field, there is now also the need to have a way to initialize it. In C++, this is part of calling the constructor. In Oberon-2, the field is initialized automatically when the memory is allocated.
+此外，LLVM没有void指针，而是使用指向字节的指针。随着隐藏虚值表字段的引入，现在还需要有一种方法来初始化它。C++中，这是调用构造函数的一部分。在Oberon-2中，该字段在分配内存时自动初始化。
 
-A dynamic call to a method is then executed with the following steps:
+然后，通过以下步骤执行对方法的动态调用:
 
 \begin{enumerate}
 \item
-Calculate the offset of the vtable pointer via the getelementptr instruction.
+通过getelementptr指令计算虚函数表指针的偏移量。
 
 \item
-Load the pointer to the vtable.
+加载指向虚参表的指针。
 
 \item
-Calculate the offset of the function in the vtable.
+计算函数在虚函数表中的偏移量。
 
 \item
-Load the function pointer.
+加载函数指针。
 
 \item
-Indirectly call the function via the pointer with the call instruction.
+使用调用指令通过指针间接调用函数。
 \end{enumerate}
 
-We can visualize the dynamic call to a virtual method, such as Area(), within LLVM IR, as well. First, we load a pointer from the corresponding designated location of the Shape class. The following load represents loading the pointer to the actual vtable for Shape:
+还可以在LLVM IR中可视化对虚拟方法(如Area())的动态调用。首先，从Shape类的相应指定位置加载一个指针。下面的load表示将指针加载到实际的虚函数表中，以便形成函数:
 
 \begin{shell}
 // Load a pointer from the corresponding location.
@@ -118,102 +118,101 @@ We can visualize the dynamic call to a virtual method, such as Area(), within LL
 %vtable = load ptr, ptr %ptrToShapeObj, align 8
 \end{shell}
 
-Following this, a getelementptr gets to the offset to call the Area() method:
+在此之后，getelementptr获取偏移量以调用Area():
 
 \begin{shell}
 %offsetToArea = getelementptr inbounds ptr, ptr %vtable, i64 1
 \end{shell}
 
-Then, we load the function pointer to Area():
+然后，加载指向Area()的函数指针:
 
 \begin{shell}
 %ptrToAreaFunction = load ptr, ptr %offsetToArea, align 8
 \end{shell}
 
-Finally, the Area() function is called through the pointer with the call, similar to the general steps that are highlighted previously:
+最后，通过指针调用Area()函数：
 
 \begin{shell}
 %funcCall = call noundef float %ptrToAreaFunction(ptr noundef
   nonnull align 8 dereferenceable(12) %ptrToShapeObj)
 \end{shell}
 
-As we can see, even in the case of a single inheritance, the LLVM IR that is generated can appear to be very verbose. Although the general procedure of generating a dynamic call to a method does not sound very efficient, most CPU architectures can perform this dynamic call with just two instructions.
+正如我们所看到的，即使在单继承的情况下，生成的LLVM IR也可能看起来非常冗长。尽管生成对方法的动态调用过程看起来效率不高，但大多数CPU架构只需两条指令就可以执行该动态调用。
 
-Moreover, to turn a function into a method, a reference to the object’s data is required. This is implemented by passing the pointer to the data as the first parameter of the method. In Oberon-2, this is the explicit receiver. In languages similar to C++, it is the implicit this pointer.
+此外，要将函数转换为方法，还需要对对象数据的引用，需要通过将指向数据的指针作为方法的第一个参数来实现的。在Oberon-2中，这是明确的接收者。在类似C++的语言中，它是隐式this指针。
 
-With the vtable, we have a unique address in memory for each class. Does this help with the runtimetype test, too? The answer is that it helps only in a limited way. To illustrate the problem, let’s extend the class hierarchy with an Ellipse class, which inherits from the Circle class. This is not the classical is-a relationship in the mathematical sense.
+使用虚函数表，每个类在内存中都有唯一地址。这对运行时类型测试也有帮助吗?是的，但帮助有限。为了说明这个问题，让我们用一个继承自Circle类的Ellipse类来扩展类层次，这不是数学意义上的is-a关系。
 
-If we have a shape variable of the Shape type, then we could implement the shape IS Circle type test as a comparison of the vtable pointer stored in the shape variable with the vtable pointer of the Circle class. This comparison only results in true if shape has the exact Circle type.
-However, if shape is indeed of the Ellipse type, then the comparison returns false, even if an object of the Ellipse type can be used in all places where only an object of the Circle type is required.
+若有一个Shape类型的shape变量，则可以实现shap IS Circle类型的测试，将shap变量中存储的虚表指针与Circle类的虚表指针进行比较。只有当shape具有确切的Circle类型时，这种比较才会为true。但若shape是Ellipse类型，则比较返回false。但在需要Circle类型对象的所有地方，都可以使用Ellipse类型的对象。
 
-Clearly, we need to do more. The solution is to extend the virtual method table with runtime-type information. How much information you need to store depends on the source language. To support the runtime-type check, it is enough to store a pointer to the vtable of the base class, which then looks like in Figure 5.2:
+显然，我们需要做得更多。解决方案是使用运行时类型信息扩展虚拟方法表，需要存储多少信息取决于源语言。为了支持运行时类型检查，存储一个指向基类虚函数表的指针就足够了，如图5.2所示:
 
-\myGraphic{0.7}{content/part2/chapter5/images/2.png}{Figure 5.2 – Class and vtable layout supporting simple type tests}
+\myGraphic{0.7}{content/part2/chapter5/images/2.png}{图5.2 - 支持简单类型测试的类和虚函数表布局}
 
-If the test fails as described earlier, then the test is repeated with the pointer to the vtable of the base class. This is repeated until the test yields true or, if there is no base class, false. In contrast to calling a dynamic function, the type test is a costly operation because, in the worst-case scenario, the inheritance hierarchy is walked up to the root class.
+若测试失败，则使用指向基类的虚函数表的指针重复测试。重复此操作，直到测试结果为true；若没有基类，则为false。与调用动态函数相比，类型测试是一个代价高昂的操作，所以在最坏的情况下，继承层次结构可以向上回溯到根类。
 
-If you know the whole class hierarchy, then an efficient approach is possible: you number each member of the class hierarchy in a depth-first order. Then, the type test becomes compare-against-a-number or an interval, which can be done in constant time. In fact, that is the approach of LLVM’s own runtimetype test, which we learned about in the previous chapter.
+若了解整个类层次结构，就有一种有效的方法:按照深度优先的顺序，对类层次结构的每个成员进行编号。然后，类型测试变成了对一个数字或一个间隔进行比较，这可以在恒定的时间内完成。事实上，这就是LLVM自己的运行时类型测试的方法，我们在前一章中已经了解过了。
 
-To couple runtime-type information with the vtable is a design decision, either mandated by the source language or just as an implementation detail. For example, if you need detailed runtime-type information because the source language supports reflection at runtime, and you have data types without a vtable, then coupling both is not a good idea. In C++, the coupling results in the fact that a class with virtual functions (and therefore no vtable) has no runtime-type data attached to it.
+将运行时类型信息与虚函数表耦合是一种设计决策，要么是源语言强制要求的，要么只是作为实现细节。例如，因为源语言在运行时支持反射，所以需要详细的运行时类型信息，并且数据类型没有vtable，那么将两者耦合就不是一个好主意。在C++中，耦合会导致具有虚函数(因此没有虚函数表)的类，没有运行时的类型数据。
 
-Often, programming languages support interfaces which are a collection of virtual methods. Interfaces are important because they add a useful abstraction. We will look at possible implementations of interfaces in the next section.
+通常，编程语言支持的接口是虚拟方法的集合。接口很重要，提供了有用的抽象。我们将在下一节中查看接口的可能实现方式。
 
-\mySubsubsection{5.4.2.}{Extending single inheritance with interfaces}
+\mySubsubsection{5.4.2.}{使用接口扩展单继承}
 
-Languages such as Java support interfaces. An interface is a collection of abstract methods, comparable to a base class with no data members and only abstract methods defined. Interfaces pose an interesting problem because each class implementing an interface can have the corresponding method at a different position in the vtable. The reason is simply that the order of function pointers in the vtable is derived from the order of the functions in the class definition in the source language. The definition of the interface is independent of this, and different orders are the norm.
+Java等语言支持接口，接口是抽象方法的集合，类似于没有数据成员、只定义了抽象方法的基类。接口带来了一个有趣的问题，实现接口的每个类，都可以在虚函数表中的不同位置拥有相应的方法。原因很简单，虚函数表中函数指针的顺序，是从源码语言中类定义中的函数顺序派生出来的。接口的定义与此无关，不同的顺序是标准。
 
-Because the methods defined in an interface can have a different order, we attach a table for each implemented interface to the class. For each method of the interface, this table can specify either the index of the method in the vtable or a copy of the function pointer stored in the vtable. If a method is called on the interface, then the corresponding vtable of the interface is searched, the pointer to the function is fetched, and the method is called. Adding two I1 and I2 interfaces to the Shape class results in the following layout:
+因为在接口中定义的方法可以有不同的顺序，所以可以将每个实现的接口的表附加到类中。对于接口的每个方法，这个表可以指定该方法在虚值表中的索引，也可以指定存储在虚值表中的函数指针的副本。若在接口上调用方法，则搜索接口对应的虚函数表，获取指向该函数的指针，并调用该方法。在Shape类中添加两个I1和I2接口会产生以下布局:
 
-\myGraphic{0.7}{content/part2/chapter5/images/3.png}{Figure 5.3 – Layout of vtables for interfaces}
+\myGraphic{0.7}{content/part2/chapter5/images/3.png}{图5.3 - 接口虚表的布局}
 
-The caveat lies in the fact that we have to find the right vtable. We can use an approach similar to the runtime-type test: we can perform a linear search through the list of interface vtables. We can assign a unique number to each interface (for example, a memory address) and identify this vtable using this number. The disadvantage of this scheme is obvious: calling a method through an interface takes much more time than calling the same method on the class. There is no easy mitigation for this problem.
+需要注意的是，必须找到合适的表。我们可以使用类似于运行时类型测试的方法:可以在接口虚表列表中执行线性搜索。可以为每个接口分配唯一编号(例如，一个内存地址)，并使用这个编号来标识这个虚函数表。这种方案的缺点是显而易见的:通过接口调用方法比在类上调用相同的方法要花费更多的时间，但要解决这个问题并不容易。
 
-A good approach is to replace the linear search with a hash table. At compilation time, the interface that a class implements is known. Therefore, we can construct a perfect hash function, which maps the interface number to the vtable for the interface. A known unique number identifying an interface may be needed for the construction, so memory does not help, but there are other ways to compute a unique number. If the symbol names in the source are unique, then it is always possible to compute a cryptographic hash such as MD5 of the symbol, and use the hash as the number. The calculation occurs at compile time and therefore has no runtime cost.
+一个好的方法是用哈希表代替线性搜索。在编译时，类实现的接口是已知的，以可以构造一个完美的哈希函数，将接口编号映射到接口的虚函数表。在构造过程中可能需要标识接口的唯一编号，因此内存没有帮助，但是还有其他方法可以计算唯一编号。若源码中的符号名称唯一，则可以计算该符号的加密哈希(例如MD5)，并使用该哈希作为数字。计算在编译时进行，因此没有运行时成本。
 
-The result is much faster than the linear search and only takes constant time. Still, it involves several arithmetic operations on a number and is slower than the method call of a class type.
+结果比线性搜索快得多，只需要常数时间。不过，会涉及数的几个算术操作，比类类型方法调用要慢。
 
-Usually, interfaces also take part in runtime-type tests, making the list search even longer. Of course, if the hash-table approach is implemented, then it can also be used for the runtime-type test.
+通常，接口也参与运行时类型测试，使列表搜索更长。当然，若实现了哈希表方法，也可以用于运行时类型测试。
 
-Some languages allow for more than one parent class. This has some interesting challenges for the implementation, and we will master this in the next section.
+有些语言允许有多个父类。这对实现有一些有趣的挑战，我们将在下一节中了解这些。
 
-\mySubsubsection{5.4.3.}{Adding support for multiple inheritance}
+\mySubsubsection{5.4.3.}{增加对多重继承的支持}
 
-Multiple inheritance adds another challenge. If a class inherits from two or more base classes, then we need to combine the data members in such a way that they are still accessible from the methods. Like in the single inheritance case, the solution is to append all data members, including the hidden vtable pointers.
+多重继承增加了另一个挑战。若一个类继承自两个或多个基类，则需要以一种仍然可以从方法访问的方式组合数据成员。与单继承情况类似，解决方案是附加所有数据成员，包括隐藏的虚函数表指针。
 
-The Circle class is not only a geometric shape but also a graphic object. To model this, we let the Circle class inherit from the Shape class and the GraphicObj class. In the class layout, the fields from the Shape class come first. Then, we append all fields of the GraphicObj class, including the hidden vtable pointer. After that, we add the new data members of the Circle class, resulting in the overall structure shown in Figure 5.4:
+Circle类不仅是一个几何形状，而且是一个图形对象。为了对此建模，让Circle类继承Shape类和GraphicObj类。在类布局中，Shape类中的字段首先出现，再追加GraphicObj类的所有字段，包括隐藏的虚值表指针。之后，添加Circle类的新数据成员，得到如图5.4所示的整体结构:
 
-\myGraphic{0.7}{content/part2/chapter5/images/4.png}{Figure 5.4 - Layout of classes and vtables with multiple inheritance}
+\myGraphic{0.7}{content/part2/chapter5/images/4.png}{图5.4 - 具有多重继承的类和变量的布局}
 
-This approach has several implications. There can now be several pointers to the object. A pointer to the Shape or Circle class points to the top of the object, while a pointer to a GraphicObj class points to inside this object, the beginning of the embedded GraphicObj object. This has to be taken into account when comparing pointers.
+这种方法有几个含义，可以有多个指向对象的指针。指向Shape或Circle类的指针指向对象的顶部，而指向GraphicObj类的指针指向该对象内部，即嵌入的GraphicObj对象的开始。在比较指针时必须考虑到这一点。
 
-Calling a virtual method is also affected. If a method is defined in the GraphicObj class, then this method expects the class layout of the GraphicObj class. If this method is not overridden in the Circle class, then there a two possibilities. The easy case is if the method call is done with a pointer to a GraphicObj instance: in this case, you look up the address of the method in the vtable of the GraphicObj class and call the function. The more complicated case is if you call the method with a pointer to the Circle class. Again, you can look up the address of the method in the vtable of the Circle class. The called method expects a this pointer to be an instance of the GraphicObj class, so we have to adjust that pointer, too. We can do this because we know the offset of the GraphicObj class inside the Circle class.
+调用虚拟方法也会受到影响，若在GraphicObj类中定义了一个方法，则这个方法需要GraphicObj类的类布局。若在Circle类中没有重写此方法，则有两种可能。简单的情况是，若方法调用是通过指向GraphicObj实例的指针完成的:可以在GraphicObj类的vtable中查找方法的地址并调用该函数。更复杂的情况是，若使用指向Circle类的指针调用该方法，所以可以在Circle类的虚函数表中查找方法的地址。调用的方法期望this指针是GraphicObj类的一个实例，所以也必须调整那个指针。因为我们知道GraphicObj类在Circle类中的偏移量，所以可以这样做。
 
-If a GrapicObj method is overridden in the Circle class, then nothing special needs to be done if the method is called through a pointer to the Circle class. However, if the method is called through a pointer to a GraphicObj instance, then we need to make another adjustment because the method needs a this pointer pointing to a Circle instance. At compilation time, we cannot compute this adjustment because we do not know whether or not this GraphicObj instance is part of a multiple inheritance hierarchy. To solve this, we store the adjustment we need to make to the this pointer before calling the method together with each function pointer in the vtable, as in Figure 5.5:
+若在Circle类中重写了GrapicObj方法，则通过指向Circle类的指针调用该方法，从而不需要做任何特殊操作。但若该方法是通过指向GraphicObj实例的指针调用，因为该方法需要一个指向Circle实例的this指针，那么就需要做一些调整。在编译时，因为我们不知道这个GraphicObj实例是否是多重继承层次结构的一部分，所以无法了解需要调整的部分。为了解决这个问题，我们将再调用方法之前，对this指针进行调整，并将每个函数指针一起存储在虚函数表中，如图5.5所示:
 
-\myGraphic{0.7}{content/part2/chapter5/images/5.png}{Figure 5.5 – vtable with adjustments to the this pointer}
+\myGraphic{0.7}{content/part2/chapter5/images/5.png}{图5.5 - vtable与this指针的调整}
 
-A method call now becomes the following:
+一个方法调用现在变成如下过程:
 
 \begin{enumerate}
 \item
-Look up the function pointer in the vtable.
+在虚函数表中查找函数指针。
 
 \item
-Adjust the this pointer.
+调整this指针。
 
 \item
-Call the method.
+调用该方法。
 \end{enumerate}
 
-This approach can also be used for implementing interfaces. As an interface only has methods, each implemented interface adds a new vtable pointer to the object. This is easier to implement and most likely faster, but it adds overhead to each object instance.
+这种方法也可用于实现接口。由于接口只有方法，所以每个实现的接口都会向对象添加一个新的虚函数表指针。这更容易实现，而且很可能更快，但它给每个对象实例增加了开销。
 
-In the worst case, if your class has a single 64-bit data field but implements 10 interfaces, then your object requires 96 bytes in memory: eight bytes for the vtable pointer of the class itself, eight bytes for the data member, and 10 * 8 bytes for the vtable pointers of each interface.
+最坏的情况下，若类有一个64位的数据字段，但是实现了10个接口，则对象需要96字节的内存:8字节用于类本身的虚表指针，8字节用于数据成员，10 * 8字节用于每个接口的虚表指针。
 
-To support meaningful comparisons to objects and to perform runtime-type tests, we need to normalize a pointer to an object first. If we add an additional field to the vtable, containing an offset to the top of the object, then we can always adjust the pointer to point to the real object. In the vtable of the Circle class, this offset is 0, but not in the vtable of the embedded GraphicObj class. Of course, whether this needs to be implemented depends on the semantics of the source language.
+为了支持对对象进行有意义的比较并执行运行时类型测试，需要首先规范指向对象的指针。若在虚函数表中添加一个额外的字段，包含对象顶部的偏移量，则可以调整指针以指向实际对象。在Circle类的实值表中，该偏移量为0，但在嵌入GraphicObj类的实值表中则不是。当然，这是否需要实现取决于源码语言的语义。
 
-LLVM itself does not favor a special implementation of object-oriented features. As seen in this section, we can implement all approaches with the available LLVM data types. Additionally, as we have seen an example of LLVM IR with single inheritance, it is also worth noting that the IR can become more verbose when multiple inheritance is involved. If you want to try a new approach, then a good way is to do a prototype in C first. The required pointer manipulations are quickly translated to LLVM IR, but reasoning about the functionality is easier in a higher-level language.
+LLVM本身并不支持面向对象特性的特殊实现。如本节所示，可以使用可用的LLVM数据类型实现所有方法。此外，正如具有单继承的LLVM IR示例一样，当涉及多继承时，IR可能会变得更加冗长。若想尝试一种新方法，一个好方法就是先用C语言做一个原型。所需的指针操作很快翻译成LLVM IR，但在高级语言中对功能的推理会更容易。
 
-With the knowledge acquired in this section, you can implement the lowering of all OOP constructs commonly found in programming languages into LLVM IR in your own code generator. You have recipes on how to represent single inheritance, single inheritance with interface, or multiple inheritance in memory, and also how to implement type tests and how to look up virtual functions, which are the core concepts of OOP languages.
+利用本节中获得的知识，可以在自己的代码生成器中实现将编程语言中常见的所有OOP结构简化为LLVM IR。您已经掌握了如何表示单继承、使用接口的单继承或内存中的多重继承，以及如何实现类型测试和如何查找虚拟函数，这些都是OOP语言的核心概念。
 
 
 

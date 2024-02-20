@@ -1,70 +1,69 @@
-With the addition of arrays and records to the code generator, you can note that sometimes, the generated code does not execute as expected. The reason is that we have ignored the calling conventions of the platform so far. Each platform defines its own rules on how one function can call another function in the same program or library. These rules are summarized in the ABI documentation. Typical information includes the following:
+通过向代码生成器添加数组和记录，有时生成的代码不会按预期执行,原因是我们忽略了平台的调用约定。对于同一个程序或库中的函数如何调用另一个函数，每个平台都定义了自己的规则。ABI文档中总结了这些规则，常见信息包括以下内容:
 
 \begin{itemize}
 \item
-Are machine registers used for parameter passing? If yes, which ones?
+机器寄存器用于参数传递吗?如果是，是哪些?
 
 \item
-How are aggregates such as arrays and structs passed to a function?
+像数组和结构这样的聚合类型如何传递给函数?
 
 \item
-How are return values handled?
+如何处理返回值?
 \end{itemize}
 
-There is a wide variety in use. On some platforms, aggregates are always passed indirectly, meaning that a copy of the aggregate is placed on the stack and only a pointer to the copy is passed as a parameter. On other platforms, a small aggregate (say 128 or 256 bit wide) is passed in registers, and only above that threshold is indirect parameter passing used. Some platforms also use floating-point and vector registers for parameter passing, while others demand that floating-point values be passed in integer registers.
+用法有很多种。某些平台上，聚合类型间接传递，所以类型的副本会放在栈上，只有指向副本的指针作为参数传递。其他平台上，在寄存器中传递一个小的聚集(例如128或256位宽)，只有超过该阈值时才使用间接参数传递。有些平台还使用浮点寄存器和向量寄存器来传递参数，而另一些平台则要求浮点值使用整数寄存器传递。
 
-Of course, this is all interesting low-level stuff. Unfortunately, it leaks into LLVM IR. At first, this is surprising. After all, we define the types of all parameters of a function in LLVM IR! It turns out that this is not enough. To understand this, let’s consider complex numbers. Some languages have built-in data types for complex numbers. For example, C99 has float \_Complex (among others). Older versions of C do not have complex number types, but you can easily define struct Complex \{ float re, im; \} and create arithmetic operations on this type. Both types can be mapped to the \{ float, float \} LLVM IR type.
+当然，这些都是有趣的底层内容。不幸的是，它影响到LLVM IR，明明我们在LLVM IR中定义了函数的所有参数类型？!事实证明，这还不够。为了理解这一点，来看一下复数。有些语言内置了复数的数据类型。例如，C99有float \_Complex(以及其他)，旧版本的C没有复数类型，但可以定义struct complex \{float re, im;\}并在此类型上创建算术运算。这两种类型都可以映射到LLVM的\{float, float \} IR类型。
 
-If the ABI now states that values of a built-in, complex-number type are passed in two floatingpoint registers, but user-defined aggregates are always passed indirectly, then the information given with the function is not enough for LLVM to decide how to pass this particular parameter. The unfortunate consequence is that we need to provide more information to LLVM, and this information is highly ABI-specific.
+若ABI现在声明内置复数类型的值在两个浮点寄存器中传递，但用户定义的聚合总是间接传递，那么该函数给出的信息，不足以让LLVM决定如何传递这个特定的参数。但我们需要向LLVM提供更多的信息，而这些信息是等级是特定于ABI的。
 
-There are two ways to specify this information to LLVM: parameter attributes and type rewriting.
-What you need to use depends on the target platform and the code generator. The most commonly used parameter attributes are the following:
+有两种方法可以将这些信息指定给LLVM:参数属性和类型重写，这取决于目标平台和代码生成器。最常用的参数属性如下所示:
 
 \begin{itemize}
 \item
-inreg specifies that the parameter is passed in a register
+inreg指定参数在寄存器中传递
 
 \item
-byval specifies that the parameter is passed by value. The parameter must be a pointer type.
-A hidden copy is made of the pointed-to data, and this pointer is passed to the called function.
+byval指定参数按值传递，该参数必须是指针类型。将指向的数据生成一个隐藏副本，并将该指针传递给调用函数。
 
 \item
-zeroext and signext specify that the passed integer value should be zero or sign extended.
+zeroext和signext指定传递的整数值是零或符号扩展。
 
 \item
-sret specifies that this parameter holds a pointer to memory which is used to return an aggregate type from the function.
+sret指定此形参保存一个指向内存的指针，该指针用于从函数返回聚合类型。
 \end{itemize}
 
-While all code generators support zeroext, signext, and sret attributes, only some support inreg and byval. An attribute can be added to the argument of a function with the addAttr() method. For example, to set the inreg attribute on argument Arg, you call the following:
+虽然所有代码生成器都支持zeroext、signext和sret属性，但只有一些支持inreg和byval。可以使用addAttr()将属性添加到函数的参数中。例如，要在参数Arg上设置inreg属性，可以使用以下方式:
 
 \begin{cpp}
 Arg->addAttr(llvm::Attribute::InReg);
 \end{cpp}
 
-To set multiple attributes, you can use the llvm::AttrBuilder class.
+若需要设置多个属性，可以使用llvm::AttrBuilder类。
 
-The other way to provide additional information is to use type rewriting. With this approach, you disguise the original types. You can do the following:
+提供信息的另一种方法是使用类型重写。使用这种方法，可以隐藏原始类型:
 
 \begin{enumerate}
 \item
-Split the parameter. For example, instead of passing one complex argument, you can pass two floating-point arguments.
+拆分参数。例如，可以传递两个浮点参数，而不是传递一个复杂参数。
 
 \item
-Cast the parameter into a different representation, such as passing a floating-point value through an integer register.
+将参数转换为不同的表示形式，例如：通过整数寄存器传递浮点值。
 \end{enumerate}
 
-To cast between types without changing the bits of the value, you use the bitcast instruction. The bitcast instruction can operate on simple data types such as integers and floating-point values. When floating-point values are passed via an integer register, the floating-point value must be cast to an integer. In LLVM, a 32-bit floating-point value is expressed as float, and a 32-bit bit integer is expressed as i32. The floating point value can be bitcasted to an integer in the following way:
+要在不改变值位的情况下强制转换类型，可以使用bitcast指令。位转换指令可以操作简单的数据类型，如整数和浮点值。当通过整数寄存器传递浮点值时，必须将该浮点值强制转换为整数。在LLVM中，32位的浮点数表示为float，32位的整数表示为i32。可以通过以下方式将浮点值转换为整数:
 
 \begin{shell}
 %intconv = bitcast float %fp to i32
 \end{shell}
 
-Additionally, the bitcast instruction requires that both types have the same size.
-Adding attributes to an argument or changing the type is not complicated. But how do you know what you need to implement? First of all, you should get an overview of the calling convention used on your target platform. For example, the ELF ABI on Linux is documented for each supported CPU platform, so you can look up the document and make yourself comfortable with it.
+此外，位转换指令要求两种类型具有相同的大小。
 
-There is also documentation about the requirements of the LLVM code generators. The source of information is the clang implementation, which you can find at \url{https://github.com/llvm/llvm-project/blob/main/clang/lib/CodeGen/TargetInfo.cpp}. This single file contains the ABI-specific actions for all supported platforms, and it is also where all information is collected.
+向参数添加属性或更改类型并不复杂。但如何知道需要实现什么呢?首先，应该大致了解目标平台上使用的调用约定。例如，Linux上的ELF ABI针对每种支持的CPU平台都有文档，所以可以查找该文档并熟悉相关信息。
 
-In this section, you learned to generate the IR for function calls to be compliant with the ABI of your platform. The next section covers the different ways to create IR for classes and virtual functions.
+还有关于LLVM代码生成器需求的文档。信息的来源是clang实现，可以在\url{https://github.com/llvm/llvm-project/blob/main/clang/lib/CodeGen/TargetInfo.cpp}上找到。这个文件包含针对所有受支持平台的ABI操作，也是收集信息的地方。
+
+在本节中，学习了如何为函数调用生成与您平台的ABI兼容的IR。下一节将为生成类和虚函数的IR创建不同的方法。
 
 
 

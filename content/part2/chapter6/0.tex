@@ -1,22 +1,22 @@
 
-With IR generation introduced in the previous chapters, you can already implement most of the functionality required in a compiler. In this chapter, we will look at some advanced topics that often arise in real-world compilers. For example, many modern languages make use of exception handling, so we’ll look at how to translate this into LLVM IR.
+通过前面章节中介绍的IR生成，已经可以实现编译器中所需的大部分功能。本章中，将研究一些编译器中经常出现的高级主题。例如，许多现代语言都使用异常处理，因此我们将研究如何将其转换为LLVM IR。
 
-To support the LLVM optimizer so that it can produce better code in certain situations, we must add additional type metadata to the IR code. Moreover, attaching debug metadata enables the compiler’s user to take advantage of source-level debug tools.
+为了支持LLVM优化器，使其能够在某些情况下生成更好的代码，必须向IR代码添加类型的元数据。添加的调试元数据，可使编译器用户能够使用源代码级调试工具进行调试。
 
-In this chapter, we will cover the following topics:
+在本章中，将了解以下内容:
 
 \begin{itemize}
 \item
-Throwing and catching exceptions: Here, you will learn how to implement exception handling in your compiler
+抛出和捕获异常:您将学习如何在编译器中实现异常处理
 
 \item
-Generating metadata for type-based alias analysis: Here, you will attach additional metadata to LLVM IR, which helps LLVM to better optimize the code
+为基于类型的别名分析生成元数据:将更多的元数据到LLVM IR，这有助于LLVM更好地优化代码
 
 \item
-Adding debug metadata: Here, you will implement the support classes needed to add debug information to the generated IR code
+添加调试元数据:将实现向生成的IR代码添加调试信息所需的类
 \end{itemize}
 
-By the end of this chapter, you will have learned about exception handling, as well as metadata for type-based alias analysis and debug information.
+在本章结束时，将了解异常处理，以及用于基于类型的别名分析和调试信息的元数据。
 
 
 
