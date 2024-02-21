@@ -1,17 +1,17 @@
 
-A pass can perform arbitrary complex transformations on the LLVM IR. To illustrate the mechanics of adding a new pass, we add a pass that performs a simple instrumentation.
+一个通道可以在LLVM IR上执行任意复杂的转换。为了说明添加新通道的机制，我们添加一个执行简单检测的通道。
 
-To investigate the performance of a program, it is interesting to know how often functions are called, and how long they run. One way to collect this data is to insert counters into each function. This process is called instrumentation. We will write a simple instrumentation pass that inserts a special function call at the entry of each function and each exit point. These functions collect the timing information and write it into a file. As a result, we can create a very basic profiler that we’ll name the poor person’s profiler, or in short, ppprofiler. We will develop the new pass so that it can be used as a standalone plugin or added as a plugin to the LLVM source tree. After that, we’ll look at how the passes that come with LLVM are integrated into the framework.
+为了研究程序的性能，了解函数被调用的频率和运行的时间是很有趣的。收集这些数据的一种方法是在每个函数中插入计数器，这个过程称为插装。我们将编写一个简单的插装传递，在每个函数的入口和每个退出点插入一个特殊的函数调用，这些函数收集计时信息并将其写入文件。因此，可以创建一个非常基本的分析器，将其命名为“穷人”分析器，或者简而言之——ppprofiler。我们将开发新通道，以便其可以作为一个独立的插件使用，或者作为一个插件添加到LLVM源代码树中。最后，我们将了解如何将LLVM自带的通道集成到框架中。
 
-\mySubsubsection{7.3.1.}{Developing the ppprofiler pass as a plugin}
+\mySubsubsection{7.3.1.}{将ppprofiler作为插件进行开发}
 
-In this section, we’ll look at creating a new pass as a plugin out of the LLVM tree. The goal of the new pass is to insert a call to the \_\_ppp\_enter() function at the entry of a function, and a call to the \_\_ppp\_exit() function before each return instruction. Only the name of the current function is passed as a parameter. The implementation of these functions can then count the number of calls and measure the elapsed time. We will implement this runtime support at the end of this chapter. We’ll examine how to develop the pass.
+本节中，将了解如何在LLVM树中创建一个新通道作为插件。新通道的目标是在函数的入口处插入对\_\_ppp\_enter()函数的调用，并在每个返回指令之前插入对\_\_ppp\_exit()函数的调用。只有当前函数的名称作为参数传递，这些函数的实现可以计算调用的次数，并测量所使用的时间。我们将在本章的最后实现这个运行时支持，并将研究如何开发通道。
 
-We’ll store the source in the PPProfiler.cpp file. Follow these steps:
+我们将源代码存储在ppprofile .cpp文件中。遵循以下步骤:
 
 \begin{enumerate}
 \item
-First, let’s include some files:
+首先，包含一些文件:
 
 \begin{cpp}
 #include "llvm/ADT/Statistic.h"
@@ -23,7 +23,7 @@ First, let’s include some files:
 \end{cpp}
 
 \item
-To shorten the source, we’ll tell the compiler that we’re using the llvm namespace:
+为了缩短源代码，告诉编译器正在使用llvm命名空间:
 
 \begin{cpp}
 using namespace llvm;

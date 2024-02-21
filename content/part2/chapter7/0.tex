@@ -1,20 +1,20 @@
 
-LLVM uses a series of passes to optimize the IR. A pass operates on a unit of IR, such as a function or a module. The operation can be a transformation, which changes the IR in a defined way, or an analysis, which collects information such as dependencies. This series of passes is called the pass pipeline. The pass manager executes the pass pipeline on the IR, which our compiler produces. Therefore, you need to know what the pass manager does and how to construct a pass pipeline. The semantics of a programming language may require the development of new passes, and we must add these passes to the pipeline.
+LLVM使用一系列的通道来优化IR。一个通道在IR的一个单元上运行，例如一个函数或一个模块。操作可以是转换，以定义的方式更改IR，也可以是分析，其收集诸如依赖关系之类的信息。这一系列的通道称为通道流水线，通道管理器在编译器生成的IR上执行通道流水线。因此，需要知道通道管理器的作用以及如何构造一个传递流水线。编程语言的语义可能需要开发新的通道，我们必须将这些通道添加到流水线中。
 
-In this chapter, you will learn about the following:
+在本章中，将了解以下内容:
 
 \begin{itemize}
 \item
-How to leverage the LLVM pass manager to implement passes within LLVM
+如何利用LLVM通道管理器在LLVM内实现传递
 
 \item
-How to implement an instrumentation pass, as an example, within the LLVM project, as well as a separate plugin
+如何在LLVM项目中实现一个instrumentation通道，以及一个单独的插件
 
 \item
-In using the ppprofiler pass with LLVM tools, you will learn how to use a pass plugin with opt and clang
+在使用LLVM工具的ppprofiler通道时，将了解如何使用opt和clang的通道插件
 
 \item
-In adding an optimization pipeline to your compiler, you will extend the tinylang compiler with an optimization pipeline based on the new pass manager
+在向编译器中添加优化流水时，将使用基于新通道管理器的优化流水扩展tinylang编译器
 \end{itemize}
 
-By the end of this chapter, you will know how to develop a new pass and how you can add it to a pass pipeline. You will also be able to set up the pass pipeline in your compiler.
+在本章结束时，将了解如何开发新的传递以及如何将其添加到传递流水线中，还可以在编译器中设置传递流水线。

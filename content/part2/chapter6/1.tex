@@ -1,4 +1,4 @@
-Exception handling in LLVM IR is closely tied to platform support. Here, we will look at the most common type of exception handling using libunwind. Its full potential is used by C++, so we will look at an example in C++ first, where the bar() function can throw an int or double value:
+LLVM IR 中的异常处理与平台支持密切相关。在此，我们将使用 libunwind来了解最常见的异常处理类型。C++可以充分发挥libunwind的潜力，先来看一个C++示例，其中bar()函数可以抛出一个 int 或 double 值：
 
 \begin{cpp}
 int bar(int x) {
@@ -8,7 +8,7 @@ int bar(int x) {
 }
 \end{cpp}
 
-The foo() function calls bar(), but only handles a thrown int. It also declares that it only throws int values:
+foo()函数调用bar()，但只处理抛出的int值，并且还声明只抛出int值：
 
 \begin{cpp}
 int foo(int x) {
@@ -23,7 +23,7 @@ int foo(int x) {
 }
 \end{cpp}
 
-Throwing an exception requires two calls into the runtime library; this can be seen in the bar() function. First, memory for the exception is allocated with a call to \_\_cxa\_allocate\_exception(). This function takes the number of bytes to allocate as a parameter. The exception payload (the int or double value in this example) is copied to the allocated memory. The exception is then raised with a call to \_\_cxa\_throw(). This function takes three arguments: the pointer to the allocated exception, type information about the payload, and a pointer to a destructor, in case the exception payload has one. The \_\_cxa\_throw() function initiates the stack unwinding process and never returns. In LLVM IR, this is done for the int value, as follows:
+抛出异常需要两次调用运行时库，可以在bar()函数中看到。首先，调用\_\_cxa\_allocate\_exception()为异常分配内存，这个函数接受要分配的字节数作为参数。异常负载(本例中的int或double值)被复制到分配的内存中，再通过\_\_cxa\_throw()引发异常。这个函数接受三个参数:指向已分配异常的指针、有关有效负载的类型信息，以及指向析构函数的指针(若异常有效负载有一个的话)。\_\_cxa\_throw()函数启动堆栈展开过程，并且永远不会返回。在LLVM IR中，这是对int值执行的，如下所示:
 
 \begin{shell}
 %eh = call ptr @__cxa_allocate_exception(i64 4)
@@ -32,18 +32,18 @@ call void @__cxa_throw(ptr %eh, ptr @_ZTIi, ptr null)
 unreachable
 \end{shell}
 
-\_ZTIi is the type information describing an int type. For a double type, it would be \_ZTId.
+\_ZTIi是描述int类型的类型信息。对于double类型，则为\_ZTId。
 
-So far, nothing LLVM-specific is done. This changes in the foo() function because the call to bar() can raise an exception. If it is an int type exception, then the control flow must be transferred to the IR code of the catch clause. To accomplish this, the invoke instruction must be used instead of the call instruction:
+目前，还没有做特定于LLVM的工作。这一点在foo()函数中发生了变化，对bar()的调用可能引发异常。若是int类型异常，控制流必须转移到catch的IR代码。为此，必须使用invoke指令，而非call指令:
 
 \begin{shell}
 %y = invoke i32 @_Z3bari(i32 %x) to label %next
                                  unwind label %lpad
 \end{shell}
 
-The difference between both instructions is that invoke has two labels associated. The first label is where execution continues in case the called function ends normally, usually with a ret instruction. In the example code, this label is called \%next. If an exception occurs, then execution continues at a so-called landing pad, with a label of \%lpad.
+这两条指令的区别在于，invoke有两个相关联的标签。在函数正常结束时，第一个标号表示执行继续，通常以ret指令结束。在示例代码中，这个标签名为\%next。若发生异常，则在标号为\%lpad的“着陆台”上继续执行。
 
-The landing pad is a basic block that must begin with a landingpad instruction. The landingpad instruction gives LLVM information about the handled exception types. For example, a possible landing pad could look like this:
+著陆台是一个基本的块，必须以landingpad指令开始。landingpad指令向LLVM提供有关处理过的异常类型的信息。例如，一个着陆台可能是这样的:
 
 \begin{shell}
 lpad:
@@ -53,29 +53,29 @@ lpad:
             filter [1 x ptr] [ptr @_ZTIi]
 \end{shell}
 
-There are three possible types of action here:
+这里有三种可能的操作类型：
 
 \begin{itemize}
 \item
-cleanup: This denotes that code to clean up the current state is present. Usually, this is used to call destructors of local objects. If this marker is present, then the landing pad is always called during stack unwinding.
+cleanup:表示存在用于清理当前状态的代码，用于调用局部对象的析构函数。若此标记存在，则在堆栈展开期间调用着陆垫。
 
 \item
-catch: This is a list of type-value pairs and denotes the exception types that can be handled. The landing pad is called if the thrown exception type is found in this list. In the case of the foo() function, the value is the pointer to the C++ runtime type information for the int type, similar to the parameter of the \_\_cxa\_throw() function.
+catch:是类型-值对的列表，表示可以处理的异常类型。若在此列表中找到抛出的异常类型，则调用着陆垫。在foo()函数的情况下，该值是指向int类型的C++运行时类型信息的指针，类似于\_\_cxa\_throw()函数的参数。
 
 \item
-filter: This specifies an array of exception types. The landing pad is called if the exception type of the current exception is not found in the array. This is used to implement the throw() specification. For the foo() function, the array has only one member – the type information for the int type.
+filter:指定一个异常类型数组。若在数组中找不到当前异常的异常类型，则调用着陆垫，用于实现throw()规范。对于foo()函数，数组只有一个成员——int类型的类型信息。
 \end{itemize}
 
-The result type of the landingpad instruction is the { ptr, i32 } structure. The first element is a pointer to the thrown exception, while the second is a type selector. Let’s extract both from the structure:
+着陆平台指令的结果类型是\{ptr, i32 \}结构。第一个元素是指向抛出异常的指针，第二个元素是类型选择器。从结构体中进行提取:
 
 \begin{shell}
 %exc.ptr = extractvalue { ptr, i32 } %exc, 0
 %exc.sel = extractvalue { ptr, i32 } %exc, 1
 \end{shell}
 
-The type selector is a number that helps us identify the cause of why the landing pad is called. It is a positive value if the current exception type matches one of the exception types given in the catch part of the landingpad instruction. If the current exception type does not match any of the values given in the filter part, then the value is negative. It is 0 if the cleanup code should be called.
+类型选择器是一个数字，可以帮助确定为什么要调用着陆垫。若当前异常类型与landingpad指令的catch部分给出的异常类型匹配，则该值为正值。若当前异常类型不匹配过滤部分给出的值，则值为负。若应该调用清理代码，则为0。
 
-The type selector is an offset into a type information table, constructed from the values given in the catch and filter parts of the landingpad instruction. During optimization, multiple landing pads can be combined into one, which means that the structure of this table is not known at the IR level. To retrieve the type selector for a given type, we need to call the intrinsic @llvm.eh.typeid. for function. We need this to check if the type selector value corresponds to the type information for int so that we can execute the code in the catch (int e) \{\} block:
+类型选择器是类型信息表的偏移量，由着陆垫指令的catch和filter部分给出的值构造而成。在优化过程中，多个着陆垫指令可以合并为一个，所以在IR级别上该表的结构是未知的。要检索给定类型的类型选择器，需要调用内部的@llvm.eh.typeid.for的函数。我们需要它来检查类型选择器值是否与int的类型信息相对应，以便执行catch (int e) \{\}块中的代码:
 
 \begin{shell}
 %tid.int = call i32 @llvm.eh.typeid.for(ptr @_ZTIi)
@@ -83,9 +83,9 @@ The type selector is an offset into a type information table, constructed from t
 br i1 %tst.int, label %catchint, label %filterorcleanup
 \end{shell}
 
-The handling of an exception is framed by calls to \_\_cxa\_begin\_catch() and \_\_cxa\_end\_ catch(). The \_\_cxa\_begin\_catch() function needs one argument – the current exception – which is one of the values returned by the landingpad instruction. It returns a pointer to the exception payload – an int value in our case.
+异常的处理是通过调用\_\_cxa\_begin\_catch()和\_\_cxa\_end\_catch()实现的。\_\_cxa\_begin\_catch()函数需要一个参数—当前异常—是着陆垫指令返回的值之一，返回一个指向异常负载的指针——在本例中是一个int值。
 
-The \_\_cxa\_end\_catch() function marks the end of exception handling and deallocates the memory allocated with \_\_cxa\_allocate\_exception(). Please note that the runtime behavior is much more complicated if another exception is thrown inside the catch block. The exception is handled as follows:
+\_\_cxa\_end\_catch()函数标志着异常处理的结束，并释放用\_\_cxa\_allocate\_exception()分配的内存。请注意，若在catch块中抛出另一个异常，则运行时行为会复杂得多。异常处理方法如下:
 
 \begin{shell}
 catchint:
@@ -95,7 +95,7 @@ call void @__cxa_end_catch()
 br label %return
 \end{shell}
 
-If the type of the current exception does not match the list in the throws() declaration, the unexpected exception handler is called. First, we need to check the type selector again:
+若当前异常的类型与throws()声明中的列表不匹配，则调用意外异常处理程序，需要再次检查类型选择器:
 
 \begin{shell}
 filterorcleanup:
@@ -103,7 +103,7 @@ filterorcleanup:
 br i1 %tst.blzero, label %filter, label %cleanup
 \end{shell}
 
-If the value of the type selector is lower than 0, then we call the handler:
+若类型选择器的值小于0，则调用该处理程序:
 
 \begin{shell}
 filter:
@@ -111,28 +111,28 @@ call void @__cxa_call_unexpected(ptr %exc.ptr) #4
 unreachable
 \end{shell}
 
-Again, the handler is not expected to come back.
+同样，该处理程序也不会返回。
 
-No cleanup work is needed in this case, so all the cleanup code does is resume the execution of the stack unwinder:
+这种情况下不需要清理，所有清理代码所做的就是恢复堆栈展开的执行:
 
 \begin{shell}
 cleanup:
 resume { ptr, i32 } %exc
 \end{shell}
 
-One piece is still missing: libunwind drives the stack unwinding process, but it is not tied to a single language. Language-dependent handling is done in the personality function. For C++ on Linux, the personality function is called \_\_gxx\_personality\_v0(). Depending on the platform or compiler, this name can vary. Each function that needs to take part in stack unwinding has a personality function attached. This personality function analyzes if the function catches an exception, has a non-matching filter list, or needs a cleanup call. It gives this information back to the unwinder, which acts accordingly. In LLVM IR, the pointer to the personality function is given as a part of the function definition:
+libunwind驱动堆栈展开过程，但没有绑定到语言。依赖于语言的处理在个性函数中完成。对于Linux上的C++，个性函数(personality function)称为\_\_gxx\_personality\_v0()。根据平台或编译器的不同，这个名称可能有所不同。每个需要参与堆栈展开的函数都有一个个性函数。此个性函数分析函数是否捕获异常、是否具有不匹配的筛选器列表或是否需要清理调用，将这些信息返回给解卷器，解卷器采取相应的行动。在LLVM IR中，个性函数的指针是作为函数定义的一部分给出的:
 
 \begin{shell}
 define i32 @_Z3fooi(i32) personality ptr @__gxx_personality_v0
 \end{shell}
 
-With this, the exception handling facility is complete.
+至此，异常处理工具就完成了。
 
-To use exception handling in the compiler for your programming language, the simplest strategy is to piggyback on the existing C++ runtime functions. This also has the advantage that your exceptions are interoperable with C++. The disadvantage is that you tie some of the C++ runtime into the runtime of your language, most notably memory management. If you want to avoid this, then you need to create your own equivalents of the \_cxa\_ functions. Still, you will want to use libunwind, which provides the stack unwinding mechanism:
+要在编译器中为编程语言使用异常处理，最简单的策略是利用现有的C++运行时函数。这还有一个好处，就是异常可以与C++互操作。缺点是将一些C++运行时绑定到语言的运行时中，尤其是内存管理。若想避免这种情况，则需要创建自己的\_cxa\_函数。不过，想必还是会想要使用libunwind，因为它提供了堆栈解旋机制:
 
 \begin{enumerate}
 \item
-Let’s look at how to create this IR. We created the calc expression compiler in Chapter 2, The Structure of a Compiler. Now, we will extend the code generator of the expression compiler to raise and handle an exception in case a division by zero is performed. The generated IR will check if the divisor of a division is 0. If true, then an exception will be raised. We will also add a landing pad to the function, which catches the exception and prints Divide by zero! to the console and ends the calculation. Using exception handling is not necessary in this simple case, but it allows us to concentrate on the code generation process. We must add all the code to the CodeGen.cpp file. We begin by adding the required new fields and some helper methods. First of all, we need to store the LLVM declaration of the \_\_cxa\_allocate\_exception() and \_\_cxa\_throw() functions, which consist of the function type and the function itself. A GlobalVariable instance is needed to hold the type information. We also need references to the basic blocks holding the landing pad and a basic block containing just an unreachable instruction:
+来看看如何创建这个IR，在第2章中创建了calc表达式编译器。现在，将扩展表达式编译器的代码生成器，以便在执行除零操作时引发并处理异常。生成的IR将检查除法的除数是否为0。若为true，则会引发异常。我们还将在函数中添加一个着陆垫指令，用来捕获异常并打印Divide by 0 !到控制台，并结束计算。在这个简单的例子中，不需要使用异常处理，但可以让我们专注于代码生成过程。我们必须将所有代码添加到CodeGen.cpp文件中，首先添加所需的新字段和一些辅助方法。首先，需要存储\_\_cxa\_allocate\_exception()和\_\_cxa\_throw()函数的LLVM声明，它们由函数类型和函数本身组成。需要一个GlobalVariable实例来保存类型信息，还需要引用控制着陆垫指令的基本块和包含不可达指令的基本块:
 
 \begin{cpp}
 GlobalVariable *TypeInfo = nullptr;
@@ -145,7 +145,7 @@ BasicBlock *UnreachableBB = nullptr;
 \end{cpp}
 
 \item
-We will also add a new helper function to create the IR for comparing two values. The createICmpEq() function takes the Left and Right values to compare as parameters. It creates a compare instruction testing for equality of the values, and a branch instruction to two basic blocks, for the equal and inequal cases. The two basic blocks are returned via references in the TrueDest and FalseDest parameters. Furthermore, a label for the new basic blocks can be given in the TrueLabel and FalseLabel parameters. The code is as follows:
+我们还将添加一个新的辅助函数，来比较两个值的IR。createICmpEq()函数接受Left和Right值作为参数进行比较，创建一个比较指令来测试值是否相等，并为两个基本块创建一个分支指令，用于相等和不相等的情况。这两个基本块通过TrueDest和FalseDest参数中的引用返回。此外，新的基本块的标签可以在TrueLabel和FalseLabel参数中给出。代码如下:
 
 \begin{cpp}
 void createICmpEq(Value *Left, Value *Right,
@@ -166,7 +166,7 @@ void createICmpEq(Value *Left, Value *Right,
 \end{cpp}
 
 \item
-To use the functions from the runtime, we need to create several function declarations. In LLVM, a function type gives the signature, and the function itself must be constructed. We use the createFunc() method to create both objects. The functions need references to the FunctionType and Function pointers, the name of the newly declared function, and the result type. The parameter type list is optional, and the flag to indicate a variable parameter list is set to false, indicating that there is no variable part in the parameter list:
+要使用运行时中的函数，需要创建几个函数声明。在LLVM中，函数类型给出了签名，并且必须构造函数本身，使用createFunc()方法创建这两个对象。函数需要引用FunctionType和Function指针、新声明函数的名称和结果类型。参数类型列表是可选的，变量参数列表标志设置为false，表示参数列表中没有变量部分:
 
 \begin{cpp}
 void createFunc(FunctionType *&Fty, Function *&Fn,
@@ -180,15 +180,15 @@ void createFunc(FunctionType *&Fty, Function *&Fn,
 \end{cpp}
 \end{enumerate}
 
-With these preparations done, we can generate the IR to raise an exception.
+完成这些准备工作后，就可以生成抛出异常的IR了。
 
-\mySubsubsection{6.1.1.}{Raising an exception}
+\mySubsubsection{6.1.1.}{抛出异常}
 
-To generate the IR code to raise an exception, we will add the addThrow() method. This new method needs to initialize the new fields and then generate the IR to raise an exception via the \_\_cxa\_throw() function. The payload of the raised exception is of the int type and can be set to an arbitrary value. Here is what we need to code:
+为了生成引发异常的IR代码，将添加addThrow()方法。这个新方法需要初始化新字段，然后通过\_\_cxa\_throw()函数生成引发异常的IR。所引发异常的有效负载为int类型，可以设置为任意值。下面是需要编写的代码:
 
 \begin{enumerate}
 \item
-The new addThrow() method begins by checking if the TypeInfo field has been initialized. If it has not been initialized, then a global external constant of an i8 pointer type called \_ZTIi is created. This represents the C++ metadata describing the C++ int type:
+新的addThrow()方法首先检查TypeInfo字段是否已初始化。若还没有初始化，则会创建一个i8指针类型的全局外部常量\_ZTIi。这代表了描述C++ int类型的C++元数据:
 
 \begin{cpp}
 void addThrow(int PayloadVal) {
@@ -201,7 +201,7 @@ void addThrow(int PayloadVal) {
 \end{cpp}
 
 \item
-The initialization continues with creating the IR declaration for the \_\_cxa\_allocate\_exception() and \_\_cxa\_throw() functions using our helper createFunc() method:
+初始化继续使用我们的助手createFunc()方法为\_\_cxa\_allocate\_exception()和\_\_cxa\_throw()函数创建IR声明:
 
 \begin{cpp}
         createFunc(AllocEHFty, AllocEHFn,
@@ -213,7 +213,7 @@ The initialization continues with creating the IR declaration for the \_\_cxa\_a
 \end{cpp}
 
 \item
-A function that uses exception handling needs a personality function, which helps with stack unwinding. We add the IR code to declare the \_\_gxx\_personality\_v0() personality function from the C++ library and set it as the personality routine of the current function. The current function is not stored as a field, but we can use the Builder instance to query the current basic block, which has the function stored as a Parent field:
+使用异常处理的函数需要一个个性函数，它有助于堆栈展开。我们添加了IR代码来声明C++库中的\_\_gxx\_personality\_v0()个性函数，并将其设置为当前函数的个性例程。当前函数没有存储为一个字段，但可以使用Builder实例来查询当前的基本块，其将函数存储为Parent字段:
 
 \begin{cpp}
         FunctionType *PersFty;
@@ -227,7 +227,7 @@ A function that uses exception handling needs a personality function, which help
 \end{cpp}
 
 \item
-Next, we must create and populate the basic block for the landing pad. First, we need to save the pointer to the current basic block. Then, we must create a new basic block, set it in the builder so that it can be used as the basic block to insert instructions, and call the addLandingPad() method. This method generates the IR code for handling an exception and is described in the next section, Catching an exception. This code populates the basic block for the landing pad:
+接下来，必须创建并填充着陆台指令的基本块。首先，需要保存指向当前基本块的指针。然后，创建一个新的基本块，在构建器中进行设置，以便它可以用作插入指令的基本块，并调用addLandingPad()方法。该方法生成用于处理异常的IR代码，将在下一节捕获异常中进行描述。这段代码填充了着陆台指令的基本块:
 
 \begin{cpp}
         BasicBlock *SaveBB = Builder.GetInsertBlock();
@@ -238,7 +238,7 @@ Next, we must create and populate the basic block for the landing pad. First, we
 \end{cpp}
 
 \item
-The initialization part is completed by creating the basic block holding an unreachable instruction. Again, we create the basic block and set it as an insertion point at the builder. Then, we can add the unreachable instruction to it. Lastly, we can set the insertion point of the builder back to the saved SaveBB instance so that the following IR is added to the right basic block:
+初始化部分通过创建保存不可达指令的基本块来完成，并创建基本块并将其设置为构建器中的插入点。然后，可以将不可达指令添加到其中，再将构建器的插入点设置回已保存的SaveBB实例，以便将以下IR添加到正确的基本块中:
 
 \begin{cpp}
         UnreachableBB = BasicBlock::Create(
@@ -250,7 +250,7 @@ The initialization part is completed by creating the basic block holding an unre
 \end{cpp}
 
 \item
-To raise an exception, we need to allocate memory for the exception and the payload via a call to the \_\_cxa\_allocate\_exception() function. Our payload is of the C++ int type, which usually has a size of 4 bytes. We create a constant unsigned value for the size and call the function with it as a parameter. The function type and the function declaration are already initialized, so we only need to create the call instruction:
+要抛出异常，需要通过调用\_\_cxa\_allocate\_exception()函数为异常和负载分配内存。我们的有效负载是C++ int类型，通常大小为4字节。我们为size创建一个常量无符号值，并将其作为参数调用函数。函数类型和函数声明已经初始化，所以只需要创建调用指令:
 
 \begin{cpp}
     Constant *PayloadSz =
@@ -260,7 +260,7 @@ To raise an exception, we need to allocate memory for the exception and the payl
 \end{cpp}
 
 \item
-Next, we store the PayloadVal value in the allocated memory. To do so, we need to create an LLVM IR constant with a call to the ConstantInt::get() function. The pointer to the allocated memory is of an i8 pointer type; to store a value of the i32 type, we need to create a bitcast instruction to cast the type:
+接下来，将PayloadVal值存储在分配的内存中，需要通过调用ConstantInt::get()函数创建一个LLVM IR常量。所述指向所分配内存的指针为i8指针类型;为了存储i32类型的值，需要创建一个bitcast指令来强制转换该类型:
 
 \begin{cpp}
     Value *PayloadPtr =
@@ -271,7 +271,7 @@ Next, we store the PayloadVal value in the allocated memory. To do so, we need t
 \end{cpp}
 
 \item
-Finally, we must raise the exception with a call to the \_\_cxa\_throw() function. As this function raises an exception, which is also handled in the same function, we need to use the invoke instruction instead of the call instruction. Unlike the call instruction, the invoke instruction ends a basic block because it has two successor basic blocks. Here, these are the UnreachableBB and LPadBB basic blocks. If the function raises no exception, the control flow is transferred to the UnreachableBB basic blocks. Due to the design of the \_\_cxa\_throw() function, this will never happen because the control flow is transferred to the LPadBB basic block to handle the exception. This finishes the implementation of the addThrow() method:
+最后，必须通过调用\_\_cxa\_throw()函数来抛出异常。由于这个函数引发了一个异常，该异常也在同一个函数中处理，因此需要使用invoke指令，而非call指令。与调用指令不同，因为它有两个后继基本块，所以调用指令会结束一个基本块，这些是UnreachableBB和LPadBB基本块。若函数没有引发异常，控制流将转移到UnreachableBB基本块。由于\_\_cxa\_throw()函数的设计，这种情况永远不会发生，因为控制流会转移到LPadBB基本块来处理异常。这样就完成了addThrow()方法的实现:
 
 \begin{cpp}
     Builder.CreateInvoke(
@@ -284,15 +284,15 @@ Finally, we must raise the exception with a call to the \_\_cxa\_throw() functio
 
 \end{enumerate}
 
-Next, we’ll add the code to generate the IR to handle the exception.
+接下来，将添加代码来生成处理异常的IR。
 
-\mySubsubsection{6.1.2.}{Catching an exception}
+\mySubsubsection{6.1.2.}{捕捉异常}
 
-To generate the IR code to catch an exception, we must add the addLandingPad() method. The generated IR extracts the type information from the exception. If it matches the C++ int type, then the exception is handled by printing Divide by zero! to the console and returning from the function. If the type does not match, we simply execute the resume instruction, which transfers control back to the runtime. As there are no other functions in the call hierarchy to handle this exception, the runtime will terminate the application. The following steps describe the code that is needed to generate the IR for catching an exception:
+要生成捕获异常的IR代码，必须添加addLandingPad()方法。生成的IR从异常中提取类型信息。若匹配C++ int类型，则通过打印Divide by 0!到控制台来处理异常并从函数中返回。若类型不匹配，只需执行resume指令，该指令将控制转移回运行时。由于调用层次结构中没有其他函数来处理此异常，因此将终止应用程序的运行。以下步骤描述了生成用于捕获异常的IR:
 
 \begin{enumerate}
 \item
-In the generated IR, we need to call the \_\_cxa\_begin\_catch() and \_\_cxa\_end\_catch() functions from the C++ runtime library. To print the error message, we will generate a call to the puts() function from the C runtime library. Furthermore, to get the type information from the exception, we must generate a call to the llvm.eh.typeid.for intrinsic. We also need the FunctionType and Function instances for all of them; we will take advantage of our createFunc() method to create them:
+在生成的IR中，需要从C++运行时库中调用\_\_cxa\_begin\_catch()和\_\_cxa\_end\_catch()函数。为了打印错误消息，将从C运行时库生成对puts()函数的调用。此外，为了从异常中获取类型信息，必须生成对llvm.eh.typeid.for指令的调用。还需要FunctionType和Function实例，我们将利用createFunc()方法来创建它们:
 
 \begin{cpp}
 void addLandingPad() {
@@ -313,7 +313,7 @@ void addLandingPad() {
 \end{cpp}
 
 \item
-The landingpad instruction is the first instruction we generate. The result type is a structure containing fields of an i8 pointer and an i32 type. This structure is generated with a call to the StructType::get() function. Moreover, since we need to handle an exception of a C++ int type, we need to also add this as a clause to the landingpad instruction, which must be a constant of an i8 pointer type. This means that generating a bitcast instruction is required to convert the TypeInfo value into this type. After, we must store the value that’s returned from the instruction for later use in the Exc variable:
+着陆台指令是我们生成的第一条指令。结果类型是一个包含i8指针和i32类型字段的结构体。这个结构是通过调用StructType::get()函数生成的。此外，由于需要处理C++ int类型的异常，还需要将this作为子句添加到landingpad指令中，该指令必须是i8指针类型的常量，所以需要生成一个位转换指令来将TypeInfo值转换为这种类型。之后，必须将指令返回的值存储在Exc变量中，供后续使用:
 
 \begin{cpp}
     LandingPadInst *Exc = Builder.CreateLandingPad(
@@ -323,8 +323,7 @@ The landingpad instruction is the first instruction we generate. The result type
 \end{cpp}
 
 \item
-Next, we extract the type selector from the returned value. With a call to the llvm.eh.typeid.
-for intrinsic, we retrieve the type ID for the TypeInfo field, representing the C++ int type. With this IR, we have generated the two values we need to compare to decide if we can handle the exception:
+接下来，从返回值中提取类型选择器。调用llvm.eh.typeid.for指令，检索TypeInfo字段的类型ID，表示C++ int类型。使用这个IR，已经生成了两个值。我们需要进行比较，以决定是否可以处理异常:
 
 \begin{cpp}
     Value *Sel =
@@ -336,7 +335,7 @@ for intrinsic, we retrieve the type ID for the TypeInfo field, representing the 
 \end{cpp}
 
 \item
-To generate the IR for the comparison, we must call our createICmpEq() function. This function also generates two basic blocks, which we store in the TrueDest and FalseDest variables:
+要生成用于比较的IR，必须调用createICmpEq()函数。这个函数还生成了两个基本块，我们将它们存储在TrueDest和FalseDest变量中:
 
 \begin{cpp}
     BasicBlock *TrueDest, *FalseDest;
@@ -345,8 +344,7 @@ To generate the IR for the comparison, we must call our createICmpEq() function.
 \end{cpp}
 
 \item
-If the two values do not match, the control flow continues at the FalseDest basic block.
-This basic block only contains a resume instruction, to give control back to the C++ runtime:
+若这两个值不匹配，控制流将在false基本块处继续。这个基本块只包含一个resume指令，将控制权交还给C++运行时:
 
 \begin{cpp}
     Builder.SetInsertPoint(FalseDest);
@@ -354,7 +352,7 @@ This basic block only contains a resume instruction, to give control back to the
 \end{cpp}
 
 \item
-If the two values are equal, the control flow continues at the TrueDest basic block. First, we generate the IR code to extract the pointer to the exception from the return value of the landingpad instruction, stored in the Exc variable. Then, we generate a call to the \_\_cxa\_begin\_catch () function, passing the pointer to the exception as a parameter. This indicates the beginning of handling the exception for the runtime:
+若这两个值相等，则控制流在TrueDest基本块处继续。首先，生成IR代码，以便从存储在Exc变量中的着陆平台指令的返回值中提取指向异常的指针。然后，生成对\_\_cxa\_begin\_catch()函数的调用，将指向异常的指针作为参数传递。这表示在运行时开始处理异常:
 
 \begin{cpp}
     Builder.SetInsertPoint(TrueDest);
@@ -365,7 +363,7 @@ If the two values are equal, the control flow continues at the TrueDest basic bl
 \end{cpp}
 
 \item
-The exception is then handled by calling the puts() function to print a message to the console. For this, we generate a pointer to the string with a call to the CreateGlobalStringPtr() function, and then pass this pointer as a parameter in the generated call to the puts() function:
+通过调用puts()函数来处理异常，将消息打印到控制台。为此，我们通过调用CreateGlobalStringPtr()函数生成一个指向该字符串的指针，然后在生成的调用中将该指针作为参数传递给puts()函数:
 
 \begin{cpp}
     Value *MsgPtr = Builder.CreateGlobalStringPtr(
@@ -374,7 +372,7 @@ The exception is then handled by calling the puts() function to print a message 
 \end{cpp}
 
 \item
-Now that we’ve handled the exception, we must generate a call to the \_\_cxa\_end\_catch() function to inform the runtime about it. Finally, we return from the function with aret instruction:
+现在我们已经处理了异常，必须生成对\_\_cxa\_end\_catch()函数的调用，以通知运行时有关它的信息。最后，从函数返回一个aret指令:
 
 \begin{cpp}
     Builder.CreateCall(EndCatchFty, EndCatchFn);
@@ -384,13 +382,13 @@ Now that we’ve handled the exception, we must generate a call to the \_\_cxa\_
 
 \end{enumerate}
 
-With the addThrow() and addLandingPad() functions, we can generate the IR to raise an exception and handle an exception. However, we still need to add the IR to check if the divisor is 0.
-We’ll cover this in the next section.
+使用addThrow()和addLandingPad()函数，可以生成引发异常和处理异常的IR，但仍需要添加IR来检查除数是否为0。
 
+我们将在下一节中讨论这一点。
 
-\mySubsubsection{6.1.3.}{Integrating the exception handling code into the application}
+\mySubsubsection{6.1.3.}{将异常处理代码集成到应用程序中}
 
-The IR for the division is generated inside the visit(BinaryOp \&) method. Instead of just generating a sdiv instruction, we must generate an IR to compare the divisor with 0. If the divisor is 0, then the control flow continues in a basic block, raising the exception. Otherwise, the control flow continues in a basic block with the sdiv instruction. With the help of the createICmpEq() and addThrow() functions, we can code this very easily:
+除法的IR是在visit(BinaryOp \&)方法中生成的，必须生成一个IR来将除数与0进行比较，而不是仅仅生成一个sdiv指令。若除数为0，则控制流继续在基本块中运行，从而引发异常。否则，控制流将在带有sdiv指令的基本块中继续。在createICmpEq()和addThrow()函数的帮助下，可以很容易地编写如下代码:
 
 \begin{cpp}
     case BinaryOp::Div:
@@ -404,28 +402,28 @@ The IR for the division is generated inside the visit(BinaryOp \&) method. Inste
         break;
 \end{cpp}
 
-The code generation part is now complete. To build the application, we must change into the build directory and run the ninja tool:
+代码生成部分现在已经完成。要构建应用程序，必须切换到构建目录并运行ninja工具:
 
 \begin{shell}
 $ ninja
 \end{shell}
 
-Once the build has finished, you can check the generated IR with the with a: 3/a expression:
+构建完成后，可以用with a: 3/a表达式检查生成的IR:
 
 \begin{shell}
 $ src/calc "with a: 3/a"
 \end{shell}
 
-You will see the additional IR needed to raise and catch the exception.
+将看到抛出和捕获异常所需的IR。
 
-The generated IR now depends on the C++ runtime. The easiest way to link against the required libraries is to use the clang++ compiler. Rename the rtcalc.c file with the runtime functions for the expression calculator to rtcalc.cpp, and add extern "C" in front of each function inside the file. Then, use the llc tool to turn the generated IR into an object file, and the clang++ compiler to create an executable:
+生成的IR现在依赖于C++运行时，链接所需库的最简单方法是使用clang++编译器。使用表达式计算器的运行时函数将rtcalc.c文件重命名为rtcalc.cpp，并在文件中的每个函数前面添加extern "C"。然后，使用llc工具将生成的IR转换为目标文件，并使用clang++编译器创建可执行文件:
 
 \begin{shell}
 $ src/calc "with a: 3/a" | llc -filetype obj -o exp.o
 $ clang++ -o exp exp.o ../rtcalc.cpp
 \end{shell}
 
-Now, we can run the generated application with different values:
+现在，可以用不同的值对程序进行测试:
 
 \begin{shell}
 $ ./exp
@@ -436,11 +434,11 @@ Enter a value for a: 0
 Divide by zero!
 \end{shell}
 
-In the second run, the input is 0, and this raises the exception. It works as expected!
+在第二次运行时，输入为0，这会引发异常——像预期的那样工作了!
 
-In this section, we learned how to raise and catch exceptions. The code to generate the IR can be used as a blueprint for other compilers. Of course, the type information that’s used and the number of catch clauses depends on the input to the compiler, but the IR we need to generate still follows the pattern presented in this section.
+在本节中，学习了如何引发和捕获异常。生成IR的代码可以用作其他编译器的蓝图，所使用的类型信息和catch子句的数量取决于编译器的输入，但是需要生成的IR仍然遵循本节中提供的模式。
 
-Adding metadata is another way to provide further information to LLVM. In the next section, we’ll add type metadata to support the LLVM optimizer in certain situations.
+添加元数据是向LLVM提供进一步信息的另一种方式。下一节中，我们将添加类型元数据，以便在某些情况下支持LLVM优化器。
 
 
 

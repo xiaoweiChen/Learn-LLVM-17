@@ -1,36 +1,36 @@
-The LLVM core libraries optimize the IR that your compiler creates and turn it into object code. This giant task is broken down into separate steps called passes. These passes need to be executed in the right order, which is the objective of the pass manager.
+LLVM核心库优化编译器创建的IR并将其转换为目标代码。这项艰巨的任务需要分解成一个个独立的步骤，称为“通道”(passes)。这些通道需要以正确的顺序执行，这是通道管理器的目标。
 
-Why not hard-code the order of the passes? The user of your compiler usually expects your compiler to provide a different level of optimization. Developers prefer fast compilation speed over optimization during development time. The final application should run as fast as possible, and your compiler should be able to perform sophisticated optimizations, with longer a compilation time being accepted. A different level of optimization means a different number of optimization passes that need to be executed. Thus, as a compiler writer, you may want to provide your own passes to take advantage of your knowledge of your source language. For example, you may want to replace well-known library functions with inlined IR or even with the precomputed result. For C, such a pass is part of the LLVM libraries, but for other languages, you will need to provide it yourself. After introducing your own passes, you may need to re-order or add some passes. For example, if you know that the operation of your pass leaves some IR code unreachable, then you want to run the dead code removal pass additionally after your pass. The pass manager helps organize these requirements.
+为什么不硬编码通道的顺序呢?编译器的用户通常希望编译器提供不同级别的优化。开发人员更喜欢快速的编译速度，而不是在开发期间进行优化。最终的应用程序应该运行得尽可能快，并且编译器应该能够执行复杂的优化，并且可以接受较长的编译时间。不同级别的优化需要执行不同数量的优化，所以作为编译器作者，可能希望提供自己的通道，以利用自己对语言的了解。例如，可能希望用内联IR甚至是预先计算的结果，来替换众所周知的库函数。对于C语言，这样的通道是LLVM库的一部分，但对于其他语言，需要自行提供。在了解了通道后，可能需要重新定制或添加一些通道。例如，若知道通行证的操作使一些IR代码无法访问，则希望在通道之后运行固定代码删除通道，通道管理器可以协助完成这些需求。
 
-A pass is often categorized by the scope on which it works:
-
-\begin{itemize}
-\item
-A module pass takes a whole module as input. Such a pass performs its work on the given module and can be used for intra-procedure operations inside this module.
-
-\item
-A call graph pass operates on the strongly connected components (SCCs) of a call graph. It traverses the components in bottom-up order.
-
-\item
-A function pass takes a single function as input and performs its work on this function only.
-
-\item
-A loop pass works on a loop inside a function.
-\end{itemize}
-
-Besides the IR code, a pass may also require, update, or invalidate some analysis results. A lot of different analyses are performed, for example, alias analysis or the construction of a dominator tree. If a pass requires such analyses, then it can request it from an analyses manager. If the information is already computed, then the cached result will be returned. Otherwise, the information will be computed. If a pass changes the IR code, then it needs to announce which analysis results are preserved so that the cached analysis information can be invalidated if necessary.
-
-Under the hood, the pass manager ensures the following:
+通道通常根据其工作的范围进行分类:
 
 \begin{itemize}
 \item
-Analysis results are shared among passes. This requires keeping track of which pass requires which analysis and the state of each analysis. The goal is to avoid needless precomputation of analysis and to free up memory held by analysis results as soon as possible.
+模块传递将整个模块作为输入。这样的传递在给定的模块上执行其工作，并可用于该模块内的过程内操作。
 
 \item
-The passes are executed in a pipeline fashion. For example, if several function passes should be executed in sequence, then the pass manager runs each of these function passes on the first function. Then, it will run all function passes on the second function, and so on. The underlying idea here is to improve the cache behavior as the compiler only performs transformations on a limited set of data (one IR function) and then moves on to the next limited set of data.
+调用图通道对调用图的强连接组件(scc)进行操作，自下而上的顺序遍历组件。
+
+\item
+函数传递将单个函数作为输入，并仅在该函数上执行其工作。
+
+\item
+循环传递作用于函数内部的循环。
 \end{itemize}
 
-Let’s implement a new IR transformation pass and explore how to add it to the optimization pipeline.
+除了IR代码之外，通道还可能需要、更新或使某些分析结果无效。执行了许多不同的分析，例如，别名分析或支配树的构造。若一个通道需要这样的分析，则可以向分析管理器请求。若已经计算了信息，那么将返回缓存的结果；否则，将计算该信息。若一个通道更改了IR代码，则需要宣布保留哪些分析结果，以便可以在必要时使缓存的分析信息无效。
+
+在底层，通道管理器有以下作用:
+
+\begin{itemize}
+\item
+分析结果在各通道之间共享，这需要跟踪哪个通道需要哪个分析以及每个分析的状态。目标是避免不必要的分析预计算，并尽快释放分析结果占用的内存。
+
+\item
+这些通道以流水线方式执行。例如，若几个函数传递应该依次执行，那么传递管理器将在第一个函数上运行这些函数中的每个函数。然后，将运行第二个函数传递的所有函数，以此类推。这里的基本思想是改进缓存行为，因为编译器只对有限的一组数据(一个IR函数)执行转换，然后切换到下一个有限的数据集。
+\end{itemize}
+
+让我们实现一个新的IR转换通道，并探索如何将其添加到优化流水线中。
 
 
 
