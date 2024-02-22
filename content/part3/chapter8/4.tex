@@ -1,25 +1,25 @@
 
-In the previous section, you defined records in the TableGen language. To make use of those records, you need to write your own TableGen backend that can produce C++ source code or do other things using the records as input.
+上一节中，用TableGen语言定义了记录。要使用这些记录，需要编写自己的TableGen后端，该后端可以生成C++源代码或使用记录作为输入执行其他操作。
 
-In Chapter 3, Turning the Source File into an Abstract Syntax Tree, the implementation of the Lexer class uses a database file to define tokens and keywords. Various query functions make use of that database file. Besides that, the database file is used to implement a keyword filter. The keyword filter is a hash map, implemented using the llvm::StringMap class. Whenever an identifier is found, the keyword filter is called to find out if the identifier is actually a keyword. If you take a closer look at the implementation using the ppprofiler pass from Chapter 6, Advanced IR Generation, then you will see that this function is called quite often. Therefore, it may be useful to experiment with different implementations to make that functionality as fast as possible.
+第3章中，Lexer类的实现使用数据库文件来定义标记和关键字。各种查询函数使用该数据库文件。除此之外，数据库文件还用于实现关键字过滤器。关键字过滤器是一个哈希映射，使用llvm::StringMap类实现。每当找到一个标识符时，就调用关键字过滤器来确定该标识符是否实际上是一个关键字。若使用第6章”中的ppprofiler通道仔细查看实现，则将看到该函数经常调用。因此，尝试不同的实现以尽可能快地实现该功能可能很有用。
 
-However, this is not as easy as it seems. For example, you can try to replace the lookup in the hash map with a binary search. This requires that the keywords in the database file are sorted. Currently, this seems to be the case, but during development, a new keyword might be added in the wrong place undetected. The only way to make sure that the keywords are in the right order is to add some code that checks the order at runtime.
+然而，这并不像看起来那么容易。例如，可以尝试用二进制搜索替换散列映射中的查找。这需要对数据库文件中的关键字进行排序。目前，情况似乎是这样，但在开发过程中，一个新的关键字可能会被添加到错误的地方而不被发现。确保关键字按正确顺序排列的唯一方法是，添加一些在运行时检查顺序的代码。
 
-You can speed up the standard binary search by changing the memory layout. For example, instead of sorting the keywords, you can use the Eytzinger layout, which enumerates the search tree in breadthfirst order. This layout increases the cache locality of the data and therefore speeds up the search. Personally speaking, maintaining the keywords in breadth-first order manually in the database file is not possible.
+可以通过更改内存布局来加快标准二进制搜索。例如，可以使用Eytzinger布局，而不是对关键字进行排序，其以宽度优先的顺序枚举搜索树。这种布局增加了数据的缓存局部性，从而加快了搜索速度。就我个人而言，不可能在数据库文件中以宽度优先的顺序手动维护关键字。
 
-Another popular approach for searching is the generation of minimal perfect hash functions. If you insert a new key into a dynamic hash table such as llvm::StringMap, then that key might be mapped to an already occupied slot. This is called a key collision. Key collisions are unavoidable, and many strategies have been developed to mitigate that problem. However, if you know all the keys, then you can construct hash functions without key collisions. Such hash functions are called perfect. In case they do not require more slots than keys, then they are called minimal. Perfect hash functions can be generated efficiently – for example, with the gperf GNU tool.
+另一种流行的搜索方法是生成最小完美哈希函数。若将新键插入动态哈希表(如llvm::StringMap)，则该键可能会映射到已占用的槽，这称为键碰撞。键冲突是不可避免的，已经开发了许多策略来缓解这个问题。但若知道所有的键，就可以构建没有键冲突的哈希函数，这样的哈希函数堪称完美。若不需要比键更多的槽，那么它们称为最小键。可以高效地生成完美的哈希函数——例如，使用gperf GNU工具。
 
-In summary, there is some incentive to be able to generate a lookup function from keywords. So, let’s move the database file to TableGen!
+总而言之，从关键字生成查找函数是有一定动机的。那么，让我们将数据库文件转成到TableGen!
 
-\mySubsubsection{8.4.1.}{Defining data in the TableGen language}
+\mySubsubsection{8.4.1.}{用TableGen语言定义数据}
 
-The TokenKinds.def database file defines three different macros. The TOK macro is used for tokens that do not have a fixed spelling – for example, for integer literals. The PUNCTUATOR macro is used for all kinds of punctuation marks and includes a preferred spelling. Lastly, the KEYWORD macro defines a keyword that is made up of a literal and a flag, which is used to indicate at which language level this literal is a keyword. For example, the thread\_local keyword was added to C++11.
+TokenKinds.def数据库文件定义了三个不同的宏。TOK宏用于没有固定拼写的令牌—例如，用于整数字面值。PUNCTUATOR宏用于所有类型的标点符号，并包含首选拼写。最后，KEYWORD宏定义了一个由字面量和一个标志组成的关键字，这个标志用于指示这个字面量在哪个语言级别上是关键字。例如，C++11中就添加了thread\_local关键字。
 
-One way to express this in the TableGen language is to create a Token class that holds all the data. You can then add subclasses of that class to make the usage more comfortable. You also need a Flag class for flags defined together with a keyword. And last, you need a class to define a keyword filter. These classes define the basic data structure and can be potentially reused in other projects. Therefore, you create a Keyword.td file for it. Here are the steps:
+在TableGen语言中表达这一点的一种方法是，创建一个保存所有数据的Token类。然后，可以添加该类的子类，还需要一个Flag类，用于与关键字一起定义的标志。最后，需要一个类来定义关键字过滤器。这些类定义了基本的数据结构，可以在其他项目中重用，所以可以创建了一个Keyword.td文件，步骤如下:
 
 \begin{enumerate}
 \item
-A flag is modeled as a name and an associated value. This makes it easy to generate an enumeration from this data:
+标志为名称和相关联的值建模。这使得从这些数据生成一个枚举变得很容易:
 
 \begin{shell}
 class Flag<string name, int val> {
@@ -29,7 +29,7 @@ class Flag<string name, int val> {
 \end{shell}
 
 \item
-The Token class is used as the base class. It just carries a name. Please note that this class has no parameters:
+Token类用作基类，只是有一个名字。注意，这个类没有参数:
 
 \begin{shell}
 class Token {
@@ -38,7 +38,7 @@ class Token {
 \end{shell}
 
 \item
-The Tok class has the same function as the corresponding TOK macro from the database file. it represents a token without fixed spellings. It derives from the base class, Token, and just adds initialization for the name:
+Tok类与数据库文件中相应的Tok宏具有相同的功能，表示没有固定拼写的标记。它派生自基类Token，只是为名称添加了初始化:
 
 \begin{shell}
 class Tok<string name> : Token {
@@ -47,7 +47,7 @@ class Tok<string name> : Token {
 \end{shell}
 
 \item
-In the same way, the Punctuator class resembles the PUNCTUATOR macro. It adds a field for the spelling of the token:
+以同样的方式，标点器类类似于PUNCTUATOR宏，为标记的拼写添加了一个字段:
 
 \begin{shell}
 class Punctuator<string name, string spelling> : Token {
@@ -57,7 +57,7 @@ class Punctuator<string name, string spelling> : Token {
 \end{shell}
 
 \item
-And last, the Keyword class needs a list of flags:
+最后，Keyword类需要一个标志列表:
 
 \begin{shell}
 class Keyword<string name, list<Flag> flags> : Token {
@@ -67,7 +67,7 @@ class Keyword<string name, list<Flag> flags> : Token {
 \end{shell}
 
 \item
-With these definitions in place, you can now define a class for the keyword filter, called TokenFilter. It takes a list of tokens as a parameter:
+有了这些定义，现在可以为关键字过滤器定义一个类，称为TokenFilter。其接受一个标记列表作为参数:
 
 \begin{shell}
 class TokenFilter<list<Token> tokens> {
@@ -77,18 +77,18 @@ class TokenFilter<list<Token> tokens> {
 \end{shell}
 \end{enumerate}
 
-With these class definitions, you are certainly able to capture all the data from the TokenKinds. def database file. The TinyLang language does not utilize the flags, since there is only this version of the language. Real-world languages such as C and C++ have undergone a couple of revisions, and they usually require flags. Therefore, we use keywords from C and C++ as an example. Let’s create a KeywordC.td file, as follows:
+使用这些类定义，就能够从TokenKinds.def数据库文件中捕获所有数据。TinyLang语言不使用标志，但实际使用的语言，如C和C++经历了几次修订，通常需要标记。因此，我们使用C和C++中的关键字作为示例，来创建一个KeywordC.td文件:
 
 \begin{enumerate}
 \item
-First, you include the class definitions created earlier:
+首先，包含前面创建的类定义:
 
 \begin{shell}
 Include "Keyword.td"
 \end{shell}
 
 \item
-Next, you define flags. The value is the binary value of the flag. Note how the !or operator is used to create a value for the KEYALL flag:
+接下来，定义标志，该值为该标志的二进制值。请注意，如何使用!or操作符来为KEYALL标志创建值:
 
 \begin{shell}
 def KEYC99 : Flag<"KEYC99", 0x1>;
@@ -101,14 +101,14 @@ def KEYALL : Flag<"KEYALL",
 \end{shell}
 
 \item
-There are tokens without a fixed spelling – for example, a comment:
+有些符号没有固定的拼写，例如注释:
 
 \begin{shell}
 def : Tok<"comment">;
 \end{shell}
 
 \item
-Operators are defined using the Punctuator class, as in this example:
+操作符是使用Punctuator类定义:
 
 \begin{shell}
 def : Punctuator<"plus", "+">;
@@ -116,7 +116,7 @@ def : Punctuator<"minus", "-">;
 \end{shell}
 
 \item
-Keywords need to use different flags:
+关键字需要使用不同的标志:
 
 \begin{shell}
 def kw_auto: Keyword<"auto", [KEYALL]>;
@@ -125,28 +125,28 @@ def kw_restrict: Keyword<"restrict", [KEYC99]>;
 \end{shell}
 
 \item
-And last, here’s the definition of the keyword filter:
+最后，是关键字过滤器的定义:
 
 \begin{shell}
 def : TokenFilter<[kw_auto, kw_inline, kw_restrict]>;
 \end{shell}
 \end{enumerate}
 
-Of course, this file does not include all tokens from C and C++. However, it demonstrates all possible usages of the defined TableGen classes.
+当然，该文件不包括C和C++中的所有标记，其演示了定义的TableGen类的所有可能用法。
 
-Based on these TableGen files, you’ll implement a TableGen backend in the next section.
+基于这些TableGen文件，我们将在下一节中实现TableGen后端。
 
-\mySubsubsection{8.4.2.}{Implementing a TableGen backend}
+\mySubsubsection{8.4.2.}{实现TableGen后端}
 
-Since parsing and creation of records are done through an LLVM library, you only need to care about the backend implementation, which consists mostly of generating C++ source code fragments based on the information in the records. First, you need to be clear about what source code to generate before you can put it into the backend.
+由于解析和创建记录是通过LLVM库完成的，只需要关心后端实现，主要由基于记录中的信息生成C++源代码片段组成。首先，需要清楚要生成什么源代码，然后才能将其放入后端。
 
-\mySamllsection{Sketching the source code to be generated}
+\mySamllsection{绘制要生成的源码的草图}
 
-The output of the TableGen tool is a single file containing C++ fragments. The fragments are guarded by macros. The goal is to replace the TokenKinds.def database file. Based on the information in the TableGen file, you can generate the following:
+TableGen工具的输出是一个包含C++片段的文件，这些片段由宏保护。目标是替换TokenKinds.def数据库文件。根据TableGen文件中的信息，可以生成以下内容:
 
 \begin{enumerate}
 \item
-The enumeration members used to define flags. The developer is free to name the type; however, it should be based on the unsigned type. If the generated file is named TokenKinds.inc, then the intended use is this:
+用于定义标志的枚举成员。开发者可以自由命名类型，但应该基于无符号类型。若生成的文件名为TokenKinds.inc，那么预期的使用方式是这样的:
 
 \begin{cpp}
 enum Flags : unsigned {
@@ -156,21 +156,21 @@ enum Flags : unsigned {
 \end{cpp}
 
 \item
-The TokenKind enumeration, and the prototypes and definitions of the getTokenName(), getPunctuatorSpelling(), and getKeywordSpelling() functions. This code replaces the TokenKinds.def database file, most of the TokenKinds.h include file and the TokenKinds.cpp. source file.
+TokenKind枚举，以及getTokenName()、getPunctuatorSpelling()和getKeywordSpelling()函数的原型和定义。这段代码替换了TokenKinds.def数据库文件，大部分TokenKinds.h包含文件和TokenKinds.cpp源文件。
 
 \item
-A new lookupKeyword() function that can be used instead of the current implementation using the llvm::StringMap. type. This is the function you want to optimize.
+新的lookupKeyword()函数，可以用来代替使用llvm::StringMap类型的当前实现，这就是要优化的函数。
 \end{enumerate}
 
-Knowing what you want to generate, you can now turn to implementing the backend.
+了解了想要生成的内容后，现在可以开始实现后端了。
 
-\mySamllsection{Creating a new TableGen tool}
+\mySamllsection{创建一个新的TableGen工具}
 
-A simple structure for your new tool is to have a driver that evaluates the command-line options and calls the generation functions and the actual generator functions in a different file. Let’s call the driver file TableGen.cpp and the file containing the generator TokenEmitter.cpp. You also need a TableGenBackends.h header file. Let’s begin the implementation with the generation of the C++ code in the TokenEmitter.cpp file:
+新工具的一个简单结构是使用一个驱动程序，该驱动程序计算命令行选项，并在不同的文件中调用生成函数和实际的生成器函数。我们将驱动程序文件命名为TableGen.cpp，将包含生成器的文件命名为TokenEmitter.cpp，还需要TableGenBackends.h头文件。让我们从生成TokenEmitter.cpp文件中的C++代码开始实现:
 
 \begin{enumerate}
 \item
-As usual, the file begins with including the required headers. The most important one is llvm/ TableGen/Record.h, which defines a Record class, used to hold records generated by parsing the .td file:
+像往常一样，文件以包含所需的头文件开始。最重要的一个是llvm/TableGen/Record.h，定义了一个Record类，用于保存解析.td文件生成的记录:
 
 \begin{cpp}
 #include "TableGenBackends.h"
@@ -181,14 +181,14 @@ As usual, the file begins with including the required headers. The most importan
 \end{cpp}
 
 \item
-To simplify coding, the llvm namespace is imported:
+为了简化编码，我们导入了llvm命名空间:
 
 \begin{cpp}
 using namespace llvm;
 \end{cpp}
 
 \item
-The TokenAndKeywordFilterEmitter class is responsible for generating the C++ source code. The emitFlagsFragment(), emitTokenKind(), and emitKeywordFilter() methods emit the source code, as described in the previous section, Sketching the source code to be generated. The only public method, run(), calls all the code-emitting methods. The records are held in an instance of RecordKeeper, which is passed as a parameter to the constructor. The class is inside an anonymous namespace:
+TokenAndKeywordFilterEmitter类负责生成C++源代码。如前一节所述，emitFlagsFragment()、emitTokenKind()和emitKeywordFilter()方法会生成源代码，其中包含要生成的源代码的草图。唯一的公共方法run()调用了所有编写代码的方法，记录保存在RecordKeeper的一个实例中，并作为参数传递给构造函数。这个类位于匿名命名空间中:
 
 \begin{cpp}
 namespace {
@@ -210,7 +210,7 @@ private:
 \end{cpp}
 
 \item
-The run() method calls all the emitting methods. It also times the length of each phase. You specify the -{}-time-phases option, and then the timing is shown after all code is generated:
+run()方法调用所有发出方法，也乘以每个相位的长度。可用-{}-time-phases选项设置，然后在所有代码生成后显示时间:
 
 \begin{cpp}
 void TokenAndKeywordFilterEmitter::run(raw_ostream &OS) {
@@ -230,7 +230,7 @@ void TokenAndKeywordFilterEmitter::run(raw_ostream &OS) {
 \end{cpp}
 
 \item
-The emitFlagsFragment() method shows the typical structure of a function emitting C++ source code. The generated code is guarded by the GET\_TOKEN\_FLAGS macro. To emit the C++ source fragment, you loop over all records that are derived from the Flag class in the TableGen file. Having such a record, it is easy to query the record for the name and the value. Please note that the names Flag, Name, and Val must be written exactly as in the TableGen file. If you rename Val to Value in the TableGen file, then you also need to change the string in this function. All the generated source code is written to the provided stream, OS:
+emitFlagsFragment()方法显示了生成C++源代码的函数的典型结构，生成的代码由GET\_TOKEN\_FLAGS宏保护。要生成C++源片段，需要循环遍历TableGen文件中从Flag类派生的所有记录。有了这样的记录，就很容易查询记录的名称和值。请注意，名称Flag、Name和Val必须与TableGen文件中的完全相同。若在TableGen文件中将Val重命名为Value，则还需要更改此函数中的字符串。所有生成的源代码都写入提供的流，OS:
 
 \begin{cpp}
 void TokenAndKeywordFilterEmitter::emitFlagsFragment(
@@ -248,9 +248,9 @@ raw_ostream &OS) {
 \end{cpp}
 
 \item
-The emitTokenKind() method emits a declaration and definition of token classification functions. Let’s have a look at emitting the declarations first. The overall structure is the same as the previous method – only more C++ source code is emitted. The generated source fragment is guarded by the GET\_TOKEN\_KIND\_DECLARATION macro. Please note that this method tries to generate nicely formatted C++ code, using new lines and indentation as a human developer would do. In case the emitted source code is not correct, and you need to examine it to find the error, this will be tremendously helpful. It is also easy to make such errors: after all, you are writing a C++ function that emits C++ source code.
+emitTokenKind()方法发出标记分类函数的声明和定义。先看一下如何发出声明，整体结构与前一种方法相同——只是要生成更多的C++源码。生成的源片段由GET\_TOKEN\_KIND\_DECLARATION宏保护。请注意，此方法尝试生成格式良好的C++代码，使用新行和缩进，就像人类开发者一样。若生成的源码不正确，并且需要检查它以找到错误，这将非常有帮助。也很容易犯这样的错误:毕竟，您正在编写一个生成C++源代码的C++函数。
 
-First, the TokenKind enumeration is emitted. The name for a keyword should be prefixed with a kw\_ string. The loop goes over all records of the Token class, and you can query the records if they are also a subclass of the Keyword class, which enables you to emit the prefix:
+首先，生成TokenKind枚举。关键字的名称应该以kw\_字符串作为前缀。循环遍历Token类的所有记录，若它们也是Keyword类的子类，则可以查询这些记录，这可生成的前缀为:
 
 \begin{cpp}
     OS << "#ifdef GET_TOKEN_KIND_DECLARATION\n"
@@ -270,7 +270,7 @@ First, the TokenKind enumeration is emitted. The name for a keyword should be pr
 \end{cpp}
 
 \item
-Next, the function declarations are emitted. This is only a constant string, so nothing exciting happens. This finishes emitting the declarations:
+接下来，生成函数声明。这只是一个常量字符串，这将完成声明生成:
 
 \begin{cpp}
     OS << " const char *getTokenName(TokenKind Kind) "
@@ -285,7 +285,7 @@ Next, the function declarations are emitted. This is only a constant string, so 
 \end{cpp}
 
 \item
-Now, let’s turn to emitting the definitions. Again, this generated code is guarded by a macro called GET\_TOKEN\_KIND\_DEFINITION. First, the token names are emitted into a TokNames array, and the getTokenName() function uses that array to retrieve the name. Please note that the quote symbol must be escaped as \verb|\|" when used inside a string:
+现在，转向生成定义。同样，生成的代码由一个名为GET\_TOKEN\_KIND\_DEFINITION的宏保护。首先，将标记名称发送到TokNames数组中，getTokenName()函数使用该数组检索名称。请注意，当在字符串中使用引号符号时，必须转义为\verb|\|":
 
 \begin{cpp}
     OS << "#ifdef GET_TOKEN_KIND_DEFINITION\n";
@@ -307,8 +307,7 @@ Now, let’s turn to emitting the definitions. Again, this generated code is gua
 \end{cpp}
 
 \item
-Next, the getPunctuatorSpelling() function is emitted. The only notable difference to the other parts is that the loop goes over all records derived from the Punctuator class.
-Also, a switch statement is generated instead of an array:
+接下来，生成getPunctuatorSpelling()函数。与其他部分的唯一显著区别是，循环遍历从punctuation类派生的所有记录。另外，会生成一个switch语句，而不是一个数组:
 
 \begin{cpp}
     OS << "const char "
@@ -328,7 +327,7 @@ Also, a switch statement is generated instead of an array:
 \end{cpp}
 
 \item
-And finally, the getKeywordSpelling() function is emitted. The coding is similar to emitting getPunctuatorSpelling(). This time, the loop goes over all records of the Keyword class, and the name is again prefixed with kw\_:
+最后，生成getKeywordSpelling()函数。代码类似于发出getPunctuatorSpelling()，这次循环遍历Keyword类的所有记录，并且该名称再次以kw\_为前缀:
 
 \begin{cpp}
     OS << "const char *tok::getKeywordSpelling(TokenKind "
@@ -349,9 +348,9 @@ And finally, the getKeywordSpelling() function is emitted. The coding is similar
 \end{cpp}
 
 \item
-The emitKeywordFilter() method is more complex than the previous methods since emitting the filter requires collecting some data from the records. The generated source code uses the std::lower\_bound() function, thus implementing a binary search.
+emitKeywordFilter()方法比前面的方法更复杂，因为生成过滤器需要从记录中收集一些数据。生成的源代码使用std::lower\_bound()函数，从而实现二分查找。
 
-Now, let’s make a shortcut. There can be several records of the TokenFilter class defined in the TableGen file. For demonstration purposes, just emit at most one token filter method:
+现在，我们来做个捷径。TableGen文件中可以定义TokenFilter类的多个记录。出于演示目的，最多只发出一个标记过滤器方法:
 
 \begin{cpp}
     std::vector<Record *> AllTokenFilter =
@@ -362,7 +361,7 @@ Now, let’s make a shortcut. There can be several records of the TokenFilter cl
 \end{cpp}
 
 \item
-The keywords used for the filter are in the list named Tokens. To get access to that list, you first need to look up the Tokens field in the record. This returns a pointer to an instance of the RecordVal class, from which you can retrieve the Initializer instance via the calling method, getValue(). The Tokens field is defined as a list, so you cast the initializer instance to ListInit. If this fails, then exit the function:
+用于筛选器的关键字位于名为Tokens的列表中。要访问该列表，首先需要查找记录中的Tokens字段。这将返回一个指向RecordVal类实例的指针，可以通过调用方法getValue()从中检索Initializer实例。Tokens字段可定义为一个列表，可将初始化器实例强制转换为ListInit。若失败，则退出该函数:
 
 \begin{cpp}
     ListInit *TokenFilter = dyn_cast_or_null<ListInit>(
@@ -374,7 +373,7 @@ The keywords used for the filter are in the list named Tokens. To get access to 
 \end{cpp}
 
 \item
-Now, you are ready to construct a filter table. For each keyword stored in the TokenFilter, list, you need the name and the value of the Flag field. That field is again defined as a list, so you need to loop over those elements to calculate the final value. The resulting name/flag value pair is stored in a Table vector:
+现在，可以构造一个过滤器表了。对于TokenFilter列表中存储的每个关键字，需要Flag字段的名称和值。该字段再次定义为列表，因此需要遍历这些元素以计算最终值。结果名称/标志值对存储在Table vector中:
 
 \begin{cpp}
     using KeyFlag = std::pair<StringRef, uint64_t>;
@@ -399,7 +398,7 @@ Now, you are ready to construct a filter table. For each keyword stored in the T
 \end{cpp}
 
 \item
-To be able to perform a binary search, the table needs to be sorted. The comparison function is provided by a lambda function:
+为了能够执行二分查找，需要对表进行排序。比较函数由Lambda函数提供:
 
 \begin{cpp}
     llvm::sort(Table.begin(), Table.end(),
@@ -409,7 +408,7 @@ To be able to perform a binary search, the table needs to be sorted. The compari
 \end{cpp}
 
 \item
-Now, you can emit the C++ source code. First, you emit the sorted table containing the name of the keyword and the associated flag value:
+现在，可以生成C++源代码了。首先，发出包含关键字名称和相关标志值的排序表:
 
 \begin{cpp}
     OS << "#ifdef GET_KEYWORD_FILTER\n"
@@ -431,7 +430,7 @@ Now, you can emit the C++ source code. First, you emit the sorted table containi
 \end{cpp}
 
 \item
-Next, you look up the keyword in the sorted table, using the std::lower\_bound() standard C++ function. If the keyword is in the table, then the Value parameter receives the value of the flags associated with the keyword, and the function returns true. Otherwise, the function simply returns false:
+接下来，使用标准C++函数std::lower\_bound()在排序表中查找关键字。若关键字在表中，则Value参数接收与关键字关联的标志的值，函数返回true。否则，函数返回false:
 
 \begin{cpp}
     OS << " const Entry *E = "
@@ -455,7 +454,7 @@ Next, you look up the keyword in the sorted table, using the std::lower\_bound()
 \end{cpp}
 
 \item
-The only missing part now is a way to call this implementation, for which you define a global function, EmitTokensAndKeywordFilter(). The emitSourceFileHeader() function declared in the llvm/TableGen/TableGenBackend.h header emits a comment at the top of the generated file:
+现在唯一缺少的部分是调用该实现的方法，为此定义了一个全局函数EmitTokensAndKeywordFilter()。在llvm/TableGen/TableGenBackend.h头文件中声明的emitSourceFileHeader()函数在生成的文件的顶部生成注释:
 
 \begin{cpp}
 void EmitTokensAndKeywordFilter(RecordKeeper &RK,
@@ -468,9 +467,9 @@ void EmitTokensAndKeywordFilter(RecordKeeper &RK,
 \end{cpp}
 \end{enumerate}
 
-With that, you finished the implementation of the source emitter in the TokenEmitter.cpp file. Overall, the coding is not too complicated.
+这样，就在TokenEmitter.cpp文件中完成了源生成器的实现。总的来说，代码并不算太复杂。
 
-The TableGenBackends.h header file only contains the declaration of the EmitTokensAndKeywordFilter() function. To avoid including other files, you use forward declarations for the raw\_ostream and RecordKeeper classes:
+TableGenBackends.h头文件只包含EmitTokensAndKeywordFilter()函数的声明。为了避免包含其他文件，可以对raw\_ostream和RecordKeeper类使用前向声明:
 
 \begin{cpp}
 #ifndef TABLEGENBACKENDS_H
@@ -486,11 +485,11 @@ void EmitTokensAndKeywordFilter(llvm::RecordKeeper &RK,
 #endif
 \end{cpp}
 
-The missing part is the implementation of the driver. Its task is to parse the TableGen file and emit the records according to the command-line options. The implementation is in the TableGen.cpp file:
+缺少的部分是驱动程序的实现，其任务是解析TableGen文件并根据命令行选项发出记录。实现在TableGen.cpp文件中:
 
 \begin{itemize}
 \item
-As usual, the implementation begins with including the required headers. The most important one is llvm/TableGen/Main.h because this header declares the frontend of TableGen:
+与往常一样，实现从包含所需的头文件开始。最重要的一个是llvm/TableGen/Main.h，因为这个头文件声明了TableGen的前端:
 
 \begin{cpp}
 #include "TableGenBackends.h"
@@ -502,14 +501,14 @@ As usual, the implementation begins with including the required headers. The mos
 \end{cpp}
 
 \item
-To simplify coding, the llvm namespace is imported:
+为了简化编码，我们导入了llvm命名空间:
 
 \begin{cpp}
 using namespace llvm;
 \end{cpp}
 
 \item
-The user can choose one action. The ActionType enumeration contains all possible actions:
+用户可以选择一个操作。ActionType枚举包含所有可能的操作:
 
 \begin{cpp}
 enum ActionType {
@@ -520,7 +519,7 @@ enum ActionType {
 \end{cpp}
 
 \item
-A single command-line option object called Action is used. The user needs to specify the -{}-gen-tokens option to emit the token filter you implemented. The other two options, -{}-print-records and -{}-dump-json, are standard options to dump read records. Note that the object is in an anonymous namespace:
+使用一个名为Action的命令行选项对象。用户需要指定-{}-gen-tokens选项，以生成实现的令牌过滤器。另外两个选项-{}-print-records和-{}-dump-json是转储读记录的标准选项。请注意，该对象位于匿名命名空间中:
 
 \begin{cpp}
 namespace {
@@ -539,7 +538,7 @@ cl::opt<ActionType> Action(
 \end{cpp}
 
 \item
-The Main() function performs the requested action based on the value of Action. Most importantly, your EmitTokensAndKeywordFilter() function is called if -{}-gen-tokens was specified on the command line. After the end of the function, the anonymous namespace is closed:
+Main()函数基于action的值执行请求的操作。最重要的是，若在命令行上指定了-{}-gen-tokens，则调用EmitTokensAndKeywordFilter()函数。函数结束后，匿名命名空间关闭:
 
 \begin{cpp}
 bool Main(raw_ostream &OS, RecordKeeper &Records) {
@@ -560,7 +559,7 @@ bool Main(raw_ostream &OS, RecordKeeper &Records) {
 \end{cpp}
 
 \item
-And lastly, you define a main() function. After setting up the stack trace handler and parsing the command-line options, the TableGenMain() function is called to parse the TableGen file and create records. That function also calls your Main() function if there are no errors:
+最后，定义一个main()函数。在设置堆栈跟踪处理程序并解析命令行选项之后，将调用TableGenMain()函数来解析TableGen文件并创建记录。若没有错误，该函数也会调用Main()函数:
 
 \begin{cpp}
 int main(int argc, char **argv) {
@@ -576,22 +575,22 @@ int main(int argc, char **argv) {
 
 \end{itemize}
 
-Your own TableGen tool is now implemented. After compiling, you can run it with the KeywordC.td sample input file as follows:
+现在实现了TableGen工具。编译后，就可以使用KeywordC运行它。示例输入文件如下:
 
 \begin{shell}
 $ tinylang-tblgen --gen-tokens –o TokenFilter.inc KeywordC.td
 \end{shell}
 
-The generated C++ source code is written to the TokenFilter.inc file.
+生成的C++源代码会写入TokenFilter.inc文件中。
 
-\begin{myTip}{Performance of the token filter}
-Using a plain binary search for the keyword filter does not give a better performance than the implementation based on the llvm::StringMap type. To beat the performance of the current implementation, you need to generate a perfect hash function.
+\begin{myTip}{标记过滤器的性能}
+对关键字过滤器使用纯二分查找，并不比基于llvm::StringMap类型的实现提供更好的性能。为了超越当前实现的性能，需要生成一个完美的哈希函数。
 
-The classic algorithm from Czech, Havas, and Majewski can be easily implemented, and it gives you a very good performance. It is described in An optimal algorithm for generating minimal perfect hash functions, Information Processing Letters, Volume 43, Issue 5, 1992. See \url{https:// www.sciencedirect.com/science/article/abs/pii/002001909290220P}.
+来自Czech、Havas和Majewski的经典算法可以很容易地实现，并且它给您提供了非常好的性能。它描述在生成最小完美哈希函数的最优算法，信息处理通讯，第43卷，第5期，1992年。参见\url{https:// www.sciencedirect.com/science/article/abs/pii/002001909290220P}。
 
-A state-of-the-art algorithm is PTHash from Pibiri and Trani, described in PTHash: Revisiting FCH Minimal Perfect Hashing, SIGIR ’21. See \url{https://arxiv.org/pdf/2104.10402.pdf}.
+最先进的算法是Pibiri和Trani的PTHash，在PTHash:重访FCH最小完美哈希，SIGIR ' 21中进行了描述。参见\url{https://arxiv.org/pdf/2104.10402.pdf}。
 
-Both algorithms are good candidates for generating a token filter that is actually faster than llvm::StringMap.
+这两种算法都是生成标记过滤器的不错选择，实际上会比llvm::StringMap更快。
 \end{myTip}
 
 

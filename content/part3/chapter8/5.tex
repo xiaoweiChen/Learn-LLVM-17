@@ -1,19 +1,18 @@
 
-Here are a few drawbacks of TableGen:
+以下是TableGen的一些缺点:
 
 \begin{itemize}
 \item
-The TableGen language is built on a simple concept. As a consequence, it does not have the same computing capabilities as other DSLs. Obviously, some programmers would like to replace TableGen with a different, more powerful language, and this topic comes up from time to time in the LLVM discussion forum.
+TableGen语言建立在一个简单的概念之上，所以不具有与其DSL相同的计算能力。显然，一些程序员希望用一种不同的、更强大的语言来取代TableGen，这个话题在LLVM讨论论坛中不时会看见。
 
 \item
-With the possibility of implementing your own backends, the TableGen language is very flexible.
-However, it also means that the semantics of a given definition are hidden inside the backend. Thus, you can create TableGen files that are basically not understandable by other developers.
+由于可以实现自己的后端，TableGen语言非常灵活，但也意味着给定定义的语义隐藏在后端内部。因此，您可以创建其他开发人员基本上无法理解的TableGen文件。
 
 \item
-And last, the backend implementation can be very complex if you try to solve a non-trivial task. It is reasonable to expect that this effort would be lower if the TableGen language were more powerful.
+最后，若试图解决一个重要的任务，后端实现可能会非常复杂。我们有理由认为，若TableGen语言更强大，这种辛苦将会减少。
 \end{itemize}
 
-Even if not all developers are happy with the capabilities of TableGen, the tool is used widely in LLVM, and for a developer, it is important to understand it.
+即使不是所有开发者都对TableGen的功能感到满意，但该工具在LLVM中广泛使用，对于开发者来说，理解它非常重要。
 
 
 

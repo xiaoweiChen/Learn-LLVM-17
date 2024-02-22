@@ -1,48 +1,48 @@
-LLVM comes with its own domain-specific language (DSL) called TableGen. It is used to generate C++ code for a wide range of use cases, thus reducing the amount of code a developer has to produce. The TableGen language is not a full-fledged programming language. It is only used to define records, which is a fancy word for a collection of names and values. To understand why such a restricted language is useful, let’s examine two examples.
+LLVM有自己的领域特定语言(DSL)，称为TableGen，用于为很多用例生成C++代码，减少开发人员手写的代码量。TableGen语言不是一种编程语言，只用于定义记录。对于名称和值的集合来说，这是一个花哨的词。为了理解为什么使用这种语言，让我们先来看两个例子。
 
-Typical data you need to define one machine instruction of a CPU is:
-
-\begin{itemize}
-\item
-The mnemonic of the instruction
-
-\item
-The bit pattern
-
-\item
-The number and types of operands
-
-\item
-Possible restrictions or side effects
-\end{itemize}
-
-It is easy to see that this data can be represented as a record. For example, a field named asmstring could hold the value of the mnemonic; say, "add". Also, a field named opcode could hold the binary representation of the instruction. Together, the record would describe an additional instruction. Each LLVM backend describes the instruction set in this way.
-
-Records are such a general concept that you can describe a wide variety of data with them. Another example is the definition of command-line options. A command-line option:
+定义CPU的一条机器指令需要的典型数据为:
 
 \begin{itemize}
 \item
-Has a name
+指令的助记符
 
 \item
-May have an optional argument
+位模式
 
 \item
-Has a help text
+操作数的数量和类型
 
 \item
-May belong to a group of options
+可能的限制或副作用
 \end{itemize}
 
-Again, this data can be easily seen as a record. Clang uses this approach for the command-line options of the Clang driver.
+很容易看出，这些数据可以表示为一条记录。例如，一个名为asmstring的字段可以保存助记符的值;比如，“添加”。另外，一个名为opcode的字段可以保存指令的二进制表示形式。总之，记录将描述一个指令，每个LLVM后端都以这种方式描述指令集。
 
-\begin{myTip}{The TableGen language}
-In LLVM, the TableGen language is used for a variety of tasks. Large parts of a backend are written in the TableGen language; for example, the definition of a register file, all instructions with mnemonic and binary encoding, calling conventions, patterns for instruction selection, and scheduling models for instruction scheduling. Other uses of LLVM are the definition of intrinsic functions, the definition of attributes, and the definition of command-line options.
+记录是一个通用的概念，可以用它来描述各种各样的数据。另一个例子是命令行选项的定义，命令行选项:
 
-You’ll find the Programmer’s Reference at \url{https://llvm.org/docs/TableGen/ProgRef.html} and the Backend Developer’s Guide at \url{https://llvm.org/docs/TableGen/BackGuide.html}.
+\begin{itemize}
+\item
+有名字
+
+\item
+有可选的参数
+
+\item
+有帮助文本
+
+\item
+可能属于一组选项
+\end{itemize}
+
+同样，可以很容易地将这些数据视为记录。Clang将这种方法用于Clang驱动程序的命令行选项。
+
+\begin{myTip}{TableGen语言}
+LLVM中，TableGen语言用于各种任务。后端的大部分是用TableGen语言编写的;例如，寄存器文件的定义，所有带有助记符和二进制编码的指令，调用约定，指令选择的模式，指令调度的调度模型。LLVM的其他用途包括定义内部函数、定义属性和定义命令行选项。
+
+可以在\url{https://llvm.org/docs/TableGen/ProgRef.html}找到开发者参考，在\url{https://llvm.org/docs/TableGen/BackGuide.html}找到后端开发者指南。
 \end{myTip}
 
-To achieve this flexibility, the parsing and the semantics of the TableGen language are implemented in a library. To generate C++ code from the records, you need to create a tool that takes the parsed records and generates C++ code from it. In LLVM, that tool is called llvm-tblgen, and in Clang, it is called clang-tblgen. Those tools contain the code generators required by the project. But they can also be used to learn more about the TableGen language, which is what we’ll do in the next section.
+为了实现这种灵活性，TableGen语言的解析和语义在库中实现。为了从记录中生成的C++代码，需要创建一个工具来获取解析后的记录，并生成C++代码。在LLVM中，这个工具称为llvm-tblgen，在Clang中，称为clang-tblgen。这些工具包含项目所需的代码生成器，但它们也可以用来学习TableGen语言，这是下一节要做的。
 
 
 

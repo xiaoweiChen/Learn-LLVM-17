@@ -1,13 +1,13 @@
 
 一个通道可以在LLVM IR上执行任意复杂的转换。为了说明添加新通道的机制，我们添加一个执行简单检测的通道。
 
-为了研究程序的性能，了解函数被调用的频率和运行的时间是很有趣的。收集这些数据的一种方法是在每个函数中插入计数器，这个过程称为插装。我们将编写一个简单的插装传递，在每个函数的入口和每个退出点插入一个特殊的函数调用，这些函数收集计时信息并将其写入文件。因此，可以创建一个非常基本的分析器，将其命名为“穷人”分析器，或者简而言之——ppprofiler。我们将开发新通道，以便其可以作为一个独立的插件使用，或者作为一个插件添加到LLVM源代码树中。最后，我们将了解如何将LLVM自带的通道集成到框架中。
+为了研究程序的性能，了解函数被调用的频率和运行的时间是很有趣的。收集这些数据的一种方法是在每个函数中插入计数器，这个过程称为插装。我们将编写一个简单的插装传递，在每个函数的入口和每个退出点插入一个特殊的函数调用，这些函数收集计时信息并将其写入文件。因此，可以创建一个非常基本的分析器，将其命名为“穷人”(poor people)分析器，或者简而言之——ppprofiler。我们将开发新通道，以便其可以作为一个独立的插件使用，或者作为一个插件添加到LLVM源代码树中。最后，我们将了解如何将LLVM自带的通道集成到框架中。
 
 \mySubsubsection{7.3.1.}{将ppprofiler作为插件进行开发}
 
 本节中，将了解如何在LLVM树中创建一个新通道作为插件。新通道的目标是在函数的入口处插入对\_\_ppp\_enter()函数的调用，并在每个返回指令之前插入对\_\_ppp\_exit()函数的调用。只有当前函数的名称作为参数传递，这些函数的实现可以计算调用的次数，并测量所使用的时间。我们将在本章的最后实现这个运行时支持，并将研究如何开发通道。
 
-我们将源代码存储在ppprofile .cpp文件中。遵循以下步骤:
+我们将源代码存储在ppprofile.cpp文件中。遵循以下步骤:
 
 \begin{enumerate}
 \item
@@ -30,14 +30,14 @@ using namespace llvm;
 \end{cpp}
 
 \item
-The built-in debug infrastructure of LLVM requires that we define a debug type, which is a string. This string is later shown in the printed statistic:
+LLVM的内置调试基础结构要求定义一个调试类型，它是一个字符串。这个字符串随后显示在打印的统计信息中:
 
 \begin{cpp}
 #define DEBUG_TYPE "ppprofiler"
 \end{cpp}
 
 \item
-Next, we’ll define one counter variable with the ALWAYS\_ENABLED\_STATISTIC macro. The first parameter is the name of the counter variable, while the second parameter is the text that will be printed in the statistic:
+接下来，将使用ALWAYS\_ENABLED\_STATISTIC宏定义一个计数器变量。第一个参数是计数器变量的名称，而第二个参数是将在统计中打印的文本:
 
 \begin{cpp}
 ALWAYS_ENABLED_STATISTIC(
@@ -45,11 +45,11 @@ ALWAYS_ENABLED_STATISTIC(
 \end{cpp}
 
 \begin{myNotic}{Note}
-Two macros can be used to define a counter variable. If you use the STATISTIC macro, then the statistic value will only be collected in a debug build if assertions are enabled, or if LLVM\_FORCE\_ENABLE\_STATS is set to ON on the CMake command line. If you use the ALWAYS\_ENABLED\_STATISTIC macro instead, then the statistic value is always collected. However, printing the statistics using the–stats command-line option only works with the former methods. If needed, you can print the collected statistics by calling the llvm::PrintStatistics(llvm::raw\_ostream) function.
+可以使用两个宏来定义计数器变量。若使用STATISTIC宏，则只有在启用断言的情况下，或者在CMake命令行中将LLVM\_FORCE\_ENABLE\_STATS设置为ON时，才会在调试构建中收集统计值。若使用ALWAYS\_ENABLED\_STATISTIC宏，则总是收集统计值。但使用-stats命令行选项打印统计信息只适用于前两种方法。若需要，可以通过调用llvm::PrintStatistics(llvm::raw\_ostream)函数打印收集的统计信息。
 \end{myNotic}
 
 \item
-Next, we must declare the pass class in an anonymous namespace. The class inherits from the PassInfoMixin template. This template only adds some boilerplate code, such as a name() method. It is not used to determine the type of the pass. The run() method is called by LLVM when the pass is executed. We also need a helper method called instrument():
+接下来，必须在匿名命名空间中声明通道类，这个类继承自PassInfoMixin模板。这个模板只添加了一些样板代码，比如name()方法，不用于确定传递的类型，run()方法在执行传递时由LLVM调用。我们还需要一个名为instrument()的辅助方法:
 
 \begin{cpp}
 namespace {
@@ -68,7 +68,7 @@ private:
 \end{cpp}
 
 \item
-Now, let’s define how a function is instrumented. Besides the function to instrument, the functions to call are passed:
+现在，让我们定义如何插装函数。除了要检测的函数外，还要传递要调用的函数:
 
 \begin{cpp}
 void PPProfilerIRPass::instrument(llvm::Function &F,
@@ -77,21 +77,21 @@ void PPProfilerIRPass::instrument(llvm::Function &F,
 \end{cpp}
 
 \item
-Inside the function, we update the statistic counter:
+在函数内部，更新统计计数器:
 
 \begin{cpp}
     ++NumOfFunc;
 \end{cpp}
 
 \item
-To easily insert IR code, we need an instance of the IRBuilder class. We will set it to the first basic block, which is the entry block of the function:
+为了方便地插入IR代码，需要IRBuilder类的一个实例。我们把它设置为第一个基本块，这是函数的入口块:
 
 \begin{cpp}
     IRBuilder<> Builder(&*F.getEntryBlock().begin());
 \end{cpp}
 
 \item
-Now that we have the builder, we can insert a global constant that holds the name of the function we wish to instrument:
+现在有了构建器，可以插入一个全局常量来保存检测函数的名称:
 
 \begin{cpp}
     GlobalVariable *FnName =
@@ -99,7 +99,7 @@ Now that we have the builder, we can insert a global constant that holds the nam
 \end{cpp}
 
 \item
-Next, we will insert a call to the \_\_ppp\_enter() function, passing the name as an argument:
+接下来，我们将插入对\_\_ppp\_enter()函数的调用，并将名称作为参数传递:
 
 \begin{cpp}
     Builder.CreateCall(EnterFn->getFunctionType(), EnterFn,
@@ -107,7 +107,7 @@ Next, we will insert a call to the \_\_ppp\_enter() function, passing the name a
 \end{cpp}
 
 \item
-To call the \_\_ppp\_exit() function, we have to locate all return instructions. Conveniently, the insertion point that’s set by the calling SetInsertionPoint() function is before the instruction that’s passed as a parameter, so we can just insert the call at that point:
+要调用\_\_ppp\_exit()函数，必须定位所有返回指令。方便的是，调用SetInsertionPoint()函数设置的插入点在作为参数传递的指令之前，所以可以在该点插入调用:
 
 \begin{cpp}
     for (BasicBlock &BB : F) {
@@ -123,7 +123,7 @@ To call the \_\_ppp\_exit() function, we have to locate all return instructions.
 \end{cpp}
 
 \item
-Next, we will implement the run() method. LLVM passes in the module our pass works on and an analysis manager from which we can request analysis results if needed:
+接下来，我们将实现run()方法。LLVM传递通道所工作的模块和一个分析管理器，若需要，可以从中请求分析结果:
 
 \begin{cpp}
 PreservedAnalyses
@@ -132,7 +132,7 @@ PPProfilerIRPass::run(Module &M,
 \end{cpp}
 
 \item
-There is a slight annoyance here: if the runtime module that contains the implementation of the \_\_ppp\_enter() and \_\_ppp\_exit() functions are instrumented, then we run into trouble because we create an infinite recursion. To avoid this, we must simply do nothing if one of those functions is defined:
+这里有一个小麻烦:若在实现的运行时模块检测到\_\_ppp\_enter()和\_\_ppp\_exit()函数，因为我们创建了一个无限递归，就会遇到麻烦。为了避免这种情况，若定义了其中一个函数，必须什么都不做:
 
 \begin{cpp}
     if (M.getFunction("__ppp_enter") ||
@@ -142,7 +142,7 @@ There is a slight annoyance here: if the runtime module that contains the implem
 \end{cpp}
 
 \item
-Now, we are ready to declare the functions. There is nothing unusual here: first, the function type is created, followed by the functions:
+现在，我们准备声明函数。首先，创建函数类型，然后是函数:
 
 \begin{cpp}
     Type *VoidTy = Type::getVoidTy(M.getContext());
@@ -159,7 +159,7 @@ Now, we are ready to declare the functions. There is nothing unusual here: first
 \end{cpp}
 
 \item
-All we need to do now is loop over all the functions of the module and instrument the found functions by calling our instrument() method. Of course, we need to ignore function declarations, which are just prototypes. There can also be functions without a name, which does not work well with our approach. We’ll filter out those functions too:
+现在需要做的就是循环遍历模块的所有函数，并通过调用instrument()方法检测找到的函数。当然，需要忽略函数声明，它们只是原型。也可能存在没有名称的函数，这与我们的方法不兼容。我们也会过滤掉这些函数:
 
 \begin{cpp}
     for (auto &F : M.functions()) {
@@ -169,17 +169,17 @@ All we need to do now is loop over all the functions of the module and instrumen
 \end{cpp}
 
 \item
-Lastly, we must declare that we did not preserve any analysis. This is most likely too pessimistic but we are on the safe side by doing so:
+最后，必须声明，我们没有保留任何分析。这很可能过于悲观，但我们这样做是出于安全考虑:
 
 \begin{cpp}
     return PreservedAnalyses::none();
 }
 \end{cpp}
 
-The functionality of our new pass is now implemented. To be able to use our pass, we need to register it with the PassBuilder object. This can happen in two ways: statically or dynamically. If the plugin is statically linked, then it needs to provide a function called get<PluginName>PluginInfo(). To use dynamic linking, the llvmGetPassPluginInfo() function needs to be provided. In both cases, an instance of the PassPluginLibraryInfo struct is returned, which provides some basic information about a plugin. Most importantly, this structure contains a pointer to the function that registers the pass. Let’s add this to our source.
+新通道的功能现在已经实现了。为了能够使用我们的通道，需要用PassBuilder对象注册它。这可以通过两种方式实现:静态或动态。若插件是静态链接的，则需要提供一个名为get<PluginName>PluginInfo()的函数。要使用动态链接，需要提供llvmGetPassPluginInfo()函数。在这两种情况下，都会返回一个PassPluginLibraryInfo结构体的实例，它提供了关于插件的一些基本信息。最重要的是，这个结构体包含一个指向注册传递的函数的指针。现在，让我们把它添加到源文件中。
 
 \item
-In the RegisterCB() function, we register a Lambda function that is called when a pass pipeline string is parsed. If the name of the pass is ppprofiler, then we add our pass to the module pass manager. These callbacks will be expanded upon in the next section:
+在RegisterCB()函数中，注册了一个Lambda函数，该函数将在解析通道流水线字符串时调用。若通道的名称是ppprofiler，将我们的传递添加到模块通道管理器中。这些回调将在下一节中展开:
 
 \begin{cpp}
 void RegisterCB(PassBuilder &PB) {
@@ -196,8 +196,7 @@ void RegisterCB(PassBuilder &PB) {
 \end{cpp}
 
 \item
-The getPPProfilerPluginInfo() function is called when the plugin is statically linked.
-It returns some basic information about the plugin:
+getPPProfilerPluginInfo()函数在静态链接插件时调用，会返回一些关于插件的基本信息:
 
 \begin{cpp}
 llvm::PassPluginLibraryInfo getPPProfilerPluginInfo() {
@@ -207,8 +206,7 @@ llvm::PassPluginLibraryInfo getPPProfilerPluginInfo() {
 \end{cpp}
 
 \item
-Finally, if the plugin is dynamically linked, then the llvmGetPassPluginInfo() function is called when the plugin is loaded. However, when linking this code statically into a tool, you might end up with linker errors because that function could be defined in several source files.
-The solution is to guard the function with a macro:
+最后，若插件动态链接，则在加载插件时调用llvmGetPassPluginInfo()函数。但当将此代码静态地链接到工具中时，可能会出现链接器错误，因为该函数可能在多个源文件中定义。解决方案是使用宏来保护函数:
 
 \begin{cpp}
 #ifndef LLVM_PPPROFILER_LINK_INTO_TOOLS
@@ -221,76 +219,76 @@ llvmGetPassPluginInfo() {
 
 \end{enumerate}
 
-With that, we’ve implemented the pass plugin. Before we look at how to use the new plugin, let’s examine what needs to be changed if we want to add the pass plugin to the LLVM source tree.
+这样，我们就实现了通道插件。在了解如何使用新插件之前，让我们检查一下，若想要将通道插件添加到LLVM源代码树中，需要更改哪些内容。
 
-\mySubsubsection{7.3.2.}{Adding the pass to the LLVM source tree}
+\mySubsubsection{7.3.2.}{将通道添加到LLVM源代码树中}
 
-Implementing a new pass as a plugin is useful if you plan to use it with a precompiled clang, for example. On the other hand, if you write your own compiler, then there can be good reasons to add your new passes directly to the LLVM source tree. There are two different ways you can do this – as a plugin and as a fully integrated pass. The plugin approach requires fewer changes.
+例如，若计划将新通道与预编译的clang一起使用，则将其实现为插件是有用的。另一方面，若编写自己的编译器，就有很好的理由将新通道直接添加到LLVM源代码树中。有两种不同的方式可以做到这一点——作为一个插件和作为一个集成通道。插件方法的修改会更少一些。
 
-\mySamllsection{Utilizing the plugin mechanisms inside the LLVM source tree}
+\mySamllsection{利用LLVM源代码树中的插件机制}
 
-The source of passes that perform transformations on LLVM IR is located in the llvm-project/ llvm/lib/Transforms directory. Inside this directory, create a new directory called PPProfiler and copy the source file, PPProfiler.cpp, into it. You do not need to make any source changes!
+在LLVM IR上执行转换的传递源位于llvm-project/ llvm/lib/Transforms目录中。在这个目录中，创建一个名为PPProfiler的新目录，并将源文件PPProfiler.cpp复制到其中，不需要对源代码进行任何更改!
 
-To integrate the new plugin into the build system, create a file called CMakeLists.txt with the following content:
+为了将新插件集成到构建系统中，创建一个名为CMakeLists.txt的文件，内容如下:
 
 \begin{cmake}
 add_llvm_pass_plugin(PPProfiler PPProfiler.cpp)
 \end{cmake}
 
-Finally, in the CmakeLists.txt file in the parent directory, you need to include the new source directory by adding the following line:
+最后，在父目录下的CMakeLists.txt文件中，需要通过添加以下行来包含新的源目录:
 
 \begin{cmake}
 add_subdirectory(PPProfiler)
 \end{cmake}
 
-You are now ready to build LLVM with PPProfiler added. Change into the build directory of LLVM and manually run Ninja:
+现在，已经准备好构建添加了PPProfiler的LLVM。进入LLVM的构建目录，手动运行Ninja:
 
 \begin{shell}
 $ ninja install
 \end{shell}
 
-CMake will detect a change in the build description and rerun the configuration step. You will see an additional line:
+CMake将检测到构建描述中的变化，并重新运行配置步骤。这里，会看到一行输出:
 
 \begin{shell}
 -- Registering PPProfiler as a pass plugin (static build: OFF)
 \end{shell}
 
-This tells you that the plugin was detected and has been built as a shared library. After the installation step, you will find that shared library, PPProfiler.so, in the <install directory>/ lib directory.
+这告诉您该插件已检测到并已构建为动态库。在安装步骤之后，在<install directory>/lib目录下，将找到动态库PPProfiler.so。
 
-So far, the only difference to the pass plugin from the previous section is that the shared library is installed as part of LLVM. But you can also statically link the new plugin to the LLVM tools. To do this, you need to rerun the CMake configuration and add the -DLLVM\_PPPROFILER\_LINK\_INTO\_TOOLS=ON option on the command line. Look for this information from CMake to confirm the changed build option:
+目前为止，与前一节的通道插件的唯一区别是，动态库是作为LLVM的一部分安装的，但也可以静态地将新插件链接到LLVM工具。要做到这一点，需要重新运行CMake配置并在命令行中添加-DLLVM\_PPPROFILER\_LINK\_INTO\_TOOLS=ON选项。从CMake中查找以下信息以确认已更改的构建选项:
 
 \begin{shell}
 -- Registering PPProfiler as a pass plugin (static build: ON)
 \end{shell}
 
-After compiling and installing LLVM again, the following has changed:
+重新编译安装LLVM后，发生如下变化:
 
 \begin{itemize}
 \item
-The plugin is compiled into the static library, libPPProfiler.a, and that library is installed in the <install directory>/lib directory.
+该插件编译到静态库libPPProfiler.a中，并且该库安装在<install directory>/lib目录下。
 
 \item
-The LLVM tools, such as opt, are linked against that library.
+LLVM工具(如opt)会链接到该库。
 
 \item
-The plugin is registered as an extension. You can check that the <install directory>/ include/llvm/Support/Extension.def file now contains the following line:
+该插件注册为扩展，可以检查<install directory>/include/llvm/Support/Extension.def文件现在包含以下行:
 
 \begin{shell}
 HANDLE_EXTENSION(PPProfiler)
 \end{shell}
 \end{itemize}
 
-In addition, all tools that support this extension mechanism pick up the new pass. In the Creating an optimization pipeline section, you will learn how to do this in your compiler.
+此外，所有支持此扩展机制的工具都将获得新的通道。在创建优化流水线一节中，将了解如何在编译器中执行此操作。
 
-This approach works well because the new source files reside in a separate directory, and only one existing file was changed. This minimizes the probability of merge conflicts if you try to keep your modified LLVM source tree in sync with the main repository.
+因为新的源文件位于单独的目录中，所以这种方法工作得很好，并且只修改一个现有文件。若试图保持修改后的LLVM源树与主存储库同步，这将最小化合并冲突的可能性。
 
-There are also situations where adding the new pass as a plugin is not the best way. The passes that LLVM provides use a different way for registration. If you develop a new pass and propose to add it to LLVM, and the LLVM community accepts your contribution, then you will want to use the same registration mechanism.
+在某些情况下，将新通道添加为插件并不是最好的方法，LLVM提供的通道使用不同的方式进行注册。若您开发了一个新通道并建议将其添加到LLVM，并且LLVM社区接受了您的贡献，那么可以使用相同的注册机制。
 
-\mySamllsection{Fully integrating the pass into the pass registry}
+\mySamllsection{将通道集成到注册表中}
 
-To fully integrate the new pass into LLVM, the source of the plugin needs to be structured slightly differently. The main reason for this is that the constructor of the pass class is called from the pass registry, which requires the class interface to be put into a header file.
+为了将新通道完全集成到LLVM中，需要对插件的源代码进行稍微不同的结构调整。这样做的主要原因是从通道注册表调用通道类的构造函数，这需要将类接口放入头文件中。
 
-Like before, you must put the new pass into the Transforms component of LLVM. Begin the implementation by creating the llvm-project/llvm/include/llvm/Transforms/ PPProfiler/PPProfiler.h header file. The content of that file is the class definition; put it into the llvm namespace. No other changes are required:
+与之前一样，必须将新通道放入LLVM的Transforms组件中。通过创建lvm-project/llvm/include/llvm/Transforms/PPProfiler/PPProfiler.h头文件开始实现。该文件的内容是类定义，将其放入LLVM的命名空间中。无需其他更改:
 
 \begin{cpp}
 #ifndef LLVM_TRANSFORMS_PPPROFILER_PPPROFILER_H
@@ -313,21 +311,21 @@ private:
 #endif
 \end{cpp}
 
-Next, copy the source file of the pass plugin, PPProfiler.cpp, into the new directory, llvmproject/llvm/lib/Transforms/PPProfiler. This file needs to be updated in the following way:
+接下来，将通道插件的源文件PPProfiler.cpp复制到新目录llvmproject/llvm/lib/Transforms/PPProfiler中。该文件需要按照如下方式更新:
 
 \begin{enumerate}
 \item
-Since the class definition is now in a header file, you must remove the class definition from this file. At the top, add the \#include directive for the header file:
+由于类定义现在位于头文件中，因此必须从该文件中删除类定义。在顶部，添加\#include:
 
 \begin{cpp}
 #include "llvm/Transforms/PPProfiler/PPProfiler.h"
 \end{cpp}
 
 \item
-The llvmGetPassPluginInfo() function must be removed because the pass wasn’t built into a shared library of its own.
+必须删除llvmGetPassPluginInfo()函数，因为通道没有内置到动态库中。
 \end{enumerate}
 
-As before, you also need to provide a CMakeLists.txt file for the build. You must declare the new pass as a new component:
+和前面一样，还需要为构建提供一个CMakeLists.txt文件，必须将新通道声明为一个新组件:
 
 \begin{cmake}
 add_llvm_component_library(LLVMPPProfiler
@@ -339,35 +337,35 @@ add_llvm_component_library(LLVMPPProfiler
 )
 \end{cmake}
 
-After, like in the previous section, you need to include the new source directory by adding the following line to the CMakeLists.txt file in the parent directory:
+之后，与前一节一样，需要通过向父目录下的CMakeLists.txt添加以下行来包含新的源目录:
 
 \begin{cmake}
 add_subdirectory(PPProfiler)
 \end{cmake}
 
-Inside LLVM, the available passes are kept in the llvm/lib/Passes/PassRegistry.def database file. You need to update this file. The new pass is a module pass, so we need to search inside the file for the section in which module passes are defined, for example, by searching for the MODULE\_PASS macro. Inside this section, add the following line:
+在LLVM内部，可用的通行证保存在llvm/lib/Passes/PassRegistry.def数据库文件中，需要更新这个文件。新的传递是一个模块传递，因此需要在文件中搜索定义模块传递的部分，例如，搜索MODULE\_PASS宏。在这个部分中，添加以下行:
 
 \begin{shell}
 MODULE_PASS("ppprofiler", PPProfilerIRPass())
 \end{shell}
 
-This database file is used in the llvm/lib/Passes/PassBuilder.cpp class. This file needs to include your new header file:
+该数据库文件在llvm/lib/Passes/PassBuilder.cpp类中使用。这个文件需要包含新的头文件:
 
 \begin{cpp}
 #include "llvm/Transforms/PPProfiler/PPProfiler.h"
 \end{cpp}
 
-These are all required source changes based on the plugin version of the new pass.
+这些都是基于新通道的插件版本所必需的源码更改。
 
-Since you created a new LLVM component, it is also necessary to add a link dependency in the llvm/ lib/Passes/CMakeLists.txt file. Under the LINK\_COMPONENTS keyword, you need to add a line with the name of the new component:
+由于您创建了一个新的LLVM组件，还需要在llvm/lib/Passes/CMakeLists.txt文件中添加链接依赖项。在LINK\_COMPONENTS关键字下，需要添加一行新组件的名称:
 
 \begin{shell}
 PPProfiler
 \end{shell}
 
-Et voilà – you are ready to build and install LLVM. The new pass, ppprofiler, is now available to all LLVM tools. It has been compiled into the libLLVMPPProfiler.a library and available in the build system as the PPProfiler component.
+现在，可以开始构建和安装LLVM了，所有LLVM工具都可以使用新的通道ppprofiler。它已经编译到libLLVMPPProfiler.a库中，并且可以作为PPProfiler组件在构建系统中使用。
 
-So far, we have talked about how to create a new pass. In the next section, we will examine how to use the ppprofiler pass.
+目前，我们已经讨论了如何创建一个新的通道。在下一节中，我们将研究如何使用ppprofiler通道。
 
 
 

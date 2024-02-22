@@ -1,17 +1,17 @@
 
-The tinylang compiler we developed in the previous chapters performs no optimizations on the IR code. In the next few subsections, we’ll add an optimization pipeline to the compiler to achieve this accordingly.
+我们在前面章节中开发的tinylang编译器，但没有对IR代码进行优化。在接下来的小节中，我们将在编译器中添加一个优化流水线来实现这一目标。
 
-\mySubsubsection{7.5.1.}{Creating an optimization pipeline}
+\mySubsubsection{7.5.1.}{创建优化流水线}
 
-The PassBuilder class is central to setting up the optimization pipeline. This class knows about all registered passes and can construct a pass pipeline from a textual description. We can use this class to either create the pass pipeline from a description given on the command line or use a default pipeline based on the requested optimization level. We also support the use of pass plugins, such as the ppprofiler pass plugin we discussed in the previous section. With this, we can mimic part of the functionality of the opt tool and also use similar names for the command-line options.
+PassBuilder类是设置优化流水线的核心。这个类知道所有已注册的通道，并且可以从文本描述构造一个通道流水线。可以使用这个类根据命令行给出的描述创建通道流水线，或者根据所请求的优化级别使用默认流水线。我们还支持使用通道插件，例如：在前一节中讨论的ppprofiler通道插件。这样，就可以模拟opt工具的部分功能，并为命令行选项使用类似的名称。
 
-The PassBuilder class populates an instance of a ModulePassManager class, which is the pass manager that holds the constructed pass pipeline and runs it. The code generation passes still use the old pass manager. Therefore, we have to retain the old pass manager for this purpose.
+PassBuilder类填充ModulePassManager类的实例，ModulePassManager类是通道管理器，保存构造的通道流水线并运行，代码生成通道仍然使用旧的通道管理器。因此，必须保留旧的通道管理器。
 
-For the implementation, we will extend the tools/driver/Driver.cpp file from our tinylang compiler:
+为了实现它，我们将扩展tinylang编译器中的tools/driver/Driver.cpp文件:
 
 \begin{enumerate}
 \item
-We’ll use new classes, so we’ll begin with adding new include files. The llvm/Passes/ PassBuilder.h file defines the PassBuilder class. The llvm/Passes/PassPlugin.h file is required for plugin support. Finally, the llvm/Analysis/TargetTransformInfo.h file provides a pass that connects IR-level transformations with target-specific information:
+我们将使用新的类，因此将从添加新的包含文件开始。llvm/Passes/PassBuilder.h文件定义了PassBuilder类，llvm/Passes/PassPlugin.h文件是插件支持所必需的。最后，llvm/Analysis/ targettransformminfo.h文件提供了一个IR级转换，并与目标特定信息连接起来的通道:
 
 \begin{cpp}
 #include "llvm/Passes/PassBuilder.h"
@@ -20,7 +20,7 @@ We’ll use new classes, so we’ll begin with adding new include files. The llv
 \end{cpp}
 
 \item
-To use certain features of the new pass manager, we must add three command-line options, using the same names as the opt tool does. The -{}-passes option allows the textual specification of the pass pipeline, while the -{}-load-pass-plugin option allows the use of pass plugins. If the -{}-debug-pass-manager option is given, then the pass manager prints out information about the executed passes:
+要使用新通道管理器的某些特性，必须添加三个命令行选项，使用与opt工具相同的名称。-{}-passes选项允许通过管道的文本规范，而-{}-load-pass-plugin选项允许使用通道插件。若给出了-{}-debug-pass-manager选项，则通道管理器会打印出执行的通道信息:
 
 \begin{cpp}
 static cl::opt<bool>
@@ -35,7 +35,7 @@ static cl::list<std::string> PassPlugins(
 \end{cpp}
 
 \item
-The user influences the construction of the pass pipeline with the optimization level. The PassBuilder class supports six different optimization levels: no optimization, three levels for optimizing speed, and two levels for reducing size. We can capture all levels in one command-line option:
+用户以优化级别影响通道流水线的构造。PassBuilder类支持6个不同的优化级别:无优化、3个优化速度级别和2个减小文件大小级别。我们可以在一个命令行选项中获取所有级别:
 
 \begin{cpp}
 static cl::opt<signed char> OptLevel(
@@ -53,7 +53,7 @@ static cl::opt<signed char> OptLevel(
 \end{cpp}
 
 \item
-The plugin mechanism of LLVM supports a plugin registry for statically linked plugins, which is created during the configuration of the project. To make use of this registry, we must include the llvm/Support/Extension.def database file to create the prototype for the functions that return the plugin information:
+LLVM的插件机制支持静态链接插件的插件注册表，它是在项目配置期间创建的。为了利用这个注册表，必须包含llvm/Support/Extension.def数据库文件，以创建返回插件信息的函数原型:
 
 \begin{cpp}
 #define HANDLE_EXTENSION(Ext) \
@@ -62,7 +62,7 @@ The plugin mechanism of LLVM supports a plugin registry for statically linked pl
 \end{cpp}
 
 \item
-Now, we must replace the existing emit() function with a new version. Additionally, we must declare the required PassBuilder instance at the top of the function:
+现在，必须用一个新版本替换现有的emit()函数。此外，必须在函数的顶部声明所需的PassBuilder实例:
 
 \begin{cpp}
 bool emit(StringRef Argv0, llvm::Module *M,
@@ -72,7 +72,7 @@ bool emit(StringRef Argv0, llvm::Module *M,
 \end{cpp}
 
 \item
-To implement the support for pass plugins given on the command line, we must loop through the list of plugin libraries given by the user and try to load the plugin. We’ll emit an error message if this fails; otherwise, we’ll register the passes:
+为了实现对命令行中给出的传递插件的支持，必须循环遍历用户给出的插件库列表，并尝试加载插件。若此操作失败，将输出一个错误消息;否则，将注册通道:
 
 \begin{cpp}
 for (auto &PluginFN : PassPlugins) {
@@ -89,7 +89,7 @@ for (auto &PluginFN : PassPlugins) {
 \end{cpp}
 
 \item
-The information from the static plugin registry is used in a similar way to register those plugins with our PassBuilder instance:
+来自静态插件注册表的信息，以类似的方式用于向PassBuilder实例注册这些插件:
 
 \begin{cpp}
 #define HANDLE_EXTENSION(Ext) \
@@ -98,7 +98,7 @@ The information from the static plugin registry is used in a similar way to regi
 \end{cpp}
 
 \item
-Now, we need to declare variables for the different analysis managers. The only parameter is the debug flag:
+现在，需要为不同的分析管理器声明变量。唯一的参数是调试标志:
 
 \begin{cpp}
 LoopAnalysisManager LAM(DebugPM);
@@ -108,7 +108,7 @@ ModuleAnalysisManager MAM(DebugPM);
 \end{cpp}
 
 \item
-Next, we must populate the analysis managers with calls to the respective register method on the PassBuilder instance. Through this call, the analysis manager is populated with the default analysis passes and also runs registration callbacks. We must also make sure that the function analysis manager uses the default alias-analysis pipeline and that all analysis managers know about each other:
+接下来，必须使用对PassBuilder实例上各自的注册方法的调用来填充分析管理器。通过此调用，分析管理器将使用默认分析通道填充，并运行注册回调。我们还必须确保功能分析管理器使用默认别名分析流水线，并且所有的分析管理器都知道彼此的存在:
 
 \begin{cpp}
 FAM.registerPass(
@@ -121,14 +121,14 @@ PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 \end{cpp}
 
 \item
-The MPM module pass manager holds the pass pipeline that we constructed. The instance is initialized with the debug flag:
+MPM模块通道管理器保存构造的通道流水线，实例用debug标志初始化:
 
 \begin{cpp}
 ModulePassManager MPM(DebugPM);
 \end{cpp}
 
 \item
-Now, we need to implement two different ways to populate the module pass manager with the pass pipeline. If the user provided a pass pipeline on the command line – that is, they have used the -{}-passes option – then we use this as the pass pipeline:
+现在，需要实现两种不同的方法，用通道流水线填充模块通道管理器。若用户在命令行上提供了一个通道流水线——也就是说，使用了-{}-passes选项——则使用这个作为通道流水线:
 
 \begin{cpp}
 if (!PassPipeline.empty()) {
@@ -142,7 +142,7 @@ if (!PassPipeline.empty()) {
 \end{cpp}
 
 \item
-Otherwise, we use the chosen optimization level to determine the pass pipeline to construct. The name of the default pass pipeline is default, and it takes the optimization level as a parameter:
+否则，使用所选择的优化级别来确定要构建的通道流水线。默认的通道流水线名称为default，将优化级别作为参数:
 
 \begin{cpp}
 else {
@@ -166,7 +166,7 @@ else {
 
 
 \item
-With that, the pass pipeline to run transformations on the IR code has been set up. After this step, we need an open file to write the result to. The system assembler and LLVM IR output are text-based, so we should set the OF\_Text flag for them:
+IR代码上运行转换的通道流水线就已经设置好了。这一步之后，需要一个打开的文件来写入结果。系统汇编器和LLVM IR输出是基于文本的，所以应该为其设置OF\_Text标志:
 
 \begin{cpp}
 std::error_code EC;
@@ -184,7 +184,7 @@ if (EC) {
 \end{cpp}
 
 \item
-For the code generation process, we have to use the old pass manager. We must simply declare the CodeGenPM instances and add the pass, which makes target-specific information available at the IR transformation level:
+对于代码生成过程，必须使用旧的通道管理器。必须简单地声明CodeGenPM实例并添加通道，这使得特定于目标的信息在进行IR级别的转换时可用:
 
 \begin{cpp}
 legacy::PassManager CodeGenPM;
@@ -193,7 +193,7 @@ CodeGenPM.add(createTargetTransformInfoWrapperPass(
 \end{cpp}
 
 \item
-To output LLVM IR, we must add a pass that prints the IR into a stream:
+要输出LLVM IR，必须添加一个将IR输出到流中的通道:
 
 \begin{cpp}
 if (FileType == CGFT_AssemblyFile && EmitLLVM) {
@@ -202,7 +202,7 @@ if (FileType == CGFT_AssemblyFile && EmitLLVM) {
 \end{cpp}
 
 \item
-Otherwise, we must let the TargetMachine instance add the required code generation passes, directed by the FileType value we pass as an argument:
+否则，必须让TargetMachine实例添加所需的代码生成通道，由作为参数传递的FileType值作为指示:
 
 \begin{cpp}
 else {
@@ -216,7 +216,7 @@ else {
 \end{cpp}
 
 \item
-After all this preparation, we are now ready to execute the passes. First, we must run the optimization pipeline on the IR module. Next, the code generation passes are run. Of course, after all this work, we want to keep the output file:
+所有这些准备工作之后，准备执行通道。首先，必须在IR模块上运行优化流水线，再运行代码生成通道。在所有这些工作之后，保留输出文件:
 
 \begin{cpp}
     MPM.run(*M, MAM);
@@ -227,7 +227,7 @@ After all this preparation, we are now ready to execute the passes. First, we mu
 \end{cpp}
 
 \item
-That was a lot of code, but the process was straightforward. Of course, we have to update the dependencies in the tools/driver/CMakeLists.txt build file too. Besides adding the target components, we must add all the transformation and code generation components from LLVM. The names roughly resemble the directory names where the source is located. The component name is translated into the link library name during the configuration process:
+虽然代码很多，但过程很简单。我们也必须更新tools/driver/CMakeLists.txt构建文件中的依赖项，除了添加目标组件，还必须添加来自LLVM的所有转换和代码生成组件。这些名称大致类似于源代码所在的目录名称。在配置过程中，组件名会转换为链接库名:
 
 \begin{cmake}
 set(LLVM_LINK_COMPONENTS ${LLVM_TARGETS_TO_BUILD}
@@ -239,7 +239,7 @@ set(LLVM_LINK_COMPONENTS ${LLVM_TARGETS_TO_BUILD}
 \end{cmake}
 
 \item
-Our compiler driver supports plugins, and we must announce this support:
+编译器驱动支持插件，我们必须声明这个支持:
 
 \begin{cmake}
 target_link_libraries(tinylang
@@ -247,10 +247,10 @@ target_link_libraries(tinylang
     tinylangLexer tinylangParser tinylangSema)
 \end{cmake}
 
-These are necessary additions to the source code and the build system.
+这些都是对源代码和构建系统的必要补充。
 
 \item
-To build the extended compiler, you must change into your build directory and type the following:
+要构建扩展编译器，必须切换到构建目录并键入以下命令:
 
 \begin{shell}
 $ ninja
@@ -258,29 +258,29 @@ $ ninja
 
 \end{enumerate}
 
-Changes to the files of the build system are automatically detected, and cmake is run before compiling and linking our changed source. If you need to re-run the configuration step, please follow the instructions in Chapter 1, Installing LLVM, the Compiling the tinylang application section.
+对构建系统文件的更改会自动检测，并且在编译和链接更改的源代码前运行cmake。若需要重新运行配置步骤，请按照第1章，编译tinylang应用程序部分中的说明进行操作。
 
-As we have used the options for the opt tool as a blueprint, you should try running tinylang with the options to load a pass plugin and run the pass, as we did in the previous sections.
+由于我们已经使用了opt工具的选项作为蓝图，所以应该尝试运行tinylang，使用这些选项来加载一个通道插件并运行通道，就像我们在前几节中所做的那样。
 
-With the current implementation, we can either run a default pass pipeline or we can construct one ourselves. The latter is very flexible, but in almost all cases, it would be overkill. The default pipeline runs very well for C-like languages. However, what is missing is a way to extend the pass pipeline. We’ll look at how to implement this in the next section.
+当前的实现中，既可以运行默认的传递管道，也可以自己构造一个。后者是非常灵活的，但在几乎所有情况下，它都是多余的。默认的管道在类C语言中运行得非常好，但缺少的是一种扩展通道流水线的方法。我们将在下一节中讨论如何实现它。
 
-\mySubsubsection{7.5.2.}{Extending the pass pipeline}
+\mySubsubsection{7.5.2.}{扩展通道流水线}
 
-In the previous section, we used the PassBuilder class to create a pass pipeline, either from a user-provided description or a predefined name. Now, let’s look at another way to customize the pass pipeline: using extension points.
+上一节中，使用PassBuilder类从用户提供的描述或预定义的名称创建了一个通道流水线。现在，让我们看一看定制通道流水线的另一种方法:扩展点。
 
-During the construction of the pass pipeline, the pass builder allows passes contributed by the user to be added. These places are called extension points. A couple of extension points exist, as follows:
+在传递管道的构造过程中，传递构建器允许添加用户贡献的传递。这些地方被为扩展点。存在一些扩展点，如下所示:
 
 \begin{itemize}
 \item
-The pipeline start extension point, which allows us to add passes at the beginning of the pipeline
+管道开始扩展点，允许在管道的开头添加通道
 
 \item
-The peephole extension point, which allows us to add passes after each instance of the instruction combiner pass
+窥视孔扩展点，允许在每个指令组合器实例传递之后添加通道
 \end{itemize}
 
-Other extension points exist too. To employ an extension point, you must register a callback. During the construction of the pass pipeline, your callback is run at the defined extension point and can add passes to the given pass manager.
+还存在其他扩展点。要使用扩展点，必须注册回调。在通道流水线的构造过程中，回调在定义的扩展点上运行，并且可以向给定的通道管理器添加通道。
 
-To register a callback for the pipeline start extension point, you must call the registerPipelineStartEPCallback() method of the PassBuilder class. For example, to add our PPProfiler pass to the beginning of the pipeline, you would adapt the pass to be used as a module pass with a call to the createModuleToFunctionPassAdaptor() template function and then add the pass to the module pass manager:
+要为流水线的起始扩展点注册回调函数，必须调用PassBuilder类的registerPipelineStartEPCallback()方法。例如，要在流水线的开头添加PPProfiler传递，需要调用createModuleToFunctionPassAdaptor()模板函数，将该通道修改为模块通道，然后将其添加到模块通道管理器:
 
 \begin{cpp}
 PB.registerPipelineStartEPCallback(
@@ -289,13 +289,13 @@ PB.registerPipelineStartEPCallback(
     });
 \end{cpp}
 
-You can add this snippet in the pass pipeline setup code anywhere before the pipeline is created – that is, before the parsePassPipeline() method is called.
+可以在流水线创建之前的任何地方——也就是parsepaspipeline()方法调用之前，在通道流水线设置代码中添加这段代码。
 
-A very natural extension to what we did in the previous section is to let the user pass a pipeline description for an extension point on the command line. The opt tool allows this too. Let’s do this for the pipeline start extension point. Add the following code to the tools/driver/Driver.cpp file:
+对于上一节中所做的工作，一个非常自然的扩展是让用户在命令行上添加管道扩展点的流水线描述。opt工具也可以这样做，让我们对管道开始扩展点执行此操作。在tools/driver/Driver.cpp文件中添加如下代码:
 
 \begin{enumerate}
 \item
-First, we must a new command line for the user to specify the pipeline description. Again, we take the option name from the opt tool:
+首先，必须为用户创建一个新的命令行来指定管道描述。同样，从opt工具中获取选项名:
 
 \begin{cpp}
 static cl::opt<std::string> PipelineStartEPPipeline(
@@ -304,7 +304,7 @@ static cl::opt<std::string> PipelineStartEPPipeline(
 \end{cpp}
 
 \item
-Using a Lambda function as a callback is the most convenient way to do this. To parse the pipeline description, we must call the parsePassPipeline() method of the PassBuilder instance. The passes are added to the PM pass manager and given as an argument to the Lambda function. If an error occurs, we only print an error message without stopping the application. You can add this snippet after the call to the crossRegisterProxies() method:
+使用Lambda函数作为回调是最方便的方式。为了解析管道描述，必须调用PassBuilder实例的parsepaspipeline()方法。这些通道会添加到PM通道管理器中，并作为Lambda函数的参数。若发生错误，只打印错误消息，而不停止应用程序。可以在调用crossRegisterProxies()方法之后添加以下代码片段:
 
 \begin{cpp}
 PB.registerPipelineStartEPCallback(
@@ -320,15 +320,15 @@ PB.registerPipelineStartEPCallback(
 \end{cpp}
 
 \begin{myTip}{Tip}
-To allow the user to add passes at every extension point, you need to add the preceding code snippet for each extension point.
+要允许用户在每个扩展点添加通道，需要为每个扩展点添加上述代码片段。
 \end{myTip}
 
 \item
-Now is a good time to try out the different pass manager options. With the -{}-debugpass-manager option, you can follow which passes are executed in which order. You can also print the IR before or after each pass, which is invoked with the -{}-print-before-all and -{}-print-after-all options. If you created your own pass pipeline, then you can insert the print pass in points of interest. For example, try the -{}-passes="print,inline,print" option. Furthermore, to identify which pass changes the IR code, you can use the -{}-printchanged option, which will only print the IR code if it has changed compared to the result from the pass before. The greatly reduced output makes it much easier to follow IR transformations.
+现在是时候尝试不同的传递管理器选项了。使用-{}-debugpass-manager选项，可以了解哪些通道以何种顺序执行。还可以在每次传递之前或之后打印IR，这可以通过-{}-print-before-all和-{}-print-after-all选项完成。若创建了自己的通道流水线，就可以在感兴趣的地方插入打印通道。例如，可以尝试-{}-passes="print,inline,print"选项。此外，为了识别哪一个通道改变了IR代码，可以使用-{}-printchanged选项，只会在IR代码与之前通道的结果相比发生了变化时打印出来，大大减少的输出使得跟踪IR修改变得更加容易。
 
-The PassBuilder class has a nested OptimizationLevel class to represent the six different optimization levels. Instead of using the "default<O?>" pipeline description as an argument to the parsePassPipeline() method, we can also call the buildPerModuleDefaultPipeline() method, which builds the default optimization pipeline for the request level – except for level O0. This optimization level means that no optimization is performed.
+PassBuilder类有一个嵌套的OptimizationLevel类来表示六个不同的优化级别。而不是使用“default<O?”>"流水描述作为parsePassPipeline()方法的参数，也可以调用buildPerModuleDefaultPipeline()方法，为请求级别构建默认的优化管道——除了级别0，此优化级别意味着不执行任何优化。
 
-Consequently, no passes are added to the pass manager. If we still want to run a certain pass, then we can add it to the pass manager manually. A simple pass to run at this level is the AlwaysInliner pass, which inlines a function marked with the always\_inline attribute into the caller. After translating the command-line option value for the optimization level into the corresponding member of the OptimizationLevel class, we can implement this as follows:
+因此，没有通道添加到通道管理器中。若仍然想要运行某个通道，则可以手动将其添加到通道管理器中。在这个级别上运行的一个简单通道是AlwaysInliner通道，将一个带有always\_inline属性的函数内联到调用者中。在将优化级别的命令行选项值转换为OptimizationLevel类的相应成员之后，可以这样实现:
 
 \begin{cpp}
 PassBuilder::OptimizationLevel Olevel = …;
@@ -338,15 +338,15 @@ else
     MPM = PB.buildPerModuleDefaultPipeline(OLevel, DebugPM);
 \end{cpp}
 
-Of course, it is possible to add more than one pass to the pass manager in this fashion. PassBuilder also uses the addPass() method when constructing the pass pipeline.
+当然，可以以这种方式向通道管理器添加多个通道。在构造通道流水线时，PassBuilder也使用addPass()方法。
 
 \end{enumerate}
 
-\begin{myTip}{Running extension point callbacks}
-Because the pass pipeline is not populated for optimization level O0, the registered extension points are not called. If you use the extension points to register passes that should also run at O0 level, this is problematic. You can call the runRegisteredEPCallbacks() method to run the registered extension point callbacks, resulting in a pass manager populated only with the passes that were registered through the extension points.
+\begin{myTip}{运行扩展点的回调}
+因为没有为优化级别O0填充通道流水线，所以注册的扩展点不会调用。若使用扩展点来注册应该在O0级别运行的通道，会有问题。可以使用runRegisteredEPCallbacks()来运行注册的扩展点回调，从而产生一个仅由通过扩展点注册通道填充的通道管理器。
 \end{myTip}
 
-By adding the optimization pipeline to tinylang, you created an optimizing compiler similar to clang. The LLVM community works on improving the optimizations and the optimization pipeline with each release. Due to this, it is very seldom that the default pipeline is not used. Most often, new passes are added to implement certain semantics of the programming language.
+通过将优化流水线添加到tinylang中，既创建了一个类似于clang的优化编译器。LLVM社区致力于在每个版本中改进优化和优化管道，所以很少不使用默认管道。大多数情况下，添加新通道是为了实现编程语言的某些语义。
 
 
 

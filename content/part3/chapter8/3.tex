@@ -1,9 +1,9 @@
 
-Very often, beginners feel overwhelmed by the TableGen language. But as soon as you start experimenting with the language, it becomes much easier.
+很多时候，初学者对TableGen语言感到不知所措。但开始尝试这门语言，其就会变得容易得多。
 
-\mySubsubsection{8.3.1.}{Defining records and classes}
+\mySubsubsection{8.3.1.}{定义记录和类}
 
-Let’s define a simple record for an instruction:
+让我们为指令定义一条简单的记录:
 
 \begin{shell}
 def ADD {
@@ -12,9 +12,9 @@ def ADD {
 }
 \end{shell}
 
-The def keyword signals that you define a record. It is followed by the name of the record. The record body is surrounded by curly braces, and the body consists of field definitions, similar to a structure in C++.
+def关键字表示定义了一条记录，后面跟着记录的名称。记录主体由花括号包围，主体由字段定义组成，类似于C++中的结构体。
 
-You can use the llvm-tblgen tool to see the generated records. Save the preceding source code in an inst.td file and run the following:
+可以使用llvm-tblgen工具查看生成的记录。将上述源代码保存在inst.td文件中，然后运行如下命令:
 
 \begin{shell}
 $ llvm-tblgen --print-records inst.td
@@ -26,9 +26,9 @@ def ADD {
 }
 \end{shell}
 
-This is not yet exciting; it only shows the defined record was parsed correctly.
+这只表明正确的解析了定义的记录。
 
-Defining instructions using single records is not very comfortable. A modern CPU has hundreds of instructions, and with this amount of records, it is very easy to introduce typing errors in the field names. And if you decide to rename a field or add a new field, then the number of records to change becomes a challenge. Therefore, a blueprint is needed. In C++, classes have a similar purpose, and in TableGen, it is also called a class. Here is the definition of an Inst class and two records based on that class:
+定义指令使用单一的记录不是很舒服。现代的CPU有数百条指令，有了这么多的记录，很容易在字段名中引入输入错误。若决定重命名一个字段或添加一个新字段，则要更改的记录数量将会非常的大，所以蓝图必不可少。在C++中，类也有类似的用途，在TableGen中，也被称为类。下面是一个Inst类的定义，以及基于该类的两条记录:
 
 \begin{shell}
 class Inst<string mnemonic, int opcode> {
@@ -40,7 +40,7 @@ def ADD : Inst<"add", 0xA0>;
 def SUB : Inst<"sub", 0xB0>;
 \end{shell}
 
-The syntax for classes is similar to that of records. The class keyword signals that a class is defined, followed by the name of the class. A class can have a parameter list. Here, the Inst class has two parameters, mnemonic and opcode, which are used to initialize the records’ fields. The values for those fields are given when the class is instantiated. The ADD and SUB records show two instantiations of the class. Again, let’s use llvm-tblgen to look at the records:
+类的语法类似于记录的语法。class关键字表示定义了一个类，后跟类名。类可以有一个参数列表。Inst类有两个参数，助记符和操作码，用于初始化记录的字段。这些字段的值在类实例化时给出。ADD和SUB记录显示了类的两个实例化，让我们使用llvm-tblgen来查看记录:
 
 \begin{shell}
 $ llvm-tblgen --print-records inst.td
@@ -60,16 +60,15 @@ def SUB { // Inst
 }
 \end{shell}
 
-Now, you have one class definition and two records. The name of the class used to define the records is shown as a comment. Please note that the arguments of the class have the default value ?, which indicates int is uninitialized.
+现在，有了一个类定义和两条记录。用于定义记录的类的名称显示为注释。请注意，该类的参数具有默认值?，这表示int未初始化。
 
-\begin{myTip}{Tip for debugging}
-To get a more detailed dump of the records, you can use the -{}-print-detailed-records option. The output includes the line numbers of record and class definitions, and where record fields are initialized. They can be very helpful if you try to track down why a record field was assigned a certain value.
+\begin{myTip}{调试的技巧}
+要获得更详细的记录转储，可以使用-{}-print-detailed-records选项。输出包括记录和类定义的行号，以及初始化记录字段的位置。若要跟踪为什么一个记录字段分配了某个值，这就会非常有用。
 \end{myTip}
 
-In general, the ADD and SUB instructions have a lot in common, but there is also a difference: addition is a commutative operation but subtraction is not. Let’s capture that fact in the record, too. A small challenge is that TableGen only supports a limited set of data types. You already used string and int in the examples. The other available data types are bit, bits<n>, list<type>, and dag.
-The bit type represents a single bit; that is, 0 or 1. If you need a fixed number of bits, then you use the bits<n> type. For example, bits<5> is an integer type 5 bits wide. To define a list based on another type, you use the list<type> type. For example, list<int> is a list of integers, and list<Inst> is a list of records of the Inst class from the example. The dag type represents directed acyclic graph (DAG) nodes. This type is useful for defining patterns and operations and is used extensively in LLVM backends.
+一般来说，ADD和SUB指令有很多共同之处，但也有一个区别:加法是可交换运算，而减法不是。这里的一个小小的挑战是，TableGen只支持有限的数据类型集。已经在示例中使用了string和int，其他可用的数据类型有bit、bits<n>、list<type>和dag。位类型表示单个位;也就是0或1。若需要固定数量的位，则使用bits<n>类型。例如，bits<5>是一个宽为5位的整数类型。要基于另一种类型定义列表，可以使用list<type>类型。例如，list<int>是一个整数列表，而list<Inst>是示例中Inst类的记录列表。dag类型表示有向无环图(dag)节点，这种类型对于定义模式和操作很有用，并且在LLVM后端中广泛使用。
 
-To represent a flag, a single bit is sufficient, so you can use one to mark an instruction as commutable. The majority of instructions are not commutable, so you can take advantage of default values:
+要表示一个标志，单个比特就足够了，因此可以使用一个比特将指令标记为可交换的。大多数指令都不可交换，所以可以使用默认值:
 
 \begin{shell}
 class Inst<string mnemonic, int opcode, bit commutable = 0> {
@@ -82,9 +81,9 @@ def ADD : Inst<"add", 0xA0, 1>;
 def SUB : Inst<"sub", 0xB0>;
 \end{shell}
 
-You should run llvm-tblgen to verify that the records are defined as expected.
+应该运行llvm-tblgen来验证记录是否按预期定义。
 
-There is no requirement for a class to have parameters. It is also possible to assign values later. For example, you can define that all instructions are not commutable:
+类不需要有参数，也可以稍后赋值。例如，可以定义所有指令都不可交换:
 
 \begin{shell}
 class Inst<string mnemonic, int opcode> {
@@ -96,14 +95,14 @@ class Inst<string mnemonic, int opcode> {
 def SUB : Inst<"sub", 0xB0>;
 \end{shell}
 
-Using a let statement, you can overwrite that value:
+使用let语句，可以覆盖该值:
 
 \begin{shell}
 let Commutable = 1 in
     def ADD : Inst<"add", 0xA0>;
 \end{shell}
 
-Alternatively, you can open a record body to overwrite the value:
+或者，打开记录主体来覆盖该值:
 
 \begin{shell}
 def ADD : Inst<"add", 0xA0> {
@@ -111,9 +110,9 @@ def ADD : Inst<"add", 0xA0> {
 }
 \end{shell}
 
-Again, please use llvm-tblgen to verify that the Commutable flag is set to 1 in both cases.
+同样，请使用llvm-tblgen来验证在这两种情况下是否将可交换标志设置为1。
 
-Classes and records can be inherited from multiple classes, and it is always possible to add new fields or overwrite the value of existing fields. You can use inheritance to introduce a new CommutableInst class:
+类和记录可以从多个类继承，并且总是可以添加新字段或覆盖现有字段的值。可以使用继承来引入一个新的可交换类:
 
 \begin{shell}
 class Inst<string mnemonic, int opcode> {
@@ -131,31 +130,31 @@ def SUB : Inst<"sub", 0xB0>;
 def ADD : CommutableInst<"add", 0xA0>;
 \end{shell}
 
-The resulting records are always the same, but the language allows you to define records in different ways. Please note that, in the latter example, the Commutable flag may be superfluous: the code generator can query a record for the classes it is based on, and if that list contains the CommutableInst class, then it can set the flag internally.
+生成的记录总相同，但是该语言允许以不同的方式定义记录。请注意，在后一个示例中，可交换标志可能是多余的:代码生成器可以查询它所基于的类的记录，若该列表包含可交换类，则可以在内部设置该标志。
 
-\mySubsubsection{8.3.2.}{Creating multiple records at once with multiclasses}
+\mySubsubsection{8.3.2.}{使用多个类一次创建多个记录}
 
-Another often-used statement is multiclass. A multiclass allows you to define multiple records at once. Let’s expand the example to show why this can be useful.
+另一个常用语句是multiclass，multiclass允许一次定义多个记录。让我们扩展这个示例，以说明这是干嘛的。
 
-The definition of an add instruction is very simplistic. In reality, a CPU often has several add instructions. A common variant is that one instruction has two register operands while another instruction has one register operand and an immediate operand, which is a small number. Assume that for the instruction having an immediate operand, the designer of the instruction set decided to mark them with i as a suffix. So, we end up with the add and addi instructions. Further, assume that the opcodes differ by 1. Many arithmetic and logical instructions follow this scheme; therefore, you want the definition to be as compact as possible.
+add指令的定义非常简单，一个CPU通常有几个add指令。一种常见的变体是一条指令有两个寄存器操作数，而另一条指令有一个寄存器操作数和一个直接操作数，这是一个小数字。假设对于具有直接操作数的指令，指令集的设计者决定用i作为后缀来标记它们。所以，以add和addi指令结束。此外，假设操作码相差1。许多算术和逻辑指令遵循这个方案，所以定义需要尽可能紧凑。
 
-The first challenge is that you need to manipulate values. There is a limited number of operators that you can use to modify a value. For example, to produce the sum of 1 and the value of the field opcode, you write:
+第一个挑战是需要操作值，可用于修改值的操作符数量有限。例如，要生成1和字段操作码的值的和，可以这样写:
 
 \begin{shell}
 !add(opcode, 1)
 \end{shell}
 
-Such an expression is best used as an argument for a class. Testing a field value and then changing it based on the found value is generally not possible because it requires dynamic statements that are not available. Always remember that all calculations are done while the records are constructed!
+这样的表达式最好用作类的参数。测试一个字段值，因为它需要不可用的动态语句，所以不可能根据找到的值更改。记住，所有的计算都是在构造记录时完成的!
 
-In a similar way, strings can be concatenated:
+类似地，字符串也可以连接起来:
 
 \begin{shell}
 !strconcat(mnemonic,"i")
 \end{shell}
 
-Because all operators begin with an exclamation mark (!), they are also called bang operators. You find a full list of bang operators in the Programmer’s Reference: \url{https://llvm.org/docs/TableGen/ProgRef.html#appendix-a-bang-operators}.
+因为所有操作符都以感叹号(!)开头，所以也称为bang操作符。您可以在开发者参考:\url{https://llvm.org/docs/TableGen/ProgRef.html#appendix-a-bang-operators}中找到bang操作符的完整列表。
 
-Now, you can define a multiclass. The Inst class serves again as the base:
+现在，可以定义一个多类。Inst类再次作为基类:
 
 \begin{shell}
 class Inst<string mnemonic, int opcode> {
@@ -164,58 +163,58 @@ class Inst<string mnemonic, int opcode> {
 }
 \end{shell}
 
-The definition of a multiclass is a bit more involved, so let’s do it in steps:
+多类的定义有点复杂，让我们分步骤来做:
 
 \begin{enumerate}
 \item
-The definition of a multiclass uses a similar syntax to classes. The new multiclass is named InstWithImm and has two parameters, mnemonic and opcode:
+多类的定义使用与类相似的语法。新的多类名为InstWithImm，有两个参数，助记符和操作码:
 
 \begin{shell}
 multiclass InstWithImm<string mnemonic, int opcode> {
 \end{shell}
 
 \item
-First, you define an instruction with two register operands. As in a normal record definition, you use the def keyword to define the record, and you use the Inst class to create the record content. You also need to define an empty name. We will explain later why this is necessary:
+首先，定义一条带有两个寄存器操作数的指令。与普通的记录定义一样，使用def关键字定义记录，并使用Inst类创建记录内容。还需要定义一个空名称，我们将在后面解释为什么这么做:
 
 \begin{shell}
     def "": Inst<mnemonic, opcode>;
 \end{shell}
 
 \item
-Next, you define an instruction with the immediate operand. You derive the values for the mnemonic and the opcode from the parameters of the multiclass, using bang operators. The record is named I:
+接下来，用直接操作数定义一条指令。可以使用bang操作符从多类的参数中派生助记符和操作码的值，记录命名为I:
 
 \begin{shell}
     def I: Inst<!strconcat(mnemonic,"i"), !add(opcode, 1)>;
 \end{shell}
 
 \item
-That is all; the class body can be closed, like so:
+这就是全部了，类主体已经完成了:
 
 \begin{shell}
 }
 \end{shell}
 \end{enumerate}
 
-To instantiate the records, you must use the defm keyword:
+要实例化记录，必须使用defm关键字:
 
 \begin{shell}
 defm ADD : InstWithImm<"add", 0xA0>;
 \end{shell}
 
-These statements result in the following:
+这些语句的结果如下所示:
 
 \begin{enumerate}
 \item
-The Inst<"add", 0xA0> record is instantiated. The name of the record is the concatenation of the name following the defm keyword and of the name following def inside the multiclass statement, which results in the name ADD.
+Inst<"add", 0xA0>记录实例化，记录的名称由multiclass语句中defm关键字后面的名称和def后面的名称拼接而成，因此名称为ADD。
 
 \item
-Generating metadata for type-based alias analysis: Here, you will attach additional metadata to LLVM IR, which helps LLVM to better optimize the code
+为基于类型的别名分析生成元数据:将向LLVM IR添加的元数据，这将帮助LLVM更好地优化代码
 
 \item
-The Inst<"addi", 0xA1> record is instantiated and, following the same scheme, is given the name ADDI.
+Inst<"addi", 0xA1>记录实例化，并按照相同的模式命名为ADDI。
 \end{enumerate}
 
-Let’s verify this claim with llvm-tblgen:
+让我们用llvm-tblgen验证这个声明:
 
 \begin{shell}
 $ llvm-tblgen –print-records inst.td
@@ -235,13 +234,13 @@ def ADDI { // Inst
 }
 \end{shell}
 
-Using a multiclass, it is very easy to generate multiple records at once. This feature is used very often!
+使用multiclass，可以很容易地一次生成多个记录。这个功能会经常使用!
 
-A record does not need to have a name. Anonymous records are perfectly fine. Omitting the name is all you need to do to define an anonymous record. The name of a record generated by a multiclass is made up of two names, and both names must be given to create a named record. If you omit the name after defm, then only anonymous records are created. Similarly, if the def inside the multiclass is not followed by a name, an anonymous record is created. This is the reason why the first definition in the multiclass example used the empty name "": without it, the record would be anonymous.
+记录不需要有名称，匿名记录完全没问题，省略名称是定义匿名记录所需要做的全部工作。由多类生成的记录的名称由两个名称组成，并且必须给出两个名称才能创建命名记录。若省略def后面的名称，则只创建匿名记录。类似地，若多类中的def后面没有名称，则会创建一个匿名记录。这就是为什么多类示例中的第一个定义使用空名称""的原因:没有它，记录是匿名的。
 
-\mySubsubsection{8.3.3.}{Simulating function calls}
+\mySubsubsection{8.3.3.}{模拟函数调用}
 
-In some cases, using a multiclass like in the previous example can lead to repetitions. Assume that the CPU also supports memory operands, in a way similar to immediate operands. You can support this by adding a new record definition to the multiclass:
+某些情况下，使用前面例子中的多分类可能会导致重复。假定CPU也支持内存操作数，类似于直接操作数。可以通过在多类中添加一个新的记录来定义:
 
 \begin{shell}
 multiclass InstWithOps<string mnemonic, int opcode> {
@@ -251,15 +250,15 @@ multiclass InstWithOps<string mnemonic, int opcode> {
 }
 \end{shell}
 
-This is perfectly fine. But now, imagine you do not have 3 but 16 records to define, and you need to do this multiple times. A typical scenario where such a situation can arise is when the CPU supports many vector types, and the vector instructions vary slightly based on the used type.
+这完全没问题，但假设要定义的记录不是3条，而是16条，并且需要多次这样做。出现这种情况的典型场景是，CPU支持许多向量类型，并且向量指令根据所使用的类型略有不同。
 
-Please note that all three lines with the def statement have the same structure. The variation is only in the suffix of the name and of the mnemonic, and the delta value is added to the opcode. In C, you could put the data into an array and implement a function that returns the data based on an index value. Then, you could create a loop over the data instead of manually repeating statements.
+请注意，带有def语句的所有三行都具有相同的结构。变化只存在于名称和助记符的后缀中，增量值会添加到操作码中。在C语言中，可以将数据放入一个数组中，并实现一个函数，该函数根据索引值返回数据。然后，可以在数据上创建一个循环，而不是手动重复书写语句。
 
-Amazingly, you can do something similar in the TableGen language! Here is how to transform the example:
+令人惊讶的是，可以在TableGen语言中做类似的事情!下面是如何转换示例:
 
 \begin{enumerate}
 \item
-To store the data, you define a class with all required fields. The class is called InstDesc, because it describes some properties of an instruction:
+要存储数据，需要定义一个包含所有必需字段的类。这个类称为InstDesc，它描述了指令的一些属性:
 
 \begin{shell}
 class InstDesc<string name, string suffix, int delta> {
@@ -270,7 +269,7 @@ class InstDesc<string name, string suffix, int delta> {
 \end{shell}
 
 \item
-Now, you can define records for each operand type. Note that it exactly captures the differences observed in the data:
+现在，可以为每个操作数类型定义记录。请注意，其准确地捕获了数据中观察到的差异:
 
 \begin{shell}
 def RegOp : InstDesc<"", "", 0>;
@@ -279,7 +278,7 @@ def MemOp : InstDesc"""","""", 2>;
 \end{shell}
 
 \item
-Imagine you have a loop enumerating the numbers 0, 1, and 2, and you want to select one of the previously defined records based on the index. How can you do this? The solution is to create a getDesc class that takes the index as a parameter. It has a single field, ret, that you can interpret as a return value. To assign the correct value to this field, the !cond operator is used:
+假设有一个枚举数字0、1和2的循环，并且希望根据索引选择先前定义的记录之一，需要怎么做呢?解决方案是创建一个以索引作为参数的getDesc类。它有一个字段ret，可以将其解释为返回值。要给这个字段赋正确的值，使用第二个操作符:
 
 \begin{shell}
 class getDesc<int n> {
@@ -289,10 +288,10 @@ class getDesc<int n> {
 }
 \end{shell}
 
-This operator works similarly to a switch/case statement in C.
+此操作符的工作方式类似于C中的switch/case语句。
 
 \item
-Now, you are ready to define the multiclass. The TableGen language has a loop statement, and it also allows us to define variables. But remember that there is no dynamic execution! As a consequence, the loop range is statically defined, and you can assign a value to a variable, but you cannot change that value later. However, this is enough to retrieve the data. Please note how the use of the getDesc class resembles a function call. But there is no function call! Instead, an anonymous record is created, and the values are taken from that record. Lastly, the past operator (\#) performs a string concatenation, similar to the !strconcat operator used earlier:
+现在，可以定义多类了。TableGen语言有一个循环语句，它允许我们定义变量，但没有动态执行!因此，循环范围是静态定义的，可以为变量赋值，但不能更改该值，但这也足以检索数据。请注意getDesc类的使用类似于函数调用，但是没有函数调用!相反，将创建一个匿名记录，并从该记录中获取值。最后，past操作符(\#)执行字符串连接，类似于前面使用的!strconcat操作符:
 
 \begin{shell}
 multiclass InstWithOps<string mnemonic, int opcode> {
@@ -307,18 +306,18 @@ multiclass InstWithOps<string mnemonic, int opcode> {
 \end{shell}
 
 \item
-Now, you use the multiclass as before to define records:
+现在，可以像以前一样使用multiclass来定义记录:
 
 \begin{shell}
 defm ADD : InstWithOps<"add", 0xA0>;
 \end{shell}
 \end{enumerate}
 
-Please run llvm-tblgen and examine the records. Besides the various ADD records, you will also see a couple of anonymous records generated by the use of the getDesc class.
+请运行llvm-tblgen查看记录。除了各种ADD记录之外，还将看到使用getDesc类生成的一些匿名记录。
 
-This technique is used in the instruction definition of several LLVM backends. With the knowledge you have acquired, you should have no problem understanding those files.
+在几个LLVM后端的指令定义中使用了这种技术。根据您所掌握的知识，理解这些文件应该没有问题。
 
-The foreach statement used the syntax 0-2 to denote the bounds of the range. This is called a range piece. An alternative syntax is to use three dots (0...3), which is useful if the numbers are negative. Lastly, you are not restricted to numerical ranges; you can also loop over a list of elements, which allows you to use strings or previously defined records. For example, you may like the use of the foreach statement, but you think that using the getDesc class is too complicated. In this case, looping over the InstDesc records is the solution:
+foreach语句使用语法0-2来表示范围的边界，这叫做值域。另一种语法是使用三个点(0…3)，这在数字为负数时很有用。最后，不局限于数值范围，还可以遍历元素列表，可以使用字符串或先前定义的记录。例如，可能喜欢使用foreach语句，但觉得使用getDesc类过于复杂。在这种情况下，循环InstDesc记录是解决方案:
 
 \begin{shell}
 multiclass InstWithOps<string mnemonic, int opcode> {
@@ -331,7 +330,7 @@ multiclass InstWithOps<string mnemonic, int opcode> {
 }
 \end{shell}
 
-So far, you only defined records in the TableGen language, using the most commonly used statements. In the next section, you’ll learn how to generate C++ source code from records defined in the TableGen language.
+目前，只使用最常用的语句在TableGen语言中定义了记录。在下一节中，将学习如何从TableGen语言中定义的记录生成C++源代码。
 
 
 
