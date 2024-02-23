@@ -1,9 +1,9 @@
 
-The clang static analyzer is a tool that performs additional checks on C, C++, and Objective C source code. The checks that are performed by the static analyzer are more thorough than the checks the compiler performs. They are also more costly in terms of time and required resources. The static analyzer has a set of checkers, which check for certain bugs.
+clang静态分析器是一个对C、C++和Objective C源代码执行额外检查的工具。静态分析器执行的检查比编译器执行的检查更彻底。在时间和所需资源方面，成本也更高。静态分析器有一组检查器，用于检查某些错误。
 
-The tool performs a symbolic interpretation of the source code, which looks at all code paths through an application and derives constraints on the values used in the application from it. Symbolic interpretation is a common technique that’s used in compilers, for example, to identify constant values. In the context of the static analyzer, the checkers are applied to the derived values.
+该工具执行源代码的符号解释，通过应用程序查看所有代码路径，并从中派生出应用程序中使用的值的约束。符号解释是编译器中常用的一种技术，例如：用于识别常数值。在静态分析器的上下文中，检查器应用于派生值。
 
-For example, if the divisor of a division is zero, then the static analyzer warns us about it. We can check this with the following example stored in the div.c file:
+例如，若除法的除数为零，则静态分析器就会发出警告。可以在div.c文件中存储下面的例子来进行检查:
 
 \begin{cpp}
 int divbyzero(int a, int b) { return a / b; }
@@ -11,9 +11,9 @@ int divbyzero(int a, int b) { return a / b; }
 int bug() { return divbyzero(5, 0); }
 \end{cpp}
 
-The static analyzer will warn about a division by 0 in this example. However, when compiling, the file, when compiled with the clang -Wall -c div.c command, will show no warning.
+在本例中，静态分析器将对除0发出警告。但在编译时，当使用clang -Wall -c div.c命令编译该文件时，将不会显示任何警告。
 
-There are two ways to invoke the static analyzer from the command line. The older tool is scan-build, which is included in LLVM and can be used for simple scenarios. The newer tool is CodeChecker, available at \url{https://github.com/Ericsson/codechecker/}. To check a single file, the scan-build tool is the easiest solution. You simply pass the compile command to the tool; everything else is done automatically:
+有两种方法可以从命令行调用静态分析器。旧的工具是scan-build，包含在LLVM中，可以用于简单的场景。新的工具是CodeChecker，可在\url{https://github.com/Ericsson/codechecker/}上获得。要检查单个文件，扫描构建工具是最简单的解决方案。只需将编译命令传递给工具，其他的工作都是会自动完成:
 
 \begin{shell}
 $ scan-build clang -c div.c
@@ -29,57 +29,57 @@ scan-build: Run 'scan-view /tmp/scan-build-2021-03-01-023401-8721-1'
 to examine bug reports.
 \end{shell}
 
-The output on the screen already tells you that a problem was found – that is, the core.DivideZero checker was triggered. However, that is not all. You will find a complete report in HTML in the mentioned subdirectory of the /tmp directory. You can then use the scan-view command to view the report or open the index.html file found in the subdirectory in your browser.
+屏幕上的输出已经说明发现了一个问题，触发DivideZero检查器。然而，在/tmp目录的上述子目录中，可以找到HTML格式的完整报告。然后，可以使用scan-view命令查看报告，或者打开在浏览器的子目录中找到的index.html文件。
 
-The first page of the report shows you a summary of the bugs that were found:
+报告的第一页展示了发现的漏洞摘要:
 
-\myGraphic{1.0}{content/part3/chapter10/images/3.png}{Figure 10.3 – Summary page}
+\myGraphic{0.7}{content/part3/chapter10/images/3.png}{图10.3 - 摘要页面}
 
-For each error that was found, the summary page shows the type of the error, the location in the source, and the path length after which the analyzer found the error. A link to a detailed report for the error is also provided.
+对于发现的每个错误，摘要页面显示了错误的类型、源中的位置，以及分析器发现错误之后的路径长度。还提供了指向该错误的详细报告的链接。
 
-The following screenshot shows the detailed report for the error:
+下面的截图显示了错误的详细报告:
 
-\myGraphic{0.7}{content/part3/chapter10/images/4.png}{Figure 10.4 – Detailed report}
+\myGraphic{0.7}{content/part3/chapter10/images/4.png}{图10.4 -详细报告}
 
-With this detailed report, you can verify the error by following the numbered bubbles. Our simple example shows how passing 0 as a parameter value leads to a division by zero error.
+有了这个详细的报告，就可以通过跟踪编号的气泡来验证错误。我们的简单示例展示了传递0作为参数值，是如何导致除零错误的。
 
-Thus, human verification is required. If the derived constraints are not precise enough for a certain checker, then false positives are possible – that is, an error is reported for perfectly fine code. Based on the report, you can use them to identify false positives.
+因此，需要人工验证。若派生的约束对于某个检查器来说不够精确，则可能出现误报——也就是说，对于完美的代码报告错误，可以使用它来识别误报。
 
-You are not limited to checkers that are provided with the tool – you can also add new checkers. The next section demonstrates how to do this.
+不仅限于该工具提供的检查程序——还可以添加新的检查程序。下一节将演示如何做到这一点。
 
-\mySubsubsection{10.5.1.}{Adding a new checker to the clang static analyzer}
+\mySubsubsection{10.5.1.}{向clang静态分析器添加一个新的检查器}
 
-Many C libraries provide functions that must be used in pairs. For example, the C standard library provides the malloc() and free() functions. The memory that’s allocated by malloc() function must be freed exactly one time by the free() function. Not calling the free() function, or calling it several times, is a programming error. There are many more instances of this coding pattern, and the static analyzer provides checkers for some of them.
+许多C库提供了必须成对使用的函数。例如，C标准库提供了malloc()和free()函数。由malloc()函数分配的内存必须由free()函数释放一次。不调用free()函数，或者多次调用是一个编程错误。这种编码模式还有很多实例，静态分析器为其中一些实例提供了检查器。
 
-The iconv library provides functions for converting text from one encoding into another – for example, from Latin-1 encoding into UTF-16 encoding. To perform the conversion, the implementation needs to allocate memory. To transparently manage the internal resources, the iconv library provides the iconv\_open() and iconv\_close() functions, which must be used in pairs, similar to the memory management functions. No checker is implemented for those functions, so let’s implement one.
+iconv库提供了将文本从一种编码转换为另一种编码的函数——例如，从Latin-1编码转换为UTF-16编码。要执行转换，实现需要分配内存。为了透明地管理内部资源，iconv库提供了iconv\_open()和iconv\_close()函数，它们必须成对使用，类似于内存管理函数。没有为这些函数实现检查器，让我们实现一个。
 
-To add a new checker to the clang static analyzer, you must create a new subclass of the Checker class. The static analyzer tries all possible paths through the code. The analyzer engine generates events at certain points – for example, before or after a function call. Moreover, your class must provide callbacks for these events if you need to handle them. The Checker class and the registrations for the events are provided in the clang/include/clang/StaticAnalyzer/Core/Checker.h header file.
+要向clang静态分析器添加一个新的检查器，必须创建一个新的checker类的子类。静态分析器通过代码尝试所有可能的路径。分析器引擎在某些点生成事件——例如，在函数调用之前或之后。此外，若需要处理这些事件，对应的类必须提供回调。Checker类和事件的注册在clang/include/clang/StaticAnalyzer/Core/Checker.h头文件中提供。
 
-Usually, a checker needs to track some symbols. However, the checker cannot manage the state because it does not know which code path the analyzer engine currently tries. Therefore, the tracked state must be registered with the engine, and can only be changed using a ProgramStateRef instance.
+通常，检查器需要跟踪一些符号。因为它不知道分析器引擎当前尝试的代码路径，所以检查器无法管理状态。因此，跟踪的状态必须向引擎注册，并且只能使用ProgramStateRef实例进行更改。
 
-To detect the errors, the checker needs to track the descriptor that’s returned from the iconv\_open() function. The analyzer engine returns a SymbolRef instance for the return value of the iconv\_open() function. We associate this symbol with a state to reflect if iconv\_close() was called or not. For the state, we create the IconvState class, which encapsulates a bool value.
+为了检测错误，检查器需要跟踪从iconv\_open()函数返回的描述符。分析器引擎为iconv\_open()函数的返回值返回一个SymbolRef实例。我们将这个符号与一个状态关联起来，以反映iconv\_close()是否调用。对于状态，我们创建了IconvState类，其封装了一个bool值。
 
-The new IconvChecker class needs to handle four types of events:
+新的IconvChecker类需要处理四种类型的事件:
 
 \begin{itemize}
 \item
-PostCall, which occurs after a function call. After the iconv\_open() function was called, we retrieved the symbol for the return value and remembered it as being in an “opened” state.
+PostCall，发生在函数调用之后。在调用iconv\_open()函数之后，检索返回值的符号，并记住其处于“打开”状态。
 
 \item
-PreCall, which occurs before a function call. Before the iconv\_close() function is called, we check if the symbol for the descriptor is in an “opened” state. If not, then the iconv\_close() function was already called for the descriptor, and we have detected a double call to the function.
+PreCall，发生在函数调用之前。在调用iconv\_close()函数之前，检查描述符的符号是否处于“打开”状态。若没有，则已经为描述符调用了iconv\_close()函数，并且我们已经检测到对该函数的两次调用。
 
 \item
-DeadSymbols, which occurs when unused symbols are cleaned up. We check if an unused symbol for a descriptor is still in an “opened” state. If it is, then we have detected a missing call to iconv\_close(), which is a resource leak.
+DeadSymbols，在清理未使用的符号时发生。我们检查描述符中未使用的符号是否仍处于“打开”状态。是的话，则检测到缺少对iconv\_close()的调用，这是一个资源泄漏。
 
 \item
-PointerEscape, which is called when the symbols can no longer be tracked by the analyzer. In this case, we remove the symbol from the state because we can no longer reason about whether the descriptor was closed or not.
+PointerEscape，当分析器无法再跟踪符号时调用该函数。这种情况下，因为我们不能再推断描述符是否已关闭，所以需要从状态中删除符号。
 \end{itemize}
 
-We can create a new directory to implement the new checker as a clang plugin, and add the implementations within the IconvChecker.cpp file:
+可以创建一个新目录来实现新的检查器作为clang插件，并在IconvChecker.cpp文件中添加实现:
 
 \begin{enumerate}
 \item
-For the implementation, we need to include several header files. The include file, BugType.h is required for emitting reports. The header file, Checker.h, provides the declaration of the Checker class and the callbacks for the events, which are declared in the CallEvent file Moreover, the CallDescription.h file helps with matching functions and methods. Finally, the CheckerContext.h file is required for declaring the CheckerContext class, which is the central class that provides access to the state of the analyzer:
+对于实现，需要包含几个头文件。发布报告需要包含文件BugType.h，头文件Checker.h提供了Checker类的声明和事件的回调，它们在CallEvent文件中声明。此外，CallDescription.h文件有助于匹配函数和方法。最后，需要使用CheckerContext.h文件来声明CheckerContext类，该类是提供对分析器状态访问的中心类:
 
 \begin{cpp}
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -92,7 +92,7 @@ For the implementation, we need to include several header files. The include fil
 \end{cpp}
 
 \item
-To avoid typing the namespace names, we can use the clang and ento namespaces:
+为了避免输入命名空间的名称，可以使用clang和ento命名空间:
 
 \begin{cpp}
 using namespace clang;
@@ -100,7 +100,7 @@ using namespace ento;
 \end{cpp}
 
 \item
-We associate a state with each symbol representing an iconv descriptor. The state can be open or closed, and we use a bool typed variable, with true value for the open state. The state value is encapsulated in the IconvState struct. This struct is used with a FoldingSet data structure, which is a hash set that filters duplicate entries. To be usable with this data structure implementation, the Profile() method is added here, which sets the unique bits of this struct. We put the struct into an anonymous namespace to avoid polluting the global namespace. Instead of exposing the bool value, the class provides the getOpened() and getClosed() factory methods and the isOpen() query method:
+我们将一个状态与代表图标描述符的每个符号关联起来。状态可以是打开的，也可以是关闭的，使用bool类型的变量，打开状态的值为true。状态值封装在IconvState结构体中，该结构体与FoldingSet数据结构一起使用，FoldingSet是一个过滤重复条目的哈希集。为了使用此数据结构实现，这里添加了Profile()方法，该方法设置该结构的唯一位。将结构体放入匿名命名空间中，以避免污染全局命名空间。这个类提供了getOpened()和getClosed()工厂方法以及isOpen()查询方法，而非对外暴露bool值:
 
 \begin{cpp}
 namespace {
@@ -132,7 +132,7 @@ public:
 \end{cpp}
 
 \item
-The IconvState struct represents the state of an iconv descriptor, which is represented by a symbol of the SymbolRef class. This is best done with a map, which has the symbol as the key and the state as the value. As explained earlier, the checker cannot hold the state. Instead, the state must be registered with the global program state, which is done with the REGISTER\_ MAP\_WITH\_PROGRAMSTATE macro. This macro introduces the IconvStateMap name, which we will use later to access the map:
+IconvState结构体表示iconv描述符的状态，其由SymbolRef类的符号表示。这最好使用映射来完成，符号作为键，将状态作为值。如前所述，检查器不能保持状态。相反，必须用全局程序状态注册状态，通过REGISTER\_MAP\_WITH\_PROGRAMSTATE宏完成。这个宏引入了IconvStateMap名称，稍后将使用它来访问映射:
 
 \begin{cpp}
 REGISTER_MAP_WITH_PROGRAMSTATE(IconvStateMap, SymbolRef,
@@ -140,7 +140,7 @@ REGISTER_MAP_WITH_PROGRAMSTATE(IconvStateMap, SymbolRef,
 \end{cpp}
 
 \item
-We also implement the IconvChecker class in an anonymous namespace. The requested PostCall, PreCall, DeadSymbols, and PointerEscape events are template parameters to the Checker base class:
+我们还在匿名命名空间中实现了IconvChecker类。请求的PostCall, PreCall, DeadSymbols和PointerEscape事件是Checker基类的模板参数:
 
 \begin{cpp}
 namespace {
@@ -151,14 +151,14 @@ namespace {
 \end{cpp}
 
 \item
-The IconvChecker class has fields of the CallDescription type, which are used to identify function calls to iconv\_open(), iconv(), and iconv\_close()in the program:
+IconvChecker类具有CallDescription类型的字段，用于识别程序中对iconv\_open()， iconv()和iconv\_close()的函数调用:
 
 \begin{cpp}
     CallDescription IconvOpenFn, IconvFn, IconvCloseFn;
 \end{cpp}
 
 \item
-The class also holds references to the detected bug types:
+该类还包含对检测到的错误类型的引用:
 
 \begin{cpp}
     std::unique_ptr<BugType> DoubleCloseBugType;
@@ -166,7 +166,7 @@ The class also holds references to the detected bug types:
 \end{cpp}
 
 \item
-Finally, the class has a couple of methods. Besides the constructor and the methods for the call events, we also need a method to emit a bug report:
+最后，这个类有几个方法。除了构造函数和调用事件的方法之外，还需要一个方法来生成错误报告:
 
 \begin{cpp}
     void report(ArrayRef<SymbolRef> Syms,
@@ -193,7 +193,7 @@ public:
 \end{cpp}
 
 \item
-The implementation of the constructor of the IconvChecker class initializes the CallDescription fields using the name of the functions, and creates the objects representing the bug types:
+IconvChecker类的构造函数的实现，使用函数的名称初始化CallDescription字段，并创建表示错误类型的对象:
 
 \begin{cpp}
 IconvChecker::IconvChecker()
@@ -208,7 +208,7 @@ IconvChecker::IconvChecker()
 \end{cpp}
 
 \item
-Now, we can implement the first call event method, checkPostCall(). This method is called after the analyzer has executed a function call. If the executed function is not a global C function and not named iconv\_open, then there is nothing to do:
+现在，可以实现第一个调用事件方法checkPostCall()。此方法在分析器执行函数调用后调用。若执行的函数不是一个全局C函数，也没有命名为iconv\_open，就没什么可做的了:
 
 \begin{cpp}
 void IconvChecker::checkPostCall(
@@ -220,7 +220,7 @@ void IconvChecker::checkPostCall(
 \end{cpp}
 
 \item
-Otherwise, we can try to get the return value of the function as a symbol. To store the symbol with the open state in the global program state, we need to get a ProgramStateRef instance from the CheckerContext instance. The state is immutable, so adding the symbol to the state results in a new state. Finally, the analyzer engine is informed about the new state with a call to the addTransition() method:
+否则，可以尝试以符号的形式获取函数的返回值。为了在全局程序状态中存储具有打开状态的符号，需要从CheckerContext实例中获取一个ProgramStateRef实例。状态是不可变的，因此将符号添加到状态会产生一个新状态。最后，分析器引擎通过调用addTransition()方法获知新状态:
 
 \begin{cpp}
     if (SymbolRef Handle =
@@ -234,7 +234,7 @@ Otherwise, we can try to get the return value of the function as a symbol. To st
 \end{cpp}
 
 \item
-Likewise, the checkPreCall() method is called before the analyzer executes a function. Only a global C function called iconv\_close is of interest to us:
+同样，在分析器执行函数之前调用checkPreCall()方法。只对一个名为iconv\_close的全局C函数感兴趣:
 
 \begin{cpp}
 void IconvChecker::checkPreCall(
@@ -248,7 +248,7 @@ void IconvChecker::checkPreCall(
 \end{cpp}
 
 \item
-If the symbol for the first argument of the function, which is the iconv descriptor, is known, then we can retrieve the state of the symbol from the program state:
+若函数的第一个参数的符号(即iconv描述符)是已知的，则可以从程序状态中检索该符号的状态:
 
 \begin{cpp}
     if (SymbolRef Handle =
@@ -259,7 +259,7 @@ If the symbol for the first argument of the function, which is the iconv descrip
 \end{cpp}
 
 \item
-If the state represents the closed state, then we have detected a double close error, and we can generate a bug report for it. The call to generateErrorNode() can return a nullptr value if an error report was already generated for this path, so we have to check for this situation:
+若状态表示关闭状态，则已经检测到双重关闭错误，并且可以生成错误报告。若已经为这个路径生成了错误报告，则调用generateErrorNode()返回一个nullptr值，所以必须检查这种情况:
 
 \begin{cpp}
             if (!St->isOpen()) {
@@ -275,7 +275,7 @@ If the state represents the closed state, then we have detected a double close e
 \end{cpp}
 
 \item
-Otherwise, we must set the state for the symbol to the “closed” state:
+否则，必须将符号的状态设置为“关闭”状态:
 
 \begin{cpp}
         State = State->set<IconvStateMap>(
@@ -286,7 +286,7 @@ Otherwise, we must set the state for the symbol to the “closed” state:
 \end{cpp}
 
 \item
-The checkDeadSymbols() method is called to clean up unused symbols. We loop over all symbols we track and ask the SymbolReaper instance if the current symbol is dead:
+调用checkDeadSymbols()方法来清理未使用的符号。我们循环遍历跟踪的所有符号，并询问SymbolReaper实例当前符号是否已无效:
 
 \begin{cpp}
 void IconvChecker::checkDeadSymbols(
@@ -298,7 +298,7 @@ void IconvChecker::checkDeadSymbols(
 \end{cpp}
 
 \item
-If the symbol is dead, then we need to check the state. If the state is still open, then this is a potential resource leak. There is one exception: iconv\_open() returns -1 in case of an error. If the analyzer is in a code path that handles this error, then it is wrong to assume a resource leak because the function call failed. We try to get the value of the symbol from the ConstraintManager instance, and we do not consider the symbol as a resource leak if this value is -1. We add a leaked symbol to a SmallVector instance to generate the error report later. Finally, we remove the dead symbol from the program state:
+若符号已无效，则需要检查状态。若状态仍然是打开的，这是潜在的资源泄漏。有一个例外:iconv\_open()在出现错误时返回-1。若分析器位于处理此错误的代码路径中，则由于函数调用失败而假定资源泄漏是错误的。可以尝试从ConstraintManager实例中获取符号的值，若该值为-1，则不认为符号是资源泄漏。可向SmallVector实例添加一个泄漏符号，以便稍后生成错误报告。最后，从程序状态中移除无效符号:
 
 \begin{cpp}
             if (St.isOpen()) {
@@ -316,7 +316,7 @@ If the symbol is dead, then we need to check the state. If the state is still op
 \end{cpp}
 
 \item
-After the loop, we call the generateNonFatalErrorNode() method. This method transitions to the new program state and returns an error node if there is not already an error node for this path. The LeakedSyms container holds the (possibly empty) list of leaked symbols, and we call the report() method to generate an error report:
+循环之后，调用generateNonFatalErrorNode()，此方法转换到新的程序状态，若此路径还没有错误节点，则返回一个错误节点。LeakedSyms容器保存了泄漏符号的列表(可能为空)，调用report()方法来生成错误报告:
 
 \begin{cpp}
         if (ExplodedNode *N =
@@ -328,7 +328,7 @@ After the loop, we call the generateNonFatalErrorNode() method. This method tran
 \end{cpp}
 
 \item
-The checkPointerEscape() function is called when the analyzer detects a function call for which the parameters cannot be tracked. In such a case, we must assume that we do not know if the iconv descriptor will be closed inside the function or not. The exceptions are a call to iconv(), which does the conversion and is known to not call the iconv\_close() function, and the iconv\_close() function itself, which we handle in the checkPreCall() method. We also do not change the state if the call is inside a system header file, and if we know that the arguments do not escape in the called function. In all other cases, we remove the symbol from the state:
+当分析器检测到无法跟踪参数的函数调用时，调用checkPointerEscape()函数，必须假设我们不知道iconv描述符是否会在函数内部关闭。异常是对iconv()的调用，执行转换并且已知不调用iconv\_close()函数，以及iconv\_close()函数本身，会在checkPreCall()方法中处理。若调用是在系统头文件中，并且知道在调用的函数中参数不会转义，则不会改变状态。在所有其他情况下，都会从状态中删除符号:
 
 \begin{cpp}
 ProgramStateRef IconvChecker::checkPointerEscape(
@@ -351,7 +351,7 @@ ProgramStateRef IconvChecker::checkPointerEscape(
 \end{cpp}
 
 \item
-The report() method generates an error report. The important parameters of the method are an array of symbols, the type of the bug, and a bug description. Inside the method, a bug report is created for each symbol, and the symbol is marked as the interesting one for the bug. If a source range is provided as a parameter, then this is also added to the report. Finally, the report is emitted:
+report()方法生成一个错误报告。该方法的重要参数是符号数组、错误类型和错误描述。在该方法内部，为每个符号创建一个错误报告，并将该符号标记为对该错误感兴趣的符号。若源范围作为参数提供，则会添加到报告中。最后，生成报告:
 
 \begin{cpp}
 void IconvChecker::report(
@@ -371,7 +371,7 @@ void IconvChecker::report(
 \end{cpp}
 
 \item
-Now, the new checker needs to be registered at a CheckerRegistry instance. When our plugin is loaded, the clang\_registerCheckers() function is used, in which we perform the registration. Each checker has a name and belongs to a package. We call the IconvChecker checker and put it into the unix packager because the iconv library is a standard POSIX interface. This is the first parameter of the addChecker() method. The second parameter is a brief documentation of the functionality, and the third parameter can be a URI to a document that provides more information about the checker:
+现在，需要在CheckerRegistry实例中注册新的检查器。当插件加载时，使用clang\_registerCheckers()，我们在其中执行注册。每个检查器都有一个名称，并且属于一个包。将IconvChecker称为检查器并将其放入unix打包程序中，因为iconv库是一个标准的POSIX接口。这是addChecker()方法的第一个参数。第二个参数是功能的简要文档，第三个参数可以是一个文档的URI，该文档提供有关检查器的更多信息:
 
 \begin{cpp}
 extern "C" void
@@ -383,17 +383,17 @@ clang_registerCheckers(CheckerRegistry &registry) {
 \end{cpp}
 
 \item
-Finally, we need to declare the version of the static analyzer API we are using, which enables the system to determine if the plugin is compatible:
+最后，需要声明我们正在使用的静态分析器API的版本，它使系统能够确定插件是否兼容:
 
 \begin{cpp}
 extern "C" const char clang_analyzerAPIVersionString[] =
     CLANG_ANALYZER_API_VERSION_STRING;
 \end{cpp}
 
-This finishes the implementation of the new checker. To build the plugin, we also need to create a build description in the CMakeLists.txt file which lives in the same directory as IconvChecker.cpp:
+这就完成了新检查器的实现。为了构建插件，还需要在CMakeLists.txt文件中创建一个构建描述，该文件与IconvChecker.cpp位于同一目录下:
 
 \item
-Begin by defining the required CMake version and the name of the project:
+首先定义所需的CMake版本和项目名称:
 
 \begin{cmake}
 cmake_minimum_required(VERSION 3.20.0)
@@ -401,14 +401,14 @@ project(iconvchecker)
 \end{cmake}
 
 \item
-Next, include the LLVM files. If CMake can’t find the files automatically, then you have to set the LLVM\_DIR variable so that it points to the LLVM directory containing the CMake files:
+接下来，包括LLVM文件。若CMake不能自动找到文件，则必须设置LLVM\_DIR变量，使它指向包含CMake文件的LLVM目录:
 
 \begin{cmake}
 find_package(LLVM REQUIRED CONFIG)
 \end{cmake}
 
 \item
-Append the LLVM directory with the CMake files to the search path, and include the required modules from LLVM:
+将包含CMake文件的LLVM目录附加到搜索路径中，并从LLVM中包含所需的模块:
 
 \begin{cmake}
 list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR})
@@ -417,14 +417,14 @@ include(HandleLLVMOptions)
 \end{cmake}
 
 \item
-Then, load the CMake definitions for clang. If CMake can’t find the files automatically, then you have to set the Clang\_DIR variable so that it points to the clang directory containing the CMake files:
+然后，为clang加载CMake定义。若CMake不能自动找到文件，必须指定Clang\_DIR变量，使其指向包含CMake文件的Clang目录:
 
 \begin{cmake}
 find_package(Clang REQUIRED)
 \end{cmake}
 
 \item
-Next, append the Clang directory with the CMake files to the search path, and include the required modules from Clang:
+接下来，将包含CMake文件的Clang目录附加到搜索路径中，并从Clang中包含所需的模块:
 
 \begin{cmake}
 list(APPEND CMAKE_MODULE_PATH ${Clang_DIR})
@@ -432,7 +432,7 @@ include(AddClang)
 \end{cmake}
 
 \item
-Then, define where the header files and the library files are located, and which definitions to use:
+然后，定义头文件和库文件的位置，以及使用哪些定义:
 
 \begin{cmake}
 include_directories("${LLVM_INCLUDE_DIR}"
@@ -442,7 +442,7 @@ link_directories("${LLVM_LIBRARY_DIR}")
 \end{cmake}
 
 \item
-The previous definitions set up the build environment. Insert the following command, which defines the name of your plugin, the source file(s) of the plugin, and that it is a clang plugin:
+前面的定义设置了构建环境。插入以下命令，定义了你的插件的名称，插件的源文件，并且它是一个clang插件:
 
 \begin{cmake}
 add_llvm_library(IconvChecker MODULE IconvChecker.cpp
@@ -450,7 +450,7 @@ add_llvm_library(IconvChecker MODULE IconvChecker.cpp
 \end{cmake}
 
 \item
-On Windows, the plugin support is different from Unix, and the required LLVM and clang libraries must be linked in. The following code ensures this:
+Windows上，插件支持与Unix不同，必需的LLVM和clang库必须链接进来。下面的代码确保了这一点:
 
 \begin{cmake}
 if(WIN32 OR CYGWIN)
@@ -464,7 +464,7 @@ endif()
 \end{cmake}
 \end{enumerate}
 
-Now, we can configure and build the plugin, assuming that the CMAKE\_GENERATOR and CMAKE\_BUILD\_TYPE environment variables are set:
+现在，可以配置和构建插件，假设设置了CMAKE\_GENERATOR和CMAKE\_BUILD\_TYPE环境变量:
 
 \begin{shell}
 $ cmake -DLLVM_DIR=~/LLVM/llvm-17/lib/cmake/llvm \
@@ -473,7 +473,7 @@ $ cmake -DLLVM_DIR=~/LLVM/llvm-17/lib/cmake/llvm \
 $ cmake --build build
 \end{shell}
 
-You can test the new checker with the following source saved in the conv.c file, which has two calls to the iconv\_close() function:
+可以使用保存在conf.c文件中的以下源代码来测试新的检查器，该文件对iconv\_close()函数有两次调用:
 
 \begin{cpp}
 #include <iconv.h>
@@ -485,7 +485,7 @@ void doconv() {
 }
 \end{cpp}
 
-To use the plugin with the scan-build script, you need to specify the path to the plugin via the -load-plugin option. A run with the conv.c file looks like:
+要将插件与扫描-构建脚本一起使用，需要通过-load-plugin选项指定插件的路径。使用conf.c文件运行如下:
 
 \begin{shell}
 $ scan-build -load-plugin build/IconvChecker.so clang-17 -c conv.c
@@ -501,9 +501,9 @@ scan-build: 1 bug found.
 scan-build: Run 'scan-view /tmp/scan-build-2023-08-08-114154-12451-1' to examine bug reports.
 \end{shell}
 
-With that, you’ve learned how to extend the clang static analyzer with your own checker. You can use this knowledge to either create new general checkers and contribute them to the community or create checkers specifically built for your needs, to raise the quality of your product.
+至此，已经了解了如何使用自己的检查器扩展clang静态分析器，可以使用这些知识来创建新的通用检查器并将其贡献给社区，或者创建需求专用的构建的检查器，以提高产品的质量。
 
-The static analyzer is built by leveraging the clang infrastructure. The next section introduces you to how can build your own plugin extending clang.
+静态分析器是通过利用clang基础设施构建的。下一节将介绍如何构建自己的clang插件扩展。
 
 
 

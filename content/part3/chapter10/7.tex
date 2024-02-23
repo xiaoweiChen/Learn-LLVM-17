@@ -1,11 +1,11 @@
 
-In this chapter, you learned how to apply various sanitizers. You detected pointer errors with the address sanitizer, uninitialized memory access with the memory sanitizer, and performed data races with the thread sanitizer. Application errors are often triggered by malformed input, and you implemented fuzz testing to test your application with random data.
+本章中，了解了如何使用各种消毒器。使用地址消毒器检测指针错误，使用内存消毒器检测未初始化的内存访问，并使用线程消毒器执行数据争用。应用程序错误通常是由格式不正确的输入触发的，所以实现了模糊测试，用随机数据测试应用程序。
 
-You also instrumented your application with XRay to identify the performance bottlenecks, and you also learned about the various ways you can visualize the data. This chapter also taught you how to utilize the clang static analyzer for identifying potential errors by interpreting the source code, and how to create your own clang plugin.
+还使用XRay对应用程序进行了检测，以确定性能瓶颈，还了解了可视化数据的各种方法。本章还学习了如何利用clang静态分析器，通过解释源代码来识别潜在的错误，以及如何创建自己的clang插件。
 
-These skills will help you raise the quality of the applications you build as it is certainly good to find runtime errors before your application users complain about them. Applying the knowledge you’ve gained in this chapter, you can not only find a wide range of common errors, but you can also extend clang with new functionality.
+这些技能将提高构建的应用程序的质量，可在应用程序用户抱怨运行时错误前发现它们。运用本章的知识，不仅可以发现大量的常见错误，还可以用新的功能扩展clang。
 
-In the next chapter, you will learn how to add a new backend to LLVM.
+在下一章中，你将学习如何为LLVM添加一个新后端。
 
 
 
