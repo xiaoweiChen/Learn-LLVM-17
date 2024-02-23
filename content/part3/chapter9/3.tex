@@ -1,15 +1,14 @@
 
 
 
-Running LLVM IR directly is the first idea that comes to mind when thinking about a JIT compiler.
-This is what the lli tool, the LLVM interpreter, and the dynamic compiler do. We will explore the lli tool in the next section.
+在考虑JIT编译器时，首先想到的是直接运行LLVM IR。这就是lli工具、LLVM解释器和动态编译器所做的工作。我们将在下一节中探讨lli工具。
 
 
-\mySubsubsection{9.3.1.}{Exploring the lli tool}
+\mySubsubsection{9.3.1.}{探索lli工具}
 
-Let’s try the lli tool with a very simple example. The following LLVM IR can be stored as a file called hello.ll, which is the equivalent of a C hello world application. This file declares a prototype for the printf() function from the C library. The hellostr constant contains the message to be printed. Inside the main() function, a call to the printf() function is generated, and this function contains a hellostr message that will be printed. The application always returns 0.
+让我们用一个非常简单的例子来试试lli工具。下面的LLVM IR可以存储为一个名为hello.ll的文件，相当于C语言中的hello world应用程序。该文件声明了来自C库的printf()函数的原型，hellostr常量包含要打印的消息。在main()函数内部，生成对printf()函数的调用，该函数包含将打印的hellostr消息。应用程序总是返回0。
 
-The complete source code is as follows:
+完整的代码如下所示:
 
 \begin{shell}
 declare i32 @printf(ptr, ...)
@@ -23,16 +22,16 @@ define dso_local i32 @main(i32 %argc, ptr %argv) {
 }
 \end{shell}
 
-This LLVM IR file is generic enough that it is valid for all platforms. We can directly execute the IR using the lli tool with the following command:
+这个LLVM IR文件是通用的，对所有平台都有效。我们可以使用cli工具直接执行IR，命令如下:
 
 \begin{shell}
 $ lli hello.ll
 Hello world
 \end{shell}
 
-The interesting point here is how the printf() function is found. The IR code is compiled to machine code, and a lookup for the printf symbol is triggered. This symbol is not found in the IR, so the current process is searched for it. The lli tool dynamically links against the C library, and the symbol is found there.
+这里有趣的一点是如何找到printf()函数。IR代码被编译为机器码，并触发printf符号的查找。这个符号在IR中找不到，所以在当前进程中搜索它。lli工具动态链接到C库，在那里可以找到该符号。
 
-Of course, the lli tool does not link against the libraries you created. To enable the use of such functions, the lli tool supports the loading of shared libraries and objects. The following C source just prints a friendly message:
+当然，lli工具不会链接到创建的库。为了使用这些函数，lli工具支持加载动态库和对象。下面的C源代码只是打印的友好消息:
 
 \begin{shell}
 #include <stdio.h>
@@ -42,21 +41,21 @@ void greetings() {
 }
 \end{shell}
 
-Stored in greetings.c, we use this to explore loading objects with lli. The following command will compile this source into a shared library. The –fPIC option instructs clang to generate position-independent code, which is required for shared libraries. Moreover, the compiler creates a greetings.so shared library with –shared:
+存储在greetings.c中，使用它来探索用lli加载对象。下面的命令将把这个源代码编译成一个动态库，–fPIC选项指示clang生成与位置无关的代码，这是动态库所必需的。此外，编译器还会用-shared创建一个greetings.so动态库:
 
 \begin{shell}
 $ clang greetings.c -fPIC -shared -o greetings.so
 \end{shell}
 
-We also compile the file into the greetings.o object file:
+我们还将该文件编译为greetings.o对象文件:
 
 \begin{shell}
 $ clang greetings.c -c -o greetings.o
 \end{shell}
 
-We now have two files, the greetings.so shared library and the greetings.o object file, which we will load into the lli tool.
+我们现在有两个文件，greetings.so动态库和greetings.o对象文件，加载到lli工具中。
 
-We also need an LLVM IR file that calls the greetings() function. For this, create a main.ll file that contains a single call to the function:
+我们还需要一个调用greetings()函数的LLVM IR文件。为此，创建一个main.ll文件，包含单个函数调用:
 
 \begin{shell}
 declare void @greetings(...)
@@ -67,7 +66,7 @@ define dso_local i32 @main(i32 %argc, i8** %argv) {
 }
 \end{shell}
 
-Notice that on executing, the previous IR crashes, as lli cannot locate the greetings symbol:
+注意，在执行时，前面的IR崩溃了，因为lli无法定位greetings符号:
 
 \begin{shell}
 $ lli main.ll
@@ -75,25 +74,25 @@ JIT session error: Symbols not found: [ _greetings ]
 lli: Failed to materialize symbols: { (main, { _main }) }
 \end{shell}
 
-The greetings() function is defined in an external file, and to fix the crash, we have to tell the lli tool which additional file needs to be loaded. In order to use the shared library, you must use the –load option, which takes the path to the shared library as an argument:
+greetings()函数是在一个外部文件中定义的，为了修复崩溃，必须告诉lli工具需要加载哪个文件。为了使用动态库，必须使用-load选项，该选项将动态库的路径作为参数:
 
 \begin{shell}
 $ lli –load ./greetings.so main.ll
 Hi!
 \end{shell}
 
-It is important to specify the path to the shared library if the directory containing the shared library is not in the search path for the dynamic loader. If omitted, then the library will not be found.
+若包含动态库的目录不在动态加载器的搜索路径中，则指定动态库的路径非常重要。若省略，则将找不到库。
 
-Alternatively, we can instruct lli to load the object file with –extra-object:
+或者，可以用-extra-object命令lli加载目标文件:
 
 \begin{shell}
 $ lli –extra-object greetings.o main.ll
 Hi!
 \end{shell}
 
-Other supported options are –extra-archive, which loads an archive, and –extramodule, which loads another bitcode file. Both options require the path to the file as an argument.
+其他支持的选项有-extra-archive(加载存档文件)和-extramodule(加载另一个位码文件)。这两个选项都需要文件的路径作为参数。
 
-You now know how you can use the lli tool to directly execute LLVM IR. In the next section, we will implement our own JIT tool.
+现在，了解了如何使用lli工具直接执行LLVM IR。在下一节中，我们将实现自己的JIT工具。
 
 
 

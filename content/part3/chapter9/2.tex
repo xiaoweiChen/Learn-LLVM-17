@@ -3,26 +3,24 @@
 
 \begin{itemize}
 \item
-Implementation of a virtual machine: A programming language can be translated to byte code with an AOT compiler. At runtime, a JIT compiler is used to compile the byte code to machine code. The advantage of this approach is that the byte code is hardware-independent, and thanks to the JIT compiler, there is no performance penalty compared to an AOT compiler. Java and C\# use this model today, but this is not a new idea: the USCD Pascal compiler from 1977 already used a similar approach.
+虚拟机的实现:编程语言可以用AOT编译器翻译成字节码。在运行时，使用JIT编译器将字节码编译为机器码。这种方法的优点是字节码与硬件无关，并且由于JIT编译器，与AOT编译器相比没有性能损失。Java和C\#现在使用这个模型，但这并不是一个新想法:1977年的USCD Pascal编译器已经使用了类似的方法。
 
 \item
-Expression evaluation: A spreadsheet application can compile often-executed expressions with a JIT compiler. For example, this can speed up financial simulations. The lldb LLVM debugger uses this approach to evaluate source expressions at debug time.
+表达式求值:电子表格应用程序可以使用JIT编译器编译经常执行的表达式。例如，这可以加快金融模拟。lldb LLVM调试器使用这种方法在调试时计算表达式。
 
 \item
-Database queries: A database creates an execution plan from a database query. The execution plan describes operations on tables and columns, which leads to a query answer when executed. A JIT compiler can be used to translate the execution plan into machine code, which speeds up the execution of the query.
+数据库查询:数据库从数据库查询创建一个执行计划。执行计划描述了对表和列的操作，在执行时产生查询答案。可以使用JIT编译器将执行计划转换为机器码，从而加快查询的执行速度。
 \end{itemize}
 
-The static compilation model of LLVM is not as far away from the JIT model as one may think. The llc LLVM static compiler compiles LLVM IR into machine code and saves the result as an object file on disk. If the object file is not stored on disk but in memory, would the code be executable? Not directly, as references to global functions and global data use relocations instead of absolute addresses. Conceptually, a relocation describes how to calculate the address – for example, as an offset to a known address. If we resolve relocations into addresses, as the linker and the dynamic loader do, then we can execute the object code. Running the static compiler to compile IR code into an object file in memory, performing a link step on the in-memory object file, and running the code gives us a JIT compiler.
+LLVM的静态编译模型与JIT模型的距离并不像人们想象的那么遥远。LLVM静态编译器将LLVM IR编译成机器码，并将结果保存为磁盘上的目标文件。若目标文件不是存储在磁盘上，而是存储在内存中，代码是可执行的吗?不是直接的，因为对全局函数和全局数据的引用使用重定位而不是绝对地址。从概念上讲，重定位描述了如何计算地址——例如，作为已知地址的偏移量。若我们像链接器和动态加载器那样将重定位解析为地址，那么就可以执行目标代码了。运行静态编译器将IR代码编译成内存中的对象文件，在内存中的对象文件上执行链接步骤，然后运行代码，就得到了一个JIT编译器。
 
-The JIT implementation in the LLVM core libraries is based on this idea.
-During the development history of LLVM, there were several JIT implementations, with different feature sets. The latest JIT API is the On-Request Compilation (ORC) engine. In case you were curious about the acronym, it was the lead developer’s intention to invent yet another acronym based on Tolkien’s universe, after Executable and Linking Format (ELF) and Debugging Standard (DWARF) were already present.
+LLVM核心库中的JIT实现就是基于这个思想。在LLVM的开发历史中，有几个JIT实现，具有不同的功能集。最新的JIT API是按请求编译(ORC)引擎。如果你对这个缩略词感到好奇，那么在可执行和链接格式(ELF)和调试标准(DWARF)出现之后，首席开发人员打算根据托尔金的世界创造另一个缩略词。
 
-The ORC engine builds on and extends the idea of using the static compiler and a dynamic linker on the in-memory object file. The implementation uses a layered approach. The two basic levels are the compile layer and the link layer. On top of this sits a layer providing support for lazy compilation. A transformation layer can be stacked on top or below the lazy compilation layer, allowing the developer to add arbitrary transformations or simply to be notified of certain events. Moreover, this layered approach has the advantage that the JIT engine is customizable for diverse requirements. For example, a high-performance virtual machine may choose to compile everything upfront and make no use of the lazy compilation layer. On the other hand, other virtual machines will emphasize startup time and responsiveness to the user and will achieve this with the help of the lazy compilation layer.
+ORC引擎基于并扩展了在内存中，对象文件上使用静态编译器和动态链接器的思想。实现使用分层的方法。两个基本层次是编译层和链接层。在此之上有一层提供延迟编译支持。转换层可以堆叠在惰性编译层之上或之下，允许开发人员添加任意的转换或简单地收到某些事件的通知。此外，这种分层的方法还有一个优点，即JIT引擎可以针对不同的需求进行定制。例如，高性能的虚拟机可能选择提前编译所有内容，而不使用延迟编译层。另一方面，其他虚拟机将强调启动时间和对用户的响应，并将在惰性编译层的帮助下实现这一点。
 
-The older MCJIT engine is still available, and its API is derived from an even older, already-removed JIT engine. Over time, this API gradually became bloated, and it lacks the flexibility of the ORC API.
+旧的MCJIT引擎仍然可用，它的API来自一个更旧的、已经删除的JIT引擎。随着时间的推移，这个API逐渐变得臃肿，缺乏ORC API的灵活性。
 
-The goal is to remove this implementation, as the ORC engine now provides all the functionality of the MCJIT engine, and new developments should use the ORC API.
-In the next section, we look at lli, the LLVM interpreter, and the dynamic compiler, before we dive into implementing a JIT compiler.
+我们的目标是删除这个实现，因为ORC引擎现在提供了MCJIT引擎的所有功能，新的开发应该使用ORC API。在下一节中，在深入实现JIT编译器之前，我们将研究LLVM解释器和动态编译器。
 
 
 

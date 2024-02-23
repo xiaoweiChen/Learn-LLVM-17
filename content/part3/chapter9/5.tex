@@ -1,51 +1,51 @@
 
-Using the layered approach of ORC, it is very easy to build a JIT compiler customized for the requirements. There is no one-size-fits-all JIT compiler, and the first section of this chapter gave some examples. Let’s have a look at how to set up a JIT compiler from scratch.
+使用ORC的分层方法，很容易构建针对需求定制的JIT编译器。没有放之四海而皆准的JIT编译器，本章的第一节给出了一些示例。让我们看一下如何从头开始设置JIT编译器。
 
-The ORC API uses layers that are stacked together. The lowest level is the object-linking layer, represented by the llvm::orc::RTDyldObjectLinkingLayer class. It is responsible for linking in-memory objects and turning them into executable code. The memory required for this task is managed by an instance of the MemoryManager interface. There is a default implementation, but we can also use a custom version if we need.
+ORC API使用堆叠在一起的层。最低层是对象链接层，由llvm::orc::RTDyldObjectLinkingLayer类表示，负责链接内存中的对象并将其转换为可执行代码。此任务所需的内存由MemoryManager接口的实例管理。有一个默认的实现，但若需要，也可以使用自定义版本。
 
-Above the object-linking layer is the compile layer, which is responsible for creating an in-memory object file. The llvm::orc::IRCompileLayer class takes an IR module as input and compiles it to an object file. The IRCompileLayer class is a subclass of the IRLayer class, which is a generic class for layer implementations accepting LLVM IR.
+在对象链接层之上是编译层，负责创建内存中的对象文件。llvm::orc::IRCompileLayer类接受IR模块作为输入，并将其编译为对象文件。IRCompileLayer类是IRLayer类的子类，IRLayer类是接受LLVM IR的层实现的通用类。
 
-Both of these layers already form the core of a JIT compiler: they add an LLVM IR module as input, which is compiled and linked in memory. To add extra functionality, we can incorporate more layers on top of both layers.
+这两层已经构成了JIT编译器的核心:添加了一个LLVM IR模块作为输入，该模块在内存中进行编译和链接。为了增加额外的功能，可以在两层之上合并更多的层。
 
-For example, the CompileOnDemandLayer class splits a module so that only the requested functions are compiled. This can be used to implement lazy compilation. Moreover, the CompileOnDemandLayer class is also a subclass of the IRLayer class. In a very generic way, the IRTransformLayer class, also a subclass of the IRLayer class, allows us to apply a transformation to the module.
+例如，CompileOnDemandLayer类拆分一个模块，以便只编译请求的函数，这可以用来实现延迟编译。此外，CompileOnDemandLayer类也是IRLayer类的一个子类。IRTransformLayer类，也是IRLayer类的一个子类，以一种非常通用的方式，允许对模块应用转换。
 
-Another important class is the ExecutionSession class. This class represents a running JIT program. Essentially, this means that the class manages JITDylib symbol tables, provides lookup functionality for symbols, and keeps track of used resource managers.
+另一个重要的类是ExecutionSession类，这个类表示一个正在运行的JIT程序。本质上，这个类管理JITDylib符号表，提供符号查找功能，并跟踪使用的资源管理器。
 
-The generic recipe for a JIT compiler is as follows:
+JIT编译器的通用方式:
 
 \begin{enumerate}
 \item
-Initialize an instance of the ExecutionSession class.
+初始化ExecutionSession类的实例。
 
 \item
-Initialize the layer, at least consisting of an RTDyldObjectLinkingLayer class and an IRCompileLayer class.
+初始化层，至少由RTDyldObjectLinkingLayer类和IRCompileLayer类组成。
 
 \item
-Create the first JITDylib symbol table, usually with main or a similar name.
+创建第一个JITDylib符号表，通常使用main或类似的名称。
 \end{enumerate}
 
-The general usage of the JIT compiler is also very straightforward:
+JIT编译器的一般用法也非常简单:
 
 \begin{enumerate}
 \item
-Add an IR module to the symbol table.
+在符号表中添加一个IR模块。
 
 \item
-Look up a symbol, triggering the compilation of the associated function, and possibly the whole module.
+查找一个符号，触发相关函数的编译，也可能触发整个模块的编译。
 
 \item
-Execute the function.
+执行函数。
 \end{enumerate}
 
-In the next subsection, we implement a JIT compiler class following the generic recipe.
+在下一小节中，我们将按照通用方式实现JIT编译器类。
 
-\mySubsubsection{9.5.1.}{Creating a JIT compiler class}
+\mySubsubsection{9.5.1.}{创建JIT编译器类}
 
-To keep the implementation of the JIT compiler class simple, everything is placed in JIT.h, within a source directory we can create called jit. However, the initialization of the class is a bit more complex compared to using LLJIT. Due to handling possible errors, we need a factory method to create some objects upfront before we can call the constructor. The steps to create the class are as follows:
+为了保持JIT编译器类的实现简单，所有内容都放在JIT.h中，可以放在在我们可以创建的名为JIT的源目录中。然而，与使用LLJIT相比，类的初始化要复杂一些。由于要处理可能的错误，在调用构造函数之前，需要一个工厂方法来预先创建一些对象。创建类的步骤如下:
 
 \begin{enumerate}
 \item
-We begin with guarding the header file against multiple inclusion with the JIT\_H preprocessor definition:
+首先使用JIT\_H预处理器定义来保护头文件不被多次包含:
 
 \begin{cpp}
 #ifndef JIT_H
@@ -53,7 +53,7 @@ We begin with guarding the header file against multiple inclusion with the JIT\_
 \end{cpp}
 
 \item
-Firstly, a number of include files are required. Most of them provide a class with the same name as the header file. The Core.h header provides a couple of basic classes, including the ExecutionSession class. Additionally, the ExecutionUtils.h header provides the DynamicLibrarySearchGenerator class to search libraries for symbols. Furthermore, the CompileUtils.h header provides the ConcurrentIRCompiler class:
+首先，需要一些包含文件，其中的大多数都提供了一个与头文件同名的类。Core.h头文件提供了几个基本类，包括ExecutionSession类。此外，ExecutionUtils.h头文件提供了DynamicLibrarySearchGenerator类来搜索库中的符号。此外，CompileUtils.h头文件提供了ConcurrentIRCompiler类:
 
 \begin{cpp}
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -73,14 +73,14 @@ Firstly, a number of include files are required. Most of them provide a class wi
 \end{cpp}
 
 \item
-Declare a new class. Our new class will be called JIT:
+声明一个新类。我们的新类称为JIT:
 
 \begin{cpp}
 class JIT {
 \end{cpp}
 
 \item
-The private data members reflect the ORC layers and some helper classes. The ExecutionSession, ObjectLinkingLayer, CompileLayer, OptIRLayer, and MainJITDylib instances represent the running JIT program, the layers, and the symbol table, as already described. Moreover, the TargetProcessControl instance is used for interaction with the JIT target process. This can be the same process, another process on the same machine, or a remote process on a different machine, possibly with a different architecture. The DataLayout and MangleAndInterner classes are required to mangle symbols’ names in the correct way. Additionally, the symbol names are internalized, which means that all equal names have the same address. This means that to check if two symbol names are equal, it is then sufficient to compare the addresses, which is a very fast operation:
+私有数据成员反映了ORC层和一些辅助类。ExecutionSession、ObjectLinkingLayer、CompileLayer、OptIRLayer和MainJITDylib实例表示正在运行的JIT程序、层和符号表，如前所述。此外，TargetProcessControl实例用于与JIT目标进程进行交互。这可以是同一进程，同一机器上的另一个进程，或者不同机器上的远程进程，可能具有不同的架构。DataLayout和MangleAndInterner类需要以正确的方式修改符号的名称。此外，符号名称内化，所以所有相等的名称具有相同的地址。所以检查两个符号名是否相等，比较地址就足够了，这是一个非常快的操作:
 
 \begin{cpp}
     std::unique_ptr<llvm::orc::TargetProcessControl> TPC;
@@ -97,11 +97,11 @@ The private data members reflect the ORC layers and some helper classes. The Exe
 \end{cpp}
 
 \item
-The initialization is split into three parts. In C++, a constructor cannot return an error. The simple and recommended solution is to create a static factory method that can do the error handling before constructing an object. The initialization of the layers is more complex, so we introduce factory methods for them, too.
+初始化分为三个部分。C++中，构造函数不能返回错误。简单且推荐的解决方案是创建一个静态工厂方法，可以在构造对象之前进行错误处理。层的初始化更为复杂，因此也为它们引入了工厂方法。
 
-In the create() factory method, we first create a SymbolStringPool instance, which is used to implement string internalization and is shared by several classes. To take control of the current process, we create a SelfTargetProcessControl instance. If we want to target a different process, then we need to change this instance.
+create()工厂方法中，首先创建一个SymbolStringPool实例，该实例用于实现字符串内部化，并由多个类共享。为了控制当前流程，我们创建了一个SelfTargetProcessControl实例。若想要针对不同的流程，则需要更改此实例。
 
-Next, we construct a JITTargetMachineBuilder instance, for which we need to know the target triple of the JIT process. Afterward, we query the target machine builder for the data layout. This step can fail if the builder is not able to instantiate the target machine based on the provided triple – for example, because support for this target is not compiled into the LLVM libraries:
+接下来，构造一个JITTargetMachineBuilder实例，为此我们需要知道JIT进程的目标三元组。之后，我们向目标机器生成器查询数据布局。若构建器无法基于提供的三元组实例化目标机器，则此步骤可能会失败，例如：因为对此目标的支持没有编译到LLVM库中:
 
 \begin{cpp}
 public:
@@ -120,7 +120,7 @@ public:
 \end{cpp}
 
 \item
-At this point, we have handled all calls that could potentially fail. We are now able to initialize the ExecutionSession instance. Finally, the constructor of the JIT class is called with all instantiated objects, and the result is returned to the caller:
+此时，我们已经处理了所有可能失败的调用，现在可以初始化ExecutionSession实例了。最后，使用所有实例化的对象调用JIT类的构造函数，并将结果返回给调用者:
 
 \begin{cpp}
         auto ES =
@@ -134,7 +134,7 @@ At this point, we have handled all calls that could potentially fail. We are now
 \end{cpp}
 
 \item
-The constructor of the JIT class moves the passed parameters to the private data members. Layer objects are constructed with a call to static factory names with the create prefix. Furthermore, each layer factory method requires a reference to the ExecutionSession instance, which connects the layer to the running JIT session. Except for the object-linking layer, which is at the bottom of the layer stack, each layer requires a reference to the previous layer, illustrating the stacking order:
+JIT类的构造函数将传递的参数移动到私有数据成员，层对象是通过调用带有create前缀的静态工厂名称来构造的。此外，每个层工厂方法都需要对ExecutionSession实例的引用，该实例将层连接到正在运行的JIT会话。除了位于层堆栈底部的对象链接层外，每一层都需要引用前一层，说明了堆叠顺序:
 
 \begin{cpp}
 JIT(std::unique_ptr<llvm::orc::ExecutorProcessControl>
@@ -157,7 +157,7 @@ JIT(std::unique_ptr<llvm::orc::ExecutorProcessControl>
 \end{cpp}
 
 \item
-In the body of the constructor, we add a generator to search the current process for symbols. The GetForCurrentProcess() method is special, as the return value is wrapped in an Expected<> template, indicating that an Error object can also be returned. However, since we know that no error can occur, the current process will eventually run! Thus, we unwrap the result with the cantFail() function, which terminates the application if an error occurred anyway:
+构造函数中，我们添加了一个生成器，用于在当前进程中搜索符号。GetForCurrentProcess()方法是特殊的，因为返回值包装在一个Expected<>模板中，表明也可以返回一个Error对象。但由于我们知道不会发生错误，因此当前进程最终将运行!因此，使用cantFail()函数展开结果，若发生错误，该函数将终止应用程序:
 
 \begin{cpp}
     MainJITDylib.addGenerator(llvm::cantFail(
@@ -167,7 +167,7 @@ In the body of the constructor, we add a generator to search the current process
 \end{cpp}
 
 \item
-To create an object-linking layer, we need to provide a memory manager. Here, we stick to the default SectionMemoryManager class, but we could also provide a different implementation if needed:
+要创建一个对象链接层，需要提供一个内存管理器。这里，我们坚持使用默认的SectionMemoryManager类，但若需要，也可以提供不同的实现:
 
 \begin{cpp}
     static std::unique_ptr<
@@ -185,7 +185,7 @@ To create an object-linking layer, we need to provide a memory manager. Here, we
 \end{cpp}
 
 \item
-A slight complication exists for the Common Object File Format (COFF) object file format, which is used on Windows. This file format does not allow functions to be marked as exported. This subsequently leads to failures in checks inside the object-linking layer: flags stored in the symbol are compared with the flags from IR, which leads to a mismatch because of the missing export marker. The solution is to override the flags only for this file format. This finishes the construction of the object layer, and the object is returned to the caller:
+Windows上使用的通用对象文件格式(COFF)对象文件格式存在轻微的复杂性，此文件格式不允许将函数标记为导出。这随后导致对象链接层内部检查失败:将符号中存储的标志与IR中的标志进行比较，由于缺少导出标记，导致不匹配，解决方案是只覆盖这种文件格式的标志。这就完成了对象层的构造，对象被返回给调用者:
 
 \begin{cpp}
    if (JTMB.getTargetTriple().isOSBinFormatCOFF()) {
@@ -201,7 +201,7 @@ A slight complication exists for the Common Object File Format (COFF) object fil
 \end{cpp}
 
 \item
-To initialize the compiler layer, an IRCompiler instance is required. The IRCompiler instance is responsible for compiling an IR module into an object file. If our JIT compiler does not use threads, then we can use the SimpleCompiler class, which compiles the IR module using a given target machine. The TargetMachine class is not threadsafe, and therefore the SimpleCompiler class is not, either. To support compilation with multiple threads, we use the ConcurrentIRCompiler class, which creates a new TargetMachine instance for each module to compile. This approach solves the problem with multiple threads:
+要初始化编译器层，需要一个IRCompiler实例。IRCompiler实例负责将一个IR模块编译成一个object文件。若我们的JIT编译器不使用线程，那么可以使用SimpleCompiler类，它使用给定的目标机器编译IR模块。TargetMachine类不是线程安全的，因此SimpleCompiler类也不是。为了支持多线程编译，使用ConcurrentIRCompiler类，为每个要编译的模块创建一个新的TargetMachine实例。这种方法解决了多线程的问题:
 
 \begin{cpp}
     static std::unique_ptr<llvm::orc::IRCompileLayer>
@@ -220,13 +220,13 @@ To initialize the compiler layer, an IRCompiler instance is required. The IRComp
 \end{cpp}
 
 \item
-Instead of compiling the IR module directly to machine code, we install a layer that optimizes the IR first. This is a deliberate design decision: we turn our JIT compiler into an optimizing JIT compiler, which produces faster code that takes longer to produce, meaning a delay for the user. We do not add lazy compilation, so whole modules are compiled when just a symbol is looked up. This can add up to a significant amount of time before the user sees the code executing.
+我们没有将IR模块直接编译为机器码，而是安装了一个层来首先优化IR。这是一个深思熟虑的设计决策:将JIT编译器转换为优化的JIT编译器，它生成更快的代码，而生成代码需要更长的时间，这意味着用户需要等待。我们没有添加延迟编译，所以当只查找一个符号时，整个模块都会编译。在用户看到代码执行之前，这可能会花费大量的时间。
 
 \begin{myNotic}{Note}
-Introducing lazy compilation is not a proper solution in all circumstances. Lazy compilation is realized by moving each function into a module of its own, which is compiled when the function name is looked up. This prevents inter-procedural optimizations such as inlining because the inliner pass needs access to the body of called functions to inline them. As a result, users see a faster startup with lazy compilation, but the produced code is not as optimal as it can be. These design decisions depend on the intended use. Here, we decide on fast code, accepting a slower startup time. Furthermore, this means that the optimization layer is essentially a transformation layer.
+在所有情况下，引入惰性编译并不是一个合适的解决方案。惰性编译是通过将每个函数移动到它自己的模块中来实现的，该模块在查找函数名时进行编译。这防止了诸如内联之类的过程间优化，因为内联传递需要访问调用函数的体才能内联它们。因此，用户看到延迟编译的启动速度更快，但生成的代码并不是最优的。这些设计决策取决于预期的用途。这里，我们决定使用快速代码，接受较慢的启动时间，所以优化层本质上是一个转换层。
 \end{myNotic}
 
-The IRTransformLayer class delegates the transformation to a function – in our case, to the optimizeModule function:
+IRTransformLayer类将转换委托给一个函数——我们的例子中，委托给了optimizeModule函数:
 
 \begin{cpp}
     static std::unique_ptr<llvm::orc::IRTransformLayer>
@@ -242,7 +242,7 @@ The IRTransformLayer class delegates the transformation to a function – in our
 \end{cpp}
 
 \item
-The optimizeModule() function is an example of a transformation on an IR module. The function gets the module to transform as a parameter and returns the transformed version of the IR module. Since the JIT compiler can potentially run with multiple threads, the IR module is wrapped in a ThreadSafeModule instance:
+optimizeModule()函数是IR模块转换的一个示例。该函数获取要转换的模块作为参数，并返回转换后的IR模块版本。由于JIT编译器可能运行多个线程，所以IR模块被封装在ThreadSafeModule实例中:
 
 \begin{cpp}
     static llvm::Expected<llvm::orc::ThreadSafeModule>
@@ -253,7 +253,7 @@ The optimizeModule() function is an example of a transformation on an IR module.
 \end{cpp}
 
 \item
-To optimize the IR, we recall some information from Chapter 7, Optimizing IR, in the Adding an optimization pipeline to your compiler section. We need a PassBuilder instance to create an optimization pipeline. First, we define a couple of analysis managers and register them afterward at the pass builder. Afterward, we populate a ModulePassManager instance with the default optimization pipeline for the O2 level. This is again a design decision: the O2 level produces already fast machine code, but it produces even faster code at the O3 level. Next, we run the pipeline on the module, and finally, the optimized module is returned to the caller:
+为了优化IR，回顾了第7章”中的一些信息，在“向编译器添加优化管道”一节中。我们需要一个PassBuilder实例来创建一个优化管道。首先，定义两个分析管理器，然后在通道构建器中注册它们。之后，用O2级别的默认优化流水线填充ModulePassManager实例。这又是一个设计决策:O2级别生成的机器码已经很快了，但O3级别生成的代码甚至更快。接下来，我们在模块上运行流水线。最后，优化后的模块返回给调用者:
 
 \begin{cpp}
     TSM.withModuleDo([](llvm::Module &M) {
@@ -282,7 +282,7 @@ To optimize the IR, we recall some information from Chapter 7, Optimizing IR, in
 \end{cpp}
 
 \item
-The client of the JIT class needs a way to add an IR module, which we provide with the addIRModule() function. Recall the layer stack we created: we must add the IR module to the top layer; otherwise, we would accidentally bypass some of the layers. This would be a programming error that is not easily spotted: if the OptIRLayer member is replaced by the CompileLayer member, then our JIT class still works, but not as an optimizing JIT because we have bypassed this layer. This is no concern for this small implementation, but in a large JIT optimization, we would introduce a function to return the top-level layer:
+JIT类的客户机需要一种添加IR模块的方法，通过addIRModule()函数提供了这种方法。回想一下我们创建的层堆栈:必须将IR模块添加到顶层;否则，会不绕过一些层。这是一个不容易发现的编程错误:若OptIRLayer成员被CompileLayer成员取代，JIT类仍然工作，但不是作为优化JIT，因为已经绕过了这一层。对于这个小实现来说，这是无关紧要的，但是在一个大JIT优化中，我们会引入一个函数来返回顶层:
 
 \begin{cpp}
     llvm::Error addIRModule(
@@ -295,7 +295,7 @@ The client of the JIT class needs a way to add an IR module, which we provide wi
 \end{cpp}
 
 \item
-Likewise, a client of our JIT class needs a way to look up a symbol. We delegate this to the ExecutionSession instance, passing in a reference to the main symbol table and the mangled and internalized name of the requested symbol:
+同样，JIT类的客户机需要一种查找符号的方法。我们把它委托给ExecutionSession实例，传递一个对主符号表的引用和被请求符号的内部名称:
 
 \begin{cpp}
     llvm::Expected<llvm::orc::ExecutorSymbolDef>
@@ -306,17 +306,17 @@ Likewise, a client of our JIT class needs a way to look up a symbol. We delegate
 \end{cpp}
 \end{enumerate}
 
-As we can see, the initialization of this JIT class can be tricky, as it involves a factory method and a constructor call for the JIT class, and factory methods for each layer. Although this distribution is caused by limitations in C++, the code itself is straightforward.
+正如我们所看到的，这个JIT类的初始化可能很棘手，它涉及到JIT类的工厂方法和构造函数调用，以及每个层的工厂方法。尽管这个发行版是由C++的限制造成的，但代码本身很简单。
 
-Next, we are going to use the new JIT compiler class to implement a simple command-line utility that takes an LLVM IR file as input.
+接下来，我们将使用新的JIT编译器类来实现一个简单的命令行实用程序，该实用程序将LLVM IR文件作为输入。
 
-\mySubsubsection{9.5.2.}{Using our new JIT compiler class}
+\mySubsubsection{9.5.2.}{使用新的JIT编译器类}
 
-We start off by creating a file called JIT.cpp, in the same directory as the JIT.h file, and add the following to this source file:
+首先在与JIT.h文件相同的目录下创建一个名为JIT.cpp的文件，并在此源文件中添加以下内容:
 
 \begin{enumerate}
 \item
-Firstly, several header files are included. We must include JIT.h to use our new class, and the IRReader.h header because it defines a function to read LLVM IR files. The CommandLine.h header allows us to parse the command-line options in the LLVM style. Next, InitLLVM.h is needed for the basic initialization of the tool. Finally, TargetSelect.h is needed for the initialization of the native target:
+首先，包含几个头文件。必须包含JIT.h来使用我们的新类，还必须包含IRReader.h头文件，因为它定义了一个读取LLVM IR文件的函数，CommandLine.h头文件允许我们以LLVM风格解析命令行选项。接下来，需要InitLLVM.h进行工具的基本初始化。最后，TargetSelect.h需要用于初始化本机目标:
 
 \begin{cpp}
 #include "JIT.h"
@@ -327,14 +327,14 @@ Firstly, several header files are included. We must include JIT.h to use our new
 \end{cpp}
 
 \item
-Next, we add the llvm namespace to the current scope:
+接下来，我们将llvm命名空间添加到当前作用域:
 
 \begin{cpp}
 using namespace llvm;
 \end{cpp}
 
 \item
-Our JIT tool expects exactly one input file on the command line, which we declare with the cl::opt<> class:
+我们的JIT工具在命令行上只需要一个输入文件，用cl::opt<>类声明它:
 
 \begin{cpp}
 static cl::opt<std::string>
@@ -343,7 +343,7 @@ static cl::opt<std::string>
 \end{cpp}
 
 \item
-To read the IR file, we call the parseIRFile() function. The file can be a textual IR representation or a bitcode file. The function returns a pointer to the created module. Additionally, the error handling is a bit different, because a textual IR file can be parsed, which is not necessarily syntactically correct. Finally, the SMDiagnostic instance holds the error information in case of a syntax error. In the event of an error, an error message is printed, and the application is exited:
+为了读取IR文件，调用parseIRFile()函数。该文件可以是文本IR表示或位码文件。该函数返回一个指向所创建模块的指针。此外，因为可以解析文本IR文件，错误处理有点不同，这在语法上不一定正确。最后，SMDiagnostic实例保存语法错误时的错误信息。若发生错误，则输出错误消息，并退出应用程序:
 
 \begin{cpp}
 std::unique_ptr<Module>
@@ -361,7 +361,7 @@ loadModule(StringRef Filename, LLVMContext &Ctx,
 \end{cpp}
 
 \item
-The jitmain() function is placed after the loadModule() method. This function sets up our JIT engine and compiles an LLVM IR module. The function needs the LLVM module with the IR to execute. The LLVM context class is also required for this module because the context class contains important type information. The goal is to call the main() function, so we also pass the usual argc and argv parameters:
+jitmain()函数放在loadModule()方法之后，这个函数设置我们的JIT引擎并编译一个LLVM IR模块。该函数需要带有IR的LLVM模块来执行。这个模块还需要LLVM上下文类，因为上下文类包含重要的类型信息。我们的目标是调用main()函数，所以也传递了常用的argc和argv参数:
 
 \begin{cpp}
 Error jitmain(std::unique_ptr<Module> M,
@@ -370,7 +370,7 @@ Error jitmain(std::unique_ptr<Module> M,
 \end{cpp}
 
 \item
-Next, we create an instance of our JIT class that we constructed earlier. If an error occurs, then we return an error message accordingly:
+接下来，创建前面构造的JIT类的一个实例。若发生错误，则返回相应的错误消息:
 
 \begin{cpp}
 auto JIT = JIT::create();
@@ -379,7 +379,7 @@ if (!JIT)
 \end{cpp}
 
 \item
-Then, we add the module to the main JITDylib instance, wrapping the module and a context in a ThreadSafeModule instance yet again. If an error occurs, then we return an error message:
+然后，将模块添加到主JITDylib实例中，再次将模块和上下文包装在ThreadSafeModule实例中。若发生错误，则返回一条错误消息:
 
 \begin{cpp}
 if (auto Err = (*JIT)->addIRModule(
@@ -389,7 +389,7 @@ if (auto Err = (*JIT)->addIRModule(
 \end{cpp}
 
 \item
-Following this, we look up the main symbol. This symbol must be in the IR module given on the command line. The lookup triggers the compilation of that IR module. If other symbols are referenced inside the IR module, then they are resolved using the generator added in the previous step. The result is of the ExecutorAddr class, where it represents the address of the executor process:
+接下来，查找主符号，此符号必须在命令行上给出的IR模块中。查找触发该IR模块的编译。若在IR模块中引用了其他符号，则使用上一步中添加的生成器解析它们。结果是ExecutorAddr类，它表示执行进程的地址:
 
 \begin{cpp}
     llvm::orc::ExecutorAddr MainExecutorAddr = MainSym->getAddress();
@@ -397,14 +397,14 @@ Following this, we look up the main symbol. This symbol must be in the IR module
 \end{cpp}
 
 \item
-Now, we can call the main() function in the IR module, and pass the argc and argv parameters that the function expects. We ignore the return value:
+现在，可以调用IR模块中的main()函数，并传递函数期望的argc和argv参数。我们忽略返回值:
 
 \begin{cpp}
     (void)Main(argc, argv);
 \end{cpp}
 
 \item
-We report success after the execution of the function:
+我们在函数执行成功后报告:
 
 \begin{cpp}
    return Error::success();
@@ -412,7 +412,7 @@ We report success after the execution of the function:
 \end{cpp}
 
 \item
-After implementing a jitmain() function, we add a main() function, which initializes the tool and the native target and parses the command line:
+实现了jitmain()函数之后，添加了main()函数，其初始化工具和本机目标并解析命令行:
 
 \begin{cpp}
 int main(int argc, char *argv[]) {
@@ -425,7 +425,7 @@ int main(int argc, char *argv[]) {
 \end{cpp}
 
 \item
-Afterward, the LLVM context class is initialized, and we load the IR module named on the command line:
+之后，初始化LLVM上下文类，并加载命令行中指定的IR模块:
 
 \begin{cpp}
     auto Ctx = std::make_unique<LLVMContext>();
@@ -434,7 +434,7 @@ Afterward, the LLVM context class is initialized, and we load the IR module name
 \end{cpp}
 
 \item
-After loading the IR module, we can call the jitmain() function. To handle errors, we use the ExitOnError utility class to print an error message and exit the application when an error is encountered. We also set a banner with the name of the application, which is printed before the error message:
+加载IR模块后，可以调用jitmain()函数。为了处理错误，使用ExitOnError实用程序类来打印错误消息，并在遇到错误时退出应用程序。我们还设置了一个带有应用程序名称，其输出在错误消息之前:
 
 \begin{cpp}
     ExitOnError ExitOnErr(std::string(argv[0]) + ": ");
@@ -443,7 +443,7 @@ After loading the IR module, we can call the jitmain() function. To handle error
 \end{cpp}
 
 \item
-If the control flow reaches this point, then the IR was successfully executed. We return 0 to indicate success:
+若控制流达到这一点，则IR已成功执行。返回0表示成功:
 
 \begin{cpp}
     return 0;
@@ -451,9 +451,9 @@ If the control flow reaches this point, then the IR was successfully executed. W
 \end{cpp}
 \end{enumerate}
 
-We can now test our newly implemented JIT compiler by compiling a simple example that prints Hello World! to the console. Under the hood, the new class uses a fixed optimization level, so with large enough modules, we can note differences in the startup and runtime.
+现在，可以通过编译一个简单的示例来测试新实现的JIT编译器，该示例输出Hello World!到控制台。在底层，新类使用一个固定的优化级别，因此对于足够大的模块，可以注意到启动和运行时的差异。
 
-To build our JIT compiler, we can follow the same CMake steps as we did near the end of the Implementing our own JIT compiler with LLJIT section, and we just need to ensure that the JIT.cpp source file is being compiled with the correct libraries to link against:
+要构建我们的JIT编译器，可以按照在用LLJIT实现我们自己的JIT编译器一节末尾所做的相同的CMake步骤，我们只需要确保JIT.cpp源文件正在用正确的库进行编译。
 
 \begin{cmake}
 add_executable(JIT JIT.cpp)
@@ -461,14 +461,14 @@ include_directories(${CMAKE_SOURCE_DIR})
 target_link_libraries(JIT ${llvm_libs})
 \end{cmake}
 
-We then change into the build directory and compile the application:
+然后切换到build目录并编译应用程序:
 
 \begin{shell}
 $ cmake –G Ninja <path to jit source directory>
 $ ninja
 \end{shell}
 
-Our JIT tool is now ready to be used. A simple Hello World! program can be written in C, like the following:
+我们的JIT工具现在可以使用了。一个简单的Hello World!程序可以用C编写，如下所示:
 
 \begin{shell}
 $ cat main.c
@@ -480,13 +480,13 @@ int main(int argc, char** argv) {
 }
 \end{shell}
 
-Next, we can compile the Hello World C source into LLVM IR with the following command:
+接下来，可以用下面的命令将Hello World C源代码编译成LLVM IR:
 
 \begin{shell}
 $ clang -S -emit-llvm main.c
 \end{shell}
 
-Remember – we compile the C source into LLVM IR because our JIT compiler accepts an IR file as input. Finally, we can invoke our JIT compiler with our IR example, as follows:
+记住——我们将C源代码编译成LLVM IR，因为JIT编译器接受IR文件作为输入。最后，可以用IR示例调用JIT编译器，如下所示:
 
 \begin{shell}
 $ JIT main.ll
