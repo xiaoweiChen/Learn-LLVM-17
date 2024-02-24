@@ -1,32 +1,32 @@
 
-Implementing the rules of the calling convention is an important part of lowering the LLVM intermediate representation (IR) to machine code. The basic rules can be defined in the target description. Let’s have a look.
+实现调用约定的规则是，将LLVM中间表示(IR)降为机器码的重要组成部分。基本规则可以在目标描述中定义。
 
-Most calling conventions follow a basic pattern: they define a subset of registers for parameter passing. If this subset is not exhausted, the next parameter is passed in the next free register. If there is no free register, then the value is passed on the stack. This can be realized by looping over the parameters and deciding how to pass each parameter to the called function while keeping track of the used registers. In LLVM, this loop is implemented inside the framework, and the state is held in a class called CCState. Furthermore, the rules are defined in the target description.
+大多数调用约定遵循一个基本模式:定义一个寄存器子集用于参数传递。若这个子集没有耗尽，则在下一个空闲寄存器中传递下一个参数。若没有空闲的寄存器，则将值传递到堆栈上。这可以通过循环遍历参数，决定如何将每个参数传递给被调用函数来实现，同时跟踪使用的寄存器。在LLVM中，这个循环是在框架内实现的，状态保存在一个名为CCState的类中，所以可在目标描述中定义规则。
 
-The rules are given as a sequence of conditions. If the condition holds, then an action is executed. Depending on the outcome of that action, either a place for the parameter is found, or the next condition is evaluated. For example, 32-bit integers are passed in a register. The condition is the type check, and the action is the assignment of a register to this parameter. In the target description, this is written as follows:
+这些规则是作为一系列条件给出的。若条件成立，则执行一个操作。根据该操作的结果，要么为参数找到一个位置，要么计算下一个条件。例如，32位整数在寄存器中传递。条件是类型检查，动作是将寄存器赋值给该参数。在目标描述中，如下所示:
 
 \begin{shell}
 CCIfType<[i32],
         CCAssignToReg<[R2, R3, R4, R5, R6, R7, R8, R9]>>,
 \end{shell}
 
-Of course, if the called function has more than eight parameters, then the register list will be exhausted, and the action will fail. The remaining parameters are passed on the stack, and we can specify this as the next action:
+当然，若调用的函数有超过8个参数，那么寄存器列表就会耗尽，操作就会失败。剩下的参数在堆栈上传递，我们可以将其指定为下一个动作:
 
 \begin{shell}
 CCAssignToStack<4, 4>
 \end{shell}
 
-The first parameter is the size of a stack slot in bytes, while the second is the alignment. Since it is a catch-all rule, no condition is used.
+第一个参数是以字节为单位的堆栈槽的大小，而第二个参数是对齐方式。它是一个包罗万象的规则，所以没有任何限制条件。
 
-\mySubsubsection{12.1.1.}{Implementing the rules of the calling convention}
+\mySubsubsection{12.1.1.}{执行调用约定规则}
 
-For a calling convention, there are also more predefined conditions and actions to note. For example, CCIfInReg checks if the argument is marked with the inreg attribute, and CCIfVarArg evaluates to true if the function has a variable argument list. The CCPromoteToType action promotes the type of the argument to a larger one, and the CCPassIndirect action indicates that the parameter value should be stored on the stack and that a pointer to that storage is passed as a normal argument. All of the predefined conditions and actions can be referenced within llvm/include/llvm/ Target/TargetCallingConv.td.
+对于调用约定，需要注意更多预定义的条件和操作。例如，CCIfInReg检查参数是否标记为inreg属性，若函数具有可变参数列表，CCIfVarArg计算结果为true。CCPromoteToType动作将参数的类型提升为更大的类型，CCPassIndirect动作表明参数值应该存储在堆栈中，并且指向该存储的指针作为普通参数传递。所有预定义的条件和动作都可以在llvm/include/llvm/Target/TargetCallingConv.td中引用。
 
-Both the parameters and the return value are defined in this way. We will put the definition into the M88kCallingConv.td file:
+参数和返回值都以这种方式定义，将把定义放入M88kCallingConv.td文件中:
 
 \begin{enumerate}
 \item
-First, we must define the rules for the parameters. To simplify the coding, we’ll only consider 32-bit values:
+首先，必须为参数定义规则。为了简化编码，只考虑32位值:
 
 \begin{cpp}
 def CC_M88k : CallingConv<[
@@ -38,7 +38,7 @@ def CC_M88k : CallingConv<[
 \end{cpp}
 
 \item
-After that, we must define the rules for return values:
+之后，必须定义返回值的规则:
 
 \begin{cpp}
 def RetCC_M88k : CallingConv<[
@@ -47,7 +47,7 @@ def RetCC_M88k : CallingConv<[
 \end{cpp}
 
 \item
-Finally, the sequence of callee saved registers must be defined. Note that we use the sequence operator to generate a sequence of registers, instead of writing them down:
+最后，必须定义调用者保存的寄存器序列。注意，使用序列操作符来生成寄存器序列，而不是将它们写下来:
 
 \begin{cpp}
 def CSR_M88k :
@@ -56,7 +56,7 @@ def CSR_M88k :
 \end{cpp}
 \end{enumerate}
 
-The benefit of defining the rules for the calling convention in the target description is that they can be reused for various instruction selection methods. We’ll look at instruction selection via the selection DAG next.
+目标描述中为调用约定定义规则的好处是，可以使用各种指令选择方法重用。接下来，我们将通过选择DAG查看指令的选择。
 
 
 

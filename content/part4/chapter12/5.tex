@@ -1,10 +1,10 @@
-The instruction selection creates machine instructions, represented by the MachineInstr class, from LLVM IR. But this is not the end. An instance of the MachineInstr class still carries additional information, such as labels or flags. To emit an instruction via the machine code component, we need to lower the instances of MachineInstr to instances of MCInst. By doing this, the machine code component provides the functionality to write instructions into object files or print them as assembler text. The M88kAsmPrinter class is responsible for emitting a whole compilation unit. Lowering an instruction is delegated to the M88kMCInstLower class.
+指令选择从LLVM IR中创建机器指令，由MachineInstr类表示，但这并不是结束。MachineInstr类的实例仍然携带额外的信息，比如标签或标志。为了通过机器码组件发出一条指令，需要将MachineInstr的实例降低为MCInst的实例。机器代码组件，提供了将指令写入目标文件或将其作为汇编文本输出的功能。M88kAsmPrinter类负责发出整个编译单元，向下转译指令委托给M88kMCInstLower类。
 
-The assembly printer is the last pass to run in a backend. Its implementation is stored in the M88kAsmPrinter.cpp file:
+汇编输出器是后端中运行的最后一个通道，其实现存储在M88kAsmPrinter.cpp文件中:
 
 \begin{enumerate}
 \item
-The declaration of the M88kAsmPrinter class is in an anonymous namespace. Besides the constructor, we only override the getPassName() function, which returns the name of the pass as a human-readable string, and the emitInstruction() function:
+M88kAsmPrinter类的声明位于匿名名称空间中。除了构造函数，只重写getPassName()函数和emitInstruction()函数，getPassName()函数以人类可读的字符串形式返回通道的名称:
 
 \begin{cpp}
 namespace {
@@ -25,7 +25,7 @@ public:
 \end{cpp}
 
 \item
-Like many other classes, we have to register our assembly printer in the target registry:
+像许多其他类一样，必须在目标注册表中注册汇编输出器:
 
 \begin{cpp}
 extern "C" LLVM_EXTERNAL_VISIBILITY void
@@ -36,7 +36,7 @@ LLVMInitializeM88kAsmPrinter() {
 \end{cpp}
 
 \item
-The emitInstruction() method is responsible for emitting the machine instruction, MI, to the output stream. In our implementation, we delegate the lowering of the instruction to the M88kMCInstLower class:
+emitInstruction()方法负责将机器指令(MI)发送到输出流。实现中，将指令的向下转译委托给M88kMCInstLower类:
 
 \begin{cpp}
 void M88kAsmPrinter::emitInstruction(
@@ -49,9 +49,9 @@ void M88kAsmPrinter::emitInstruction(
 \end{cpp}
 \end{enumerate}
 
-This is already the full implementation. The base class, AsmPrinter, provides many useful hooks you can override. For example, the emitStartOfAsmFile() method is called before anything is emitted, and emitEndOfAsmFile() is called after everything is emitted. These methods can emit target-specific data or code at the beginning and the end of a file. Similarly, the emitFunctionBodyStart() and emitFunctionBodyEnd() methods are called before and after a function body is emitted. Read the comments in the llvm/include/llvm/CodeGen/ AsmPrinter.h file to understand what can be customized.
+这已经是完整的实现了，基类AsmPrinter提供了许多可以覆盖的有用钩子。例如，emitStartOfAsmFile()方法在事件触发之前调用，而emitEndOfAsmFile()在所有事件触发之后调用。这些方法可以生成有针对性的数据或代码文件的开始和结束。类似地，emitFunctionBodyStart()和emitFunctionBodyEnd()方法也会在函数体发出前后调用。请阅读llvm/include/llvm/CodeGen/ AsmPrinter.h文件中的注释，了解可以自定义哪些内容。
 
-The M88kMCInstLower class lowers operands and instructions, and our implementation contains two methods for that purpose. The declaration is in the M88kMCInstLower.h file:
+M88kMCInstLower类向下转译操作数和指令，实现包含两个用于此目的的方法。声明在M88kMCInstLower.h文件中:
 
 \begin{cpp}
 class LLVM_LIBRARY_VISIBILITY M88kMCInstLower {
@@ -65,7 +65,7 @@ The definition goes into the M88kMCInstLower.cpp file:
 
 \begin{enumerate}
 \item
-To lower MachineOperand to MCOperand, we need to check the operand type. Here, we only handle registers and immediates by creating MCOperand-equivalent register and immediate values by supplying the original MachineOperand values. As soon as expressions are introduced as operands, this method needs to be enhanced:
+为了将MachineOperand降格为MCOperand，需要检查操作数类型。这里，只通过提供原始的MachineOperand值来创建mcoperand等效寄存器和立即值，从而处理寄存器和立即值。当表达式作为操作数引入，这个方法就需要增强了:
 
 \begin{cpp}
 MCOperand M88kMCInstLower::lowerOperand(
@@ -84,7 +84,7 @@ MCOperand M88kMCInstLower::lowerOperand(
 \end{cpp}
 
 \item
-The lowering of an instruction is similar. First, the opcode is copied, and then the operands are handled. An instance of MachineInstr can have implicit operands attached, which are not lowered, and we need to filter them:
+指令的向下转译也是类似的。首先，复制操作码，然后处理操作数。MachineInstr的实例可以添加隐式操作数，这些操作数不会向下转译，需要对它们进行过滤:
 
 \begin{cpp}
 void M88kMCInstLower::lower(const MachineInstr *MI,
@@ -98,7 +98,7 @@ MCInst &OutMI) const {
 \end{cpp}
 \end{enumerate}
 
-With that, we’ve implemented the assembly printer. Now, we need to bring all the pieces together. We’ll do this in the next section.
+这样，就实现了汇编输出器。现在，需要把所有的碎片拼凑起来。我们将在下一节中进行此操作。
 
 
 

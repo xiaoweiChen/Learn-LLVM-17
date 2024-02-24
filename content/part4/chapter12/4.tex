@@ -1,6 +1,6 @@
-The binary interface of a platform not only defines how parameters are passed. It also includes how a stack frame is laid out: in which places are local variables stored, where registers are spilled to, and so on. Often, a special instruction sequence is required at the beginning and end of a function, called the prolog and the epilog. At the current development state, our target does not support the required machine instructions to create the prolog and the epilog. However, the framework code for instruction selection requires that a subclass of TargetFrameLowering is available. The easy solution is to provide the M88kFrameLowering class with an empty implementation.
+平台的二进制接口不仅定义了参数的传递方式，还包括如何布局堆栈帧:在哪里存储局部变量，将寄存器溢出到哪里等。通常，在函数的开始和结束处需要一个特殊的指令序列，称为序言和尾声。在当前的开发状态下，目标不支持创建序言和尾部声明的机器指令，但用于指令选择的帧代码要求TargetFrameLowering的子类可用。简单的解决方案是为M88kFrameLowering类提供一个空的实现。
 
-The declaration of the class is in the M88kFrameLowering.h file. All we must do here is override the pure virtual functions:
+该类的声明在M88kFrameLowering.h文件中，我们要做的就是重写纯虚函数:
 
 \begin{cpp}
 namespace llvm {
@@ -20,7 +20,7 @@ public:
 }
 \end{cpp}
 
-The implementation, which is stored in the M88kFrameLowering.cpp file, provides some basic details about stack frames in the constructor. The stack grows downwards, to smaller addresses, and is aligned on 8-byte boundaries. When a function is called, the local variables are stored directly below the stack pointer of the calling function, so the offset of the local area is 0. Even during a function call, the stack should remain aligned at an 8-byte boundary. The last parameter implies that the stack cannot be realigned. The other functions just have an empty implementation:
+该实现存储在M88kFrameLowering.cpp文件中，提供了关于构造函数中堆栈帧的一些基本细节。堆栈向下扩展到更小的地址，并以8字节的边界对齐。当调用函数时，局部变量直接存储在调用函数的堆栈指针下面，因此局部区域的偏移量为0。即使在函数调用期间，堆栈也应该保持在8字节的边界上对齐。最后一个参数表示不能重新排列堆栈。其他函数只有一个空的实现:
 
 \begin{cpp}
 M88kFrameLowering::M88kFrameLowering()
@@ -38,9 +38,9 @@ bool M88kFrameLowering::hasFP(
     const MachineFunction &MF) const { return false; }
 \end{cpp}
 
-Of course, as soon as our implementation grows, this class will be one of the first that needs to be fully implemented.
+当然，随着我们的实现的增长，这个类将是第一个需要完全实现的类。
 
-Before we can put all the pieces together, we need to implement the assembly printer, which is used to emit machine instructions.
+在将所有部件组装在一起之前，我们需要实现汇编输出器，用于发出机器指令。
 
 
 

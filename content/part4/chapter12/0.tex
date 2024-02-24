@@ -1,34 +1,34 @@
-The heart of any backend is instruction selection. LLVM implements several approaches; in this chapter, we will implement instruction selection via the selection directed acyclic graph (DAG) and with global instruction selection.
+任何后端的核心都是指令选择，LLVM实现了几种方法。在本章中，我们将通过选择有向无环图(DAG)和全局指令选择来实现指令选择。
 
-In this chapter, you will learn about the following topics:
+本章中，将学习以下主题:
 
 \begin{itemize}
 \item
-Defining the rules of the calling convention: This section shows you how to describe the rules of a calling convention in the target description
+定义调用约定的规则:如何在目标描述中，描述调用规则
 
 \item
-Instruction selection via the selection DAG: This section teaches you how to implement instruction selection with a graph data structure
+通过选择DAG进行指令选择:如何使用图数据结构实现指令选择
 
 \item
-Adding register and instruction information: This section explains how to access information in the target description, and what additional information you need to provide
+添加寄存器和指令信息:如何访问目标描述中的信息，以及需要提供哪些信息
 
 \item
-Putting an empty frame lowering in place: This section introduces you to the stack layout and the prologue of a function
+将空框架放置到位:介绍堆栈布局和函数的序言
 
 \item
-Emitting machine instructions: This section tells you how machine instructions are finally written into an object file or as assembly text
+生成机器指令:如何将机器指令最终写入目标文件或汇编文本
 
 \item
-Creating the target machine and the sub-target: This section shows you how a backend is configured
+创建目标计算机和子目标:如何配置后端
 
 \item
-Global instruction selection: This section demonstrates a different approach to instruction selection
+全局指令选择:指令选择的另一种方法
 
 \item
-How to further evolve the backend: This section gives you some guidance about possible next steps
+如何进一步发展后端:提供了一些关于后续步骤的指导
 \end{itemize}
 
-By the end of this chapter, you will know how to create an LLVM backend that can translate simple instructions. You will also acquire the knowledge to develop instruction selection via the selection DAG and with global instruction selection, and you will become familiar with all the important support classes you have to implement to get instruction selection working.
+本章结束时，将了解如何创建一个LLVM后端来翻译简单的指令。还将获得通过选择DAG和全局指令选择开发指令选择的知识，并且将熟悉为使指令选择工作而必须实现的支持类。
 
 
 

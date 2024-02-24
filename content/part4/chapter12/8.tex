@@ -1,23 +1,23 @@
-With the code from this and the previous chapter, we have created a backend that can translate some LLVM IR into machine code. It is very satisfying to see the backend working, but it is far from being usable for serious tasks. Much more coding is needed. Here is a recipe for how you can further evolve the backend:
+使用本章和前一章的代码，创建了一个后端，可以将一些LLVM IR转换为机器码。看到后端能够正常工作是非常令人满意的，但不能用于实际任务。需要编写更多的代码。以下是如何进一步发展后端的秘诀:
 
 \begin{itemize}
 \item
-The first decision you should make is if you want to use GlobalISel or the selection DAG. In our experience, GlobalISel is easier to understand and develop, but all targets in the LLVM source tree implement the selection DAG, and you may already have experience in using it.
+第一个决定是，是使用GlobalISel，还是选择DAG。根据我们的经验，GlobalISel更容易理解和开发，但是LLVM源代码树中的所有目标都实现了选择DAG，并且开发者可能已经有了使用它的经验。
 
 \item
-Next, you should define the instructions for adding and subtracting integer values, which can be done similarly to the bitwise and instruction.
+接下来，应该定义用于加减整数值的指令，这与按位和指令类似。
 
 \item
-After, you should implement the load and store instructions. This is more involved since you need to translate the different addressing modes. Most likely, you will deal with indexing, for example, to address an element of an array, which most likely requires the previously defined instruction for addition.
+之后，应该实现加载和存储指令。由于需要转换不同的寻址模式，这就更复杂了。最可能的情况是，需要处理索引，对数组中的一个元素进行寻址，这很可能需要前面定义的加法指令。
 
 \item
-Finally, you can fully implement frame lowering and call lowering. At this point, you can translate a simple “Hello, world!” style application into a running program.
+最后，可以完全实现帧和调用的向下转译。此时，可以翻译一个简单的“Hello, world!”样式的应用程序变成可运行的程序。
 
 \item
-The next logical step is to implement branch instructions, which enable the translation of loops. To generate optimal code, you need to implement the branch analyzing methods in the instruction information class.
+下一个逻辑步骤是实现分支指令，支持循环的转换。为了生成最优的代码，需要在指令信息类中实现分支分析方法。
 \end{itemize}
 
-When you reach this point, your backend can already translate simple algorithms. You should also have gained enough experience to develop the missing parts based on your priorities.
+这时，自定义后端已经可以翻译简单的算法。还应该获得足够的经验，可以根据优先级开发缺失的部分。
 
 
 

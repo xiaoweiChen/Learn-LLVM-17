@@ -1,13 +1,13 @@
 
-The target description is the heart of a backend implementation. It is written in the TableGen language and defines the basic properties of an architecture, such as the registers and the instruction formats and patterns for instruction selection. If you are not familiar with the TableGen language, then we recommend reading Chapter 8, The TableGen Language, first. The base definitions are in the llvm/ include/llvm/Target/Target.td file, which can be found online at \url{https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/Target/Target.td}. This file is heavily commented on and is a useful source of information about the use of the definitions.
+目标描述是后端实现的核心，是用TableGen语言编写的，并定义了架构的基本属性，例如：寄存器和指令格式以及用于指令选择的模式。若不熟悉TableGen语言，那则建议先阅读本书第8章。基本定义在llvm/include/llvm/Target/Target文件中，该文件可在\url{https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/Target/Target.td}上找到。该文件有大量注释，都是关于定义使用的信息来源。
 
-In an ideal world, we would generate the whole backend from the target description. This goal has not yet been reached, and therefore, we will need to extend the generated code later. Because of its size, the target description is split into several files. The top-level file will be M88k.td, inside the llvm/ lib/Target/M88k directory, which also includes the other files. Let’s have a look at some files, beginning with the register definition.
+理想情况下，我们将根据目标描述生成整个后端。这个目标还没有实现，稍后需要扩展生成的代码。由于其大小，目标描述被分割成几个文件。顶级文件是M88k.td，在llvm/lib/Target/M88k目录下，该目录还包括其他文件。让我们从寄存器定义开始件。
 
-\mySubsubsection{11.4.1.}{Adding the register definition}
+\mySubsubsection{11.4.1.}{添加寄存器定义}
 
-A CPU architecture usually defines a set of registers. The characteristics of these registers can vary. Some architectures allow access to sub-registers. For example, the x86 architecture has special register names to access only a part of a register value. Other architectures do not implement this. In addition to general-purpose, floating-point, and vector registers, an architecture may have special registers for status codes or configuration of floating-point operations. We need to define all this information for LLVM. The register definitions are stored in the M88kRegisterInfo.td file, also found within the llvm/lib/Target/M88k directory.
+CPU架构通常定义一组寄存器，这些寄存器的特性可以有所不同，一些架构允许访问子寄存器。例如，x86架构有特殊的寄存器名来访问寄存器值的一部分，其他架构没有实现这个。除了通用寄存器、浮点寄存器和向量寄存器外，架构还可以有用于状态码或浮点操作配置的特殊寄存器。我们需要为LLVM定义所有这些信息，寄存器定义存储在M88kRegisterInfo中，在llvm/lib/Target/M88k目录中也可以找到。
 
-The M88k architecture defines general-purpose registers, extended registers for floating-point operations, and control registers. To keep the example small, we only define the general-purpose registers. We begin by defining a super-class for the registers. A register has a name and an encoding. The name is used in the textual representation of an instruction. Similarly, the encoding is used as part of the binary representation of an instruction. The architecture defines 32 registers and the encoding for registers therefore uses 5 bits, so we limit the field holding the encoding. We also define that all the generated C++ code should live in the M88k namespace:
+M88k架构定义了通用寄存器、用于浮点操作的扩展寄存器和控制寄存器。为了保持示例较小，我们只定义了通用寄存器。首先为寄存器定义一个超类，寄存器有名称和编码。该名称用于指令的文本表示。类似地，编码用作指令二进制表示的一部分。该架构定义了32个寄存器，因此寄存器的编码使用5位，限制了保存编码的字段。我们还定义了所有生成的C++代码，应该放在在M88k命名空间中:
 
 \begin{cpp}
 class M88kReg<bits<5> Enc, string n> : Register<n> {
@@ -17,7 +17,7 @@ class M88kReg<bits<5> Enc, string n> : Register<n> {
 }
 \end{cpp}
 
-Next, we can define all 32 general-purpose registers. The r0 register is special because it always returns the constant 0 when read, so we set the isConstant flag to true for that register:
+接下来，可以定义所有32个通用寄存器。r0寄存器很特殊，它在读取时总是返回常量0，所以将该寄存器的isConstant标志设置为true:
 
 \begin{cpp}
 foreach I = 0-31 in {
@@ -26,7 +26,7 @@ foreach I = 0-31 in {
 }
 \end{cpp}
 
-For the register allocator, the single registers need to be grouped into register classes. The sequence order of the registers defines the allocation order. The register allocator also needs other information about the registers such as, for example, the value types, which can be stored in a register, the spill size of a register in bits, and the required alignment in memory. Instead of using the RegisterClass base class directly, we create a new M88kRegisterClass class. This allows us to change the parameter list to our needs. It also avoids the repetition of the C++ namespace name used for the generated code, which is the first argument for the RegisterClass class:
+对于寄存器分配器，需要将单个寄存器分组到寄存器类中。寄存器的顺序，定义了分配顺序。寄存器分配器还需要有关寄存器的其他信息，例如可以存储在寄存器中的值类型、寄存器的溢出大小(以位为单位)，以及在内存中所需的对齐方式。没有直接使用RegisterClass基类，而是创建了一个新的M88kRegisterClass类。这可以根据需要更改参数列表，还避免了用于生成代码的C++命名空间名称的重复，这是RegisterClass类的第一个参数:
 
 \begin{cpp}
 class M88kRegisterClass<list<ValueType> types, int size,
@@ -38,7 +38,7 @@ class M88kRegisterClass<list<ValueType> types, int size,
 }
 \end{cpp}
 
-In addition, we define a class for register operands. Operands describe the input and output of an instruction. They are used during assembling and disassembling of an instruction, and also in the patterns used by the instruction selection phase. Using our own class, we can give the generated function used to decode a register operand a name that conforms to the LLVM coding guidelines:
+此外，还定义了一个寄存器操作数类。操作数描述指令的输入和输出，在指令的组装和分解过程中使用，也在指令选择阶段使用的模式中使用。使用自己的类，我们可以给用于解码寄存器操作数函数，一个符合LLVM编码准则的名称:
 
 \begin{cpp}
 class M88kRegisterOperand<RegisterClass RC>
@@ -47,14 +47,14 @@ class M88kRegisterOperand<RegisterClass RC>
 }
 \end{cpp}
 
-Based on these definitions, we now define the general-purpose registers. Please note that a generalpurpose register of the m88k architecture is 32-bits wide and can hold integer and floating-point values. To avoid writing all register names, we use the sequence generator, which generates a list of strings based on the template string:
+基于这些定义，我们现在定义通用寄存器。注意，m88k架构的通用寄存器是32位宽的，可以保存整数和浮点值。为了避免写入所有寄存器名，使用序列生成器，基于模板字符串生成字符串列表:
 
 \begin{cpp}
 def GPR : M88kRegisterClass<[i32, f32], 32, 32,
                             (add (sequence "R%u", 0, 31))>;
 \end{cpp}
 
-Likewise, we define the register operand. The r0 register is special because it contains the constant 0. This fact can be used by the global instruction selection framework, and therefore, we attach this information to the register operand:
+同样，我们定义了寄存器操作数。r0寄存器很特殊，因为它包含常数0。全局指令选择框架可以使用这一事实，因此将该信息添加到寄存器操作数上:
 
 \begin{cpp}
 def GPROpnd : M88kRegisterOperand<GPR> {
@@ -62,9 +62,9 @@ def GPROpnd : M88kRegisterOperand<GPR> {
 }
 \end{cpp}
 
-There is an extension to the m88k architecture that defines an extended register file for floating-point values only. You would define those registers in the same way as the general-purpose registers.
+m88k架构有一个扩展，为浮点值定义了一个扩展的寄存器文件。可与通用寄存器相同的方式定义这些寄存器。
 
-The general-purpose registers are also used in pairs, mainly for 64-bit floating point operations, and we need to model them. We use the sub\_hi and sub\_lo sub-register indices to describe the high 32 bits and the low 32 bits. We also need to set the C++ namespace for the generated code:
+通用寄存器也成对使用，主要用于64位浮点运算，需要对它们进行建模。我们使用sub\_hi和sub\_lo子寄存器索引来描述高32位和低32位。还需要为生成的代码设置C++命名空间:
 
 \begin{cpp}
 let Namespace = "M88k" in {
@@ -73,7 +73,7 @@ let Namespace = "M88k" in {
 }
 \end{cpp}
 
-The register pairs are then defined using the RegisterTuples class. The class takes a list of sub-register indices as the first argument and a list of registers as the second argument. We only need even/odd numbered pairs, and we achieve this with the optional fourth parameter of sequence, which is the stride to use when generating the sequence:
+使用RegisterTuples类定义寄存器对，该类将子寄存器索引列表作为第一个参数，并将寄存器列表作为第二个参数。只需要偶数/奇数对，就可通过sequence的第四个可选参数来实现这一点，这是在生成序列时使用的步幅:
 
 \begin{cpp}
 def GRPair : RegisterTuples<[sub_hi, sub_lo],
@@ -81,7 +81,7 @@ def GRPair : RegisterTuples<[sub_hi, sub_lo],
                             (add (sequence "R%u", 1, 31, 2))]>;
 \end{cpp}
 
-To use the register pairs, we define a register class and a register operand:
+要使用寄存器对，需要定义一个寄存器类和一个寄存器操作数:
 
 \begin{cpp}
 def GPR64 : M88kRegisterClass<[i64, f64], 64, 32,
@@ -89,27 +89,27 @@ def GPR64 : M88kRegisterClass<[i64, f64], 64, 32,
 def GPR64Opnd : M88kRegisterOperand<GPR64>;
 \end{cpp}
 
-Please note that we set the copycost parameter to 2 because we need two instructions instead of one to copy a register pair to another register pair.
+请注意，我们将copycost参数设置为2，因为需要两个指令而不是一个指令来将一个寄存器对复制到另一个寄存器对。
 
-This finishes our definition of the registers. In the next section, we will define the instruction formats.
+这就完成了对寄存器的定义。在下一节中，我们将定义指令格式。
 
-\mySubsubsection{11.4.2.}{Defining the instruction formats and the instruction informations}
+\mySubsubsection{11.4.2.}{定义指令格式和指令信息}
 
-An instruction is defined using the TableGen Instruction class. Defining an instruction is a complex task because we have to consider many details. An instruction has a textual representation used by the assembler and the disassembler. It has a name, for example, and, and it may have operands. The assembler transforms the textual representation into a binary format, therefore, we must define the layout of that format. For instruction selection, we need to attach a pattern to the instruction. To manage this complexity, we define a class hierarchy. The base classes will describe the various instruction formats and are stored in the M88kIntrFormats.td file. The instructions themselves and other definitions required for the instruction selection are stored in the M88kInstrInfo.td file.
+指令是使用TableGen指令类定义的。定义一条指令是一项复杂的任务，所以必须考虑许多细节，指令具有供汇编程序和反汇编程序使用的文本表示形式。例如，有一个名称，并且可以有操作数。汇编程序将文本表示转换为二进制格式，所以必须定义该格式的布局。对于指令选择，需要给指令附加一个模式。为了管理这种复杂性，需要定义一个类层次结构。基类将描述各种指令格式，并存储在M88kIntrFormats.td文件中。指令本身和指令选择所需的其他定义存储在M88kInstrInfo.td文件中。
 
-Let’s begin with defining a class for the instructions of the m88k architecture called M88kInst. We derive this class from the predefined Instruction class. Our new class has a couple of parameters. The outs and ins parameters describe the output and input operands as a list, using the special dag type. The textual representation of the instruction is split into the mnemonic given in theasm parameter, and the operands. Last, the pattern parameter can hold a pattern used for instruction selection.
+首先为m88k架构指令定义一个名为M88kInst的类，可从预定义的指令类派生出这个类。我们的新类有几个参数。outs和ins参数使用特殊的dag类型将输出和输入操作数描述为一个列表。指令的文本表示分为asm参数中给出的助记符和操作数。最后，pattern参数可以保存用于指令选择的模式。
 
-We also need to define two new fields:
+还要定义两个新字段:
 
 \begin{itemize}
 \item
-The Inst field is used to hold the bit pattern of the instruction. Because the size of an instruction depends on the platform, this field cannot be predefined. All instructions of the m88k architecture are 32-bit wide, and so this field has the bits<32> type.
+Inst字段用于保存指令的位模式。因为指令的大小取决于平台，所以这个字段不能预先定义。m88k架构的所有指令都是32位宽的，因此该字段为bits<32>类型。
 
 \item
-The other field is called SoftFail and has the same type as Inst. It holds a bit mask used with an instruction for which the actual encoding can differ from the bits in the Inst field and still be valid. The only platform that requires this is ARM, so we can simply set this field to 0.
+另一个字段称为SoftFail，与Inst具有相同的类型。保存一个位掩码，用于指令的实际编码可以与Inst字段中的位不同，但仍然有效。唯一需要这个的平台是ARM，所以可以简单地将这个字段设置为0。
 \end{itemize}
 
-The other fields are defined in the superclass, and we only set the value. Simple computations are possible in the TableGen language, and we use this when we create the value for the AsmString field, which holds the full assembler representation. If the operands operand string is empty, then the AsmString field will just have the value of the asm parameter, otherwise, it will be the concatenation of both strings, with a space between them:
+其他字段在超类中定义，只设置值。TableGen语言中可以进行简单的计算，在为AsmString字段创建值时使用，AsmString字段包含完整的汇编程序表示。若操作数的操作数字符串为空，AsmString字段将只包含asm参数的值；否则，它将是两个字符串的连接，它们之间有一个空格:
 
 \begin{cpp}
 class InstM88k<dag outs, dag ins, string asm, string operands,
@@ -128,7 +128,7 @@ class InstM88k<dag outs, dag ins, string asm, string operands,
 }
 \end{cpp}
 
-For the instruction encoding, the manufacturer usually groups instructions together, and the instructions of one group have a similar encoding. We can use those groups to systematically create classes defining the instruction formats. For example, all logical operations of the m88k architecture encode the destination register in the bits from 21 to 25 and the first source register in the bits from 16 to 20. Please note the implementation pattern here: we declare the rd and rs1 fields for the values, and we assign those values to the correct bit positions of the Inst field, which we defined previously in the superclass:
+对于指令编码，制造商通常将指令分组在一起，一组指令具有相似的编码。可以使用这些组系统地创建定义指令格式的类。例如，m88k架构的所有逻辑操作都将目标寄存器编码为21到25位，将第一个源寄存器编码为16到20位。请注意这里的实现模式:为值声明了rd和rs1字段，并将这些值赋给了之前在超类中定义的Inst字段的正确位:
 
 \begin{cpp}
 class F_L<dag outs, dag ins, string asm, string operands,
@@ -141,7 +141,7 @@ class F_L<dag outs, dag ins, string asm, string operands,
 }
 \end{cpp}
 
-There are several groups of logical operations based on this format. One of them is the group of instructions using three registers, which is called triadic addressing mode in the manual:
+有几组基于这种格式的逻辑操作。其中一种是使用三个寄存器的指令组，在手册中称为三元寻址模式:
 
 \begin{cpp}
 class F_LR<bits<5> func, bits<1> comp, string asm,
@@ -158,17 +158,17 @@ class F_LR<bits<5> func, bits<1> comp, string asm,
 }
 \end{cpp}
 
-Let’s examine the functionality provided by this class in more detail. The func parameter specifies the operation. As a special feature, the second operand can be complemented before the operation, which is indicated by setting the flag comp to 1. The mnemonic is given in the asm parameter, and an instruction selection pattern can be passed.
+让我们更详细地研究一下这个类提供的功能。函数形参指定操作，作为一个特殊的特性，第二个操作数可以在操作之前进行补充，可以通过将标志comp设置为1来表示。助记符在asm参数中给出，并可以传递指令选择模式。
 
-With initializing the superclass, we can give more information. The full assembler text template for the and instruction is and \$rd, \$rs1, \$rs2. The operand string is fixed for all instructions of this group, so we can define it here. The mnemonic is given by the user of this class, but we can concatenate the .c suffix here, which denotes that the second operand should be complemented first. And last, we can define the output and input operands. These operands are expressed as directed acyclic graphs or dag for short. A dag has an operation and a list of arguments. An argument can also be a dag, which allows the construction of complex graphs. For example, the output operand is (outs GPROpnd:\$rd).
+通过初始化超类，可以提供更多信息。and指令的完整汇编文本模板是and \$rd，\$rs1，\$rs2。对于该组的所有指令，操作数字符串是固定的，所以可以在这里定义。助记符由该类的用户提供，可以在这里连接.c后缀，这表示应该首先补充第二个操作数。最后，可以定义输出和输入操作数，这些操作数表示为有向无环图或简称为dag。dag有一个操作和一个参数列表。参数也可以是dag，允许构造复杂的图。例如，输出操作数为(outs GPROpnd:\$rd)。
 
-The outs operation denotes this dag as the output operand list. The only argument, GPROpnd:\$rd, consists of a type and a name. It connects several pieces we have already seen. The type is GPROnd, which is the name of the register operand we have defined in the previous section. The name \$rd refers to the destination register. We used this name in the operand string earlier, and also as a field name in the F\_L superclass. The input operands are defined similarly. The rest of the class initializes the other bits of the Inst field. Please take the time and check that all 32 bits are indeed now assigned.
+outs操作将此dag表示为输出操作数列表。唯一的参数GPROpnd:\$rd由一个类型和一个名称组成，连接了之前看到的几个部分。类型是GPROnd，在前一节中定义的寄存器操作数的名称。名称\$rd指的是目标寄存器。前面的操作数字符串中使用了这个名称，并且在F\_L超类中也使用了这个名称，输入操作数的定义类似，类的其余部分初始化Inst字段的其他部分。请花点时间检查所有32位是否已经分配。
 
-We put the final instruction definition in the M88kInstrInfo.td file. Since we have two variants of each logical instruction, we use a multiclass to define both instructions at once. We also define here the pattern for the instruction selection as a directed acyclic graph. The operation in the pattern is set, and the first argument is the destination register. The second argument is a nested graph, which is the actual pattern. Once again, the name of the operation is the first OpNode element.
+将最后的指令定义放在M88kInstrInfo.td文件中。由于每个逻辑指令都有两个变体，因此使用一个多类来同时定义这两个指令。这里也将指令选择的模式定义为有向无环图，设置模式中的操作，第一个参数是目标寄存器。第二个参数是一个嵌套图，这是实际的模式。同样，操作的名称是第一个OpNode元素。
 
-LLVM has many predefined operations, which you find in the llvm/include/llvm/Target/ TargetSelectionDAG.td file (\url{https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/Target/TargetSelectionDAG.td}). For example, there is the and operation, which denotes a bitwise AND operation. The arguments are the two source registers, \$rs1 and \$rs2.You read this pattern roughly as follows: if the input to the instruction selection contains an OpNode operation using two registers, then assign the result of this operation to the \$rd register and generate this instruction. Utilizing the graph structure, you can define more complex patterns. For example, the second pattern integrates the complement into the pattern using the not operand.
+LLVM有许多预定义的操作，这些操作可以在llvm/include/llvm/Target/TargetSelectionDAG.td文件中找到件(\url{https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/Target/TargetSelectionDAG.td})。例如，有and操作，表示位与操作。参数是两个源寄存器，\$rs1和\$rs2。大致可以这样阅读该模式:若指令选择的输入包含使用两个寄存器的OpNode操作，则该操作的结果赋值给\$rd寄存器，并生成该指令。利用图结构，可以定义更复杂的模式。例如，第二个模式使用非操作数将补码集成到模式中。
 
-A small detail to point out is that the logical operations are commutative. This can be helpful for the instruction selection, so we set the isCommutable flag to 1 for those instructions:
+需要指出的一个小细节是，逻辑运算是可交换的。这对指令选择很有帮助，所以可以将这些指令的isCommutable标志设置为1:
 
 \begin{cpp}
 multiclass Logic<bits<5> Fun, string OpcStr, SDNode OpNode> {
@@ -182,7 +182,7 @@ multiclass Logic<bits<5> Fun, string OpcStr, SDNode OpNode> {
 }
 \end{cpp}
 
-And finally, we define the records for the instructions:
+最后，定义指令的记录:
 
 \begin{cpp}
 defm AND : Logic<0b01000, "and", and>;
@@ -190,17 +190,17 @@ defm XOR : Logic<0b01010, "xor", xor>;
 defm OR : Logic<0b01011, "or", or>;
 \end{cpp}
 
-The first parameter is the bit pattern for the function, the second is the mnemonic, and the third parameter is the dag operation used in the pattern.
+第一个参数是函数的位模式，第二个是助记符，第三个参数是模式中使用的dag操作。
 
-To fully understand the class hierarchy, revisit the class definitions. The guiding design principle is to avoid the repetition of information. For example, the 0b01000 function bit pattern is used exactly once. Without the Logic multiclass you would need to type this bit pattern twice and repeat the patterns several times, which is error-prone.
+要完全理解类层次结构，重新查看类定义。指导设计原则是避免信息的重复。例如，0b01000函数位模式只使用一次。若没有Logic多类，需要输入此位模式两次，并重复该模式几次，这很容易出错。
 
-Please also note that it is good to establish a naming scheme for the instructions. For example, the record for the and instruction is named ANDrr, while the variant with the complemented register is named ANDrrc. Those names end up in the generated C++ source code, and using a naming scheme helps to understand to which assembler instruction the name refers.
+请注意，最好为说明建立一个命名方案。例如，and指令的记录命名为ANDrr，而带有补充寄存器的变体命名为ANDrrc。这些名称最终会出现在生成的C++源代码中，使用命名方案有助于理解该名称指的是哪条汇编指令。
 
-Up to now, we modeled the register file of the m88k architecture and defined a couple of instructions. In the next section, we will create the top-level file.
+到目前为止，我们对m88k架构的寄存器文件进行了建模，并定义了一些指令。在下一节中，我们将创建顶层文件。
 
-\mySubsubsection{11.4.3.}{Creating the top-level file for the target description}
+\mySubsubsection{11.4.3.}{为目标描述创建顶层文件}
 
-So far, we created the M88kRegisterInfo.td, M88kInstrFormats.td, and M88kInstrInfo. td files. The target description is a single file, called M88k.td. This file includes the LLVM definitions first, and the files that we have implemented follow afterwards.:
+我们创建了M88kRegisterInfo.td，M88kInstrFormats.td和M88kInstrInfo.td的文件。目标描述是一个名为M88k.td的文件，该文件首先包含LLVM定义:
 
 \begin{cpp}
 include "llvm/Target/Target.td"
@@ -210,15 +210,15 @@ include "M88kInstrFormats.td"
 include "M88kInstrInfo.td"
 \end{cpp}
 
-We will extend this include section later when we add more backend functionality.
+我们将在稍后添加更多后端功能时扩展这个include部分。
 
-The top-level file also defines some global instances. The first record named M88kInstrInfo holds the information about all instructions:
+顶层文件还定义了一些全局实例。第一个名为M88kInstrInfo的记录保存了所有指令的信息:
 
 \begin{cpp}
 def M88kInstrInfo : InstrInfo;
 \end{cpp}
 
-We call the assembler class M88kAsmParser. To enable TableGen to identify hardcoded registers, we specify that register names are prefixed with a percent sign, and we need to define an assembler parser variant to specify this:
+我们将汇编类称为M88kAsmParser。为了使TableGen能够识别硬编码寄存器，指定寄存器名，以百分号为前缀，这里需要定义一个汇编解析器来指定:
 
 \begin{cpp}
 def M88kAsmParser : AsmParser;
@@ -227,7 +227,7 @@ def M88kAsmParserVariant : AsmParserVariant {
 }
 \end{cpp}
 
-And last, we need to define the target:
+最后，需要定义目标:
 
 \begin{cpp}
 def M88k : Target {
@@ -237,7 +237,7 @@ def M88k : Target {
 }
 \end{cpp}
 
-We now have defined enough of the target so that we can code the first utility. In the next section, we add the M88k backend to LLVM.
+现在，已经定义了足够的目标，可以编写第一个实用程序了。在下一节中，我们将向LLVM添加M88k后端。
 
 
 

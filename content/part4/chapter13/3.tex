@@ -1,36 +1,36 @@
-Today, many small computers, such as the Raspberry Pi, are in use despite having only limited resources. Running a compiler on such a computer is often not possible or it takes too much time. Thus, a common requirement for a compiler is to generate code for a different CPU architecture. The whole process of having a host compile an executable for a different target is called cross-compiling.
+今天，许多小型计算机(如树莓派)，只有有限的资源。在这样的计算机上运行编译器通常是不可能的，或者需要花费太多时间。因此，编译器的一个常见需求是为不同的CPU架构生成代码。让主机为不同的目标编译可执行文件的整个过程，称为交叉编译。
 
-In cross-compiling, two systems are involved: the host system and the target system. The compiler runs on the host system and produces code for the target system. To denote the systems, the so-called triple is used. This is a configuration string that usually consists of the CPU architecture, the vendor, and the operating system. Furthermore, additional information about the environment is often added to the configuration string. For example, the x86\_64-pc-win32 triple is used for a Windows system running on a 64-bit X86 CPU. The CPU architecture is x86\_64, pc is a generic vendor, and win32 is the operating system, and all of these pieces are connected by a hyphen. A Linux system running on an ARMv8 CPU uses aarch64-unknown-linux-gnu as the triple, with aarch64 as the CPU architecture. Moreover, the operating system is linux, running a gnu environment. There is no real vendor for a Linux-based system, so this part is unknown. Additionally, parts that are not known or unimportant for a specific purpose are often omitted: the aarch64-linux-gnu triple describes the same Linux system.
+在交叉编译中，涉及到两个系统:主机系统和目标系统。编译器在主机系统上运行，并为目标系统生成代码。为了表示系统，使用了所谓的三元组。这是一个配置字符串，通常由CPU架构、供应商和操作系统组成。此外，有关环境的附加信息经常被添加到配置字符串中。例如，x86\_64-pc-win32三元组用于在64位x86 CPU上运行的Windows系统。CPU架构是x86\_64, pc是通用厂商，win32是操作系统，所有这些部分都用连字符连接起来。在ARMv8 CPU上运行的Linux系统使用aarch64-unknown-linux-gnu作为三元组，使用aarch64作为CPU架构。此外，操作系统是linux，运行gnu环境。没有真正的基于linux的系统供应商，所以这部分是未知的。此外，对于特定目的不知道或不重要的部分经常省略:aarch64-linux-gnu三元组描述相同的Linux系统。
 
-Let’s assume your development machine runs Linux on an X86 64-bit CPU and you want to crosscompile to an ARMv8 CPU system running Linux. The host triple is x86\_64-linux-gnu and the target triple is aarch64-linux-gnu. Different systems have different characteristics. Thus, your application must be written in a portable fashion; otherwise, complications may arise. Some common pitfalls are as follows:
-
-\begin{itemize}
-\item
-Endianness: The order in which multi-byte values are stored in memory can be different.
-
-\item
-Pointer size: The size of a pointer varies with the CPU architecture (usually 16, 32, or 64-bit). The C int type may not be large enough to hold a pointer.
-
-\item
-Type differences: Data types are often closely related to the hardware. The long double type can use 64-bit (ARM), 80-bit (X86), or 128-bit (ARMv8). PowerPC systems may use doubledouble arithmetic for long double, which gives more precision by using a combination of two 64-bit double values.
-\end{itemize}
-
-If you do not pay attention to these points, then your application can act surprisingly or crash on the target platform, even if it runs perfectly on your host system. The LLVM libraries are tested on different platforms and also contain portable solutions to the aforementioned issues.
-
-For cross-compiling, the following tools are required:
+假设开发机器在x86-64位CPU上运行Linux，并且希望交叉编译到运行Linux的ARMv8 CPU系统。主机三元组为x86\_64-linux-gnu，目标三元组为aarch64-linux-gnu。不同的系统有不同的特点，所以应用程序必须以可移植的方式编写;否则，可能会出现一些问题。一些常见的问题如下:
 
 \begin{itemize}
 \item
-A compiler that generates code for the target
+字节顺序:多字节值在内存中的存储顺序可以不同。
 
 \item
-A linker capable of generating binaries for the target
+指针大小:指针大小随CPU架构不同而不同(通常为16位、32位或64位)。C int类型可能不够大，无法容纳指针。
 
 \item
-Header files and libraries for the target
+类型差异:数据类型通常与硬件密切相关。long double类型可以使用64位(ARM)、80位(X86)或128位(ARMv8)。PowerPC系统可以对长双精度使用double-double算法，通过使用两个64位双精度值的组合来提供更高的精度。
 \end{itemize}
 
-Fortunately, the Ubuntu and Debian distributions have packages that support cross-compiling. We’re taking advantage of this in the following setup. The gcc and g++ compilers, the linker, ld, and the libraries are available as precompiled binaries that produce ARMv8 code and executables. The following command installs all of these packages:
+若不注意这些问题，则即使应用程序在您的主机系统上完美运行，也可能在目标平台上异常运行或崩溃。LLVM库在不同的平台上进行了测试，并且还包含针对上述问题的可移植解决方案。
+
+交叉编译时，需要使用以下工具:
+
+\begin{itemize}
+\item
+为目标生成代码的编译器
+
+\item
+能够为目标生成二进制文件的链接器
+
+\item
+目标的头文件和库
+\end{itemize}
+
+幸运的是，Ubuntu和Debian发行版都有支持交叉编译的包。我们将在下面的设置中利用这一点。gcc和g++编译器、链接器、ld和库都可以作为预编译的二进制文件使用，它们可以生成ARMv8代码和可执行文件。下面的命令安装所有这些包:
 
 \begin{shell}
 $ sudo apt –y install gcc-12-aarch64-linux-gnu \
@@ -38,15 +38,15 @@ $ sudo apt –y install gcc-12-aarch64-linux-gnu \
     libstdc++-12-dev-arm64-cross
 \end{shell}
 
-The new files are installed under the /usr/aarch64-linux-gnu directory. This directory is the (logical) root directory of the target system. It contains the usual bin, lib, and include directories. The cross-compilers (aarch64-linux-gnu-gcc-8 and aarch64-linux-gnu-g++-8) are aware of this directory.
+新文件安装在/usr/aarch64-linux-gnu目录下。该目录是目标系统的(逻辑)根目录，包含通常的bin、lib和include目录。交叉编译器(aarch64-linux-gnu-gcc-8和aarch64-linux-gnu-g++-8)知道这个目录。
 
-\begin{myTip}{Cross-compiling on other systems}
-Some distributions, such as Fedora, only provide cross-compiling support for bare-metal targets such as the Linux kernel, but the header and library files needed for user land applications are not provided. In such a case, you can simply copy the missing files from your target system.
+\begin{myTip}{在其他系统上交叉编译}
+有些发行版(如Fedora)只提供对裸机目标(如Linux内核)的交叉编译支持，但不提供用户应用程序所需的头文件和库文件。这种情况下，可以从目标系统复制缺失的文件。
 
-If your distribution does not come with the required toolchain, then you can build it from source. For the compiler, you can use clang or gcc/g++. The gcc and g++ compilers must be configured to produce code for the target system and the binutils tools need to handle files for the target system. Moreover, the C and C++ libraries need to be compiled with this toolchain. The steps vary by operating system and host and target architecture. On the web, you can find instructions if you search for gcc cross-compile <architecture>.
+若发行版没有附带所需的工具链，可以从源代码构建它。对于编译器，可以使用clang或gcc/g++。gcc和g++编译器必须配置为为目标系统生成代码，binutils工具需要为目标系统处理文件。此外，C和C++库需要使用这个工具链进行编译。步骤因操作系统、主机和目标架构而异。在web上，搜索gcc cross-compile <architecture>，可以找到相关说明。
 \end{myTip}
 
-With this preparation, you are almost ready to cross-compile the sample application (including the LLVM libraries) except for one little detail. LLVM uses the TableGen tool during the build. During cross-compilation, everything is compiled for the target architecture, including this tool. You can use llvm-tblgen from the build in Chapter 1 or you can compile only this tool. Assuming you are in the directory that contains the clone of this book’s GitHub repository, type the following:
+有了这些准备，除了一个小细节之外，可以交叉编译示例应用程序(包括LLVM库)了。LLVM在构建过程中使用TableGen工具。交叉编译期间，将为目标架构编译所有内容，包括此工具。可以使用第1章中构建的llvm-tblgen，也可以只编译这个工具。假设在本书的GitHub代码库克隆的目录中，输入以下命令:
 
 \begin{shell}
 $ mkdir build-host
@@ -60,9 +60,9 @@ $ ninja llvm-tblgen
 $ cd ..
 \end{shell}
 
-These steps should be familiar by now. A build directory is created and entered. The cmake command creates the build files for LLVM only for the X86 target. To save space and time, a release build is done but assertions are enabled to catch possible errors. Only the llvm-tblgen tool is compiled with ninja.
+这些步骤现在应该很熟悉了。创建并输入一个构建目录。cmake命令仅为X86目标创建LLVM的构建文件。为了节省空间和时间，完成了发布构建，启用了断言来捕获可能的错误。只有llvm-tblgen工具是用ninja编译的。
 
-With the llvm-tblgen tool at hand, you can now start the cross-compilation process. The CMake command line is very long, so you may want to store the command in a script file. The difference from previous builds is that more information must be provided:
+有了llvm-tblgen工具，就可以开始交叉编译过程了。CMake命令行非常长，开发者可能希望将命令存储在脚本文件中。与以前版本的不同之处在于必须提供更多信息:
 
 \begin{shell}
 $ mkdir build-target
@@ -84,37 +84,37 @@ $ cmake -G Ninja \
 $ ninja
 \end{shell}
 
-Again, you create a build directory and enter it before running the CMake command. Some of these CMake parameters have not been used before and require some explanation:
+同样，需要创建一个构建目录并在运行CMake命令之前输入它。这些CMake参数中有一些以前没有使用过，需要一些解释:
 
 \begin{itemize}
 \item
-CMAKE\_CROSSCOMPILING set to ON tells CMake that we are cross-compiling.
+CMAKE\_CROSSCOMPILING设置为ON，说明CMake正在交叉编译。
 
 \item
-LLVM\_TABLEGEN specifies the path to the llvm-tblgen tool to use. This is the one from the previous build.
+LLVM\_TABLEGEN指定要使用的llvm-tblgen工具的路径。
 
 \item
-LLVM\_DEFAULT\_TARGET\_TRIPLE is the triple of the target architecture.
+LLVM\_DEFAULT\_TARGET\_TRIPLE是目标架构的三元组。
 
 \item
-LLVM\_TARGET\_ARCH is used for JIT code generation. It defaults to the architecture of the host. For cross-compiling, this must be set to the target architecture.
+LLVM\_TARGET\_ARCH用于JIT代码生成。默认为主机的架构。对于交叉编译，必须将其设置为目标架构。
 
 \item
-LLVM\_TARGETS\_TO\_BUILD is the list of targets for which LLVM should include code generators. The list should at least include the target architecture.
+LLVM\_TARGETS\_TO\_BUILD是LLVM应该包含代码生成器的目标列表，该列表至少应该包括目标架构。
 
 \item
-CMAKE\_C\_COMPILER and CMAKE\_CXX\_COMPILER specify the C and C++ compilers used for the build, respectively. The binaries of the cross-compilers are prefixed with the target triple and are not found automatically by CMake.
+CMAKE\_C\_COMPILER和CMAKE\_CXX\_COMPILER分别指定用于构建的C和C++编译器。交叉编译器的二进制文件以目标三元组为前缀，并且不会让CMake自动找到。
 \end{itemize}
 
-With the other parameters, a release build with assertions enabled is requested and our tinylang application is built as part of LLVM. Once the compilation process has finished, the file command can demonstrate that we have created a binary for ARMv8. Specifically, we can run \$ file bin/ tinylang and check that the output says ELF 64-bit object for the ARM aarch64 architecture.
+使用其他参数，将请求启用断言的版本构建，并将的tinylang应用程序构建为LLVM的一部分。编译过程完成后，file命令可以证明我们已经为ARMv8创建了一个二进制文件。具体来说，我们可以运行\$ file bin/ tinylang并检查输出是否为用于ARM aarch64架构的ELF 64位对象。
 
-\begin{myTip}{Cross-compiling with clang}
-As LLVM generates code for different architectures, it seems obvious to use clang to crosscompile. The obstacle here is that LLVM does not provide all the required parts – for example, the C library is missing. Because of this, you must use a mix of LLVM and GNU tools and as a result, you need to tell CMake even more about the environment you are using. As a minimum, you need to specify the following options for clang and clang++: -{}-target=<targettriple> (enables code generation for a different target), -{}-sysroot=<path> (path to the root directory for the target), I (search path for header files), and –L (search path for libraries).
+\begin{myTip}{使用clang进行交叉编译}
+由于LLVM为不同的架构生成代码，使用clang进行交叉编译似乎是显而易见的。这里的难点是LLVM不提供所有必需的部分——例如，缺少C库。正因为如此，必须混合使用LLVM和GNU工具，因此，需要告诉CMake更多关于正在使用的环境的信息。至少，需要为clang和clang++指定以下选项:-{}-target=<targettriple>(为不同的目标启用代码生成)，-{}-sysroot=<path>(目标的根目录路径)，I(搜索头文件的路径)和- l(搜索库的路径)。
 
-During the CMake run, a small application is compiled and CMake complains if something is wrong with your setup. This step is sufficient to check if you have a working environment. Common problems are picking the wrong header files or link failures due to different library names or wrong search paths.
+CMake运行期间，编译一个小的应用程序时，若设置有问题，CMake会报错。这一步足以检查你是否有一个工作环境。常见的问题是由于不同的库名称或错误的搜索路径，导致选择错误的头文件或链接，从而编译失败。
 \end{myTip}
 
-Cross-compiling is surprisingly complex. With the instructions from this section, you will be able to cross-compile your application for a target architecture of your choice.
+交叉编译非常复杂。根据本节的说明，将能够为您选择的架构结构交叉编译应用程序。
 
 
 

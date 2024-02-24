@@ -1,9 +1,9 @@
 
-The target description captures most information about registers and instructions. To access that information, we must implement the M88kRegisterInfo and M88kInstrInfo classes. These classes also contain hooks that we can override to accomplish tasks that are too complex to express in the target description. Let’s begin with the M88kRegisterInfo class, which is declared in the M88kRegisterInfo.h file:
+目标描述捕获有关寄存器和指令的大部分信息。要访问该信息，必须实现M88kRegisterInfo和M88kInstrInfo类。这些类还包含钩子，可以覆盖这些钩子来完成那些太复杂，而无法在目标描述中表达的任务。从M88kRegisterInfo类开始，在M88kRegisterInfo.h文件中声明:
 
 \begin{enumerate}
 \item
-The header file begins by including the code generated from the target description:
+头文件首先包含从目标描述生成的代码:
 
 \begin{cpp}
 #define GET_REGINFO_HEADER
@@ -11,7 +11,7 @@ The header file begins by including the code generated from the target descripti
 \end{cpp}
 
 \item
-After that, we must declare the M88kRegisterInfo class in the llvm namespace. We only override a couple of methods:
+之后，必须在llvm命名空间中声明M88kRegisterInfo类。我们只重写了几个方法:
 
 \begin{cpp}
 namespace llvm {
@@ -37,11 +37,11 @@ struct M88kRegisterInfo : public M88kGenRegisterInfo {
 
 \end{enumerate}
 
-The definition of the class is stored in the M88kRegisterInfo.cpp file:
+类的定义存储在M88kRegisterInfo.cpp文件中:
 
 \begin{enumerate}
 \item
-Again, the film begins with including the code generated from the target description:
+同样，该文件以包含从目标描述生成的代码开始:
 
 \begin{cpp}
 #define GET_REGINFO_TARGET_DESC
@@ -49,7 +49,7 @@ Again, the film begins with including the code generated from the target descrip
 \end{cpp}
 
 \item
-The constructor initializes the superclass, passing the register holding the return address as a parameter:
+构造函数初始化超类，将保存返回地址的寄存器作为参数传递:
 
 \begin{cpp}
 M88kRegisterInfo::M88kRegisterInfo()
@@ -57,7 +57,7 @@ M88kRegisterInfo::M88kRegisterInfo()
 \end{cpp}
 
 \item
-Then, we implement the method that returns the list of callee-saved registers. We defined the list in the target description, and we only return that list:
+然后，调用者保存实现返回的寄存器列表的方法。我们在目标描述中定义了列表，并且只返回该列表:
 
 \begin{cpp}
 const MCPhysReg *M88kRegisterInfo::getCalleeSavedRegs(
@@ -67,7 +67,7 @@ const MCPhysReg *M88kRegisterInfo::getCalleeSavedRegs(
 \end{cpp}
 
 \item
-After, we deal with the reserved registers. The reserved registers depend on the platform and the hardware. The r0 register contains a constant value of 0, so we treat it as a reserved register. The r28 and r29 registers are always reserved for use by a linker. Lastly, the r31 register is used as a stack pointer. This list may depend on the function, and it cannot be generated due to this dynamic behavior:
+之后，处理保留寄存器，保留的寄存器取决于平台和硬件。r0寄存器包含一个常量值0，因此将其视为保留寄存器，r28和r29寄存器始终保留供链接器使用。最后，r31寄存器用作堆栈指针。这个列表可能取决于函数，由于这个动态行为无法生成:
 
 \begin{cpp}
 BitVector M88kRegisterInfo::getReservedRegs(
@@ -82,7 +82,7 @@ BitVector M88kRegisterInfo::getReservedRegs(
 \end{cpp}
 
 \item
-If a frame register is required, then r30 is used. Please note that our code does not support creating a frame yet. If the function requires a frame, then r30 must also be marked as reserved in the getReservedRegs() method. However, we must implement this method because it is declared pure virtual in the superclass:
+若果需要帧寄存器，则使用r30。请注意，代码还不支持创建框架。若函数需要一个帧，那么r30也必须在getReservedRegs()方法中标记为保留。因为它在超类中声明为纯虚，所以必须实现这个方法:
 
 \begin{cpp}
 Register M88kRegisterInfo::getFrameRegister(
@@ -92,7 +92,7 @@ Register M88kRegisterInfo::getFrameRegister(
 \end{cpp}
 
 \item
-Similarly, we need to implement the eliminateFrameIndex() method because it is declared pure virtual. It is called to replace a frame index in an operand with the correct value to use to address the value on the stack:
+类似地，因为其为纯虚拟，所以需要实现eliminateFrameIndex()方法。调用它是为了将操作数中的帧索引替换为正确的值，以便对堆栈上的值进行寻址:
 
 \begin{cpp}
 bool M88kRegisterInfo::eliminateFrameIndex(
@@ -104,11 +104,11 @@ bool M88kRegisterInfo::eliminateFrameIndex(
 
 \end{enumerate}
 
-The M88kInstrInfo class has many hook methods we can override to accomplish special tasks, for example, for branch analysis and rematerialization. For now, we’re only overriding the expandPostRAPseudo() method, in which we expand the pseudo-instruction RET. Let’s begin with the header file, M88kInstrInfo.h:
+M88kInstrInfo类有许多钩子方法，可以覆盖它们来完成特殊任务。例如，用于分支分析和重新具体化。现在，只重写expandPostRAPseudo()方法，在这个方法中扩展了伪指令RET。
 
 \begin{enumerate}
 \item
-The header file begins with including the generated code:
+头文件首先包含生成的代码:
 
 \begin{cpp}
 #define GET_INSTRINFO_HEADER
@@ -116,7 +116,7 @@ The header file begins with including the generated code:
 \end{cpp}
 
 \item
-The M88kInstrInfo class derives from the generated M88kGenInstrInfo class. Besides overriding the expandPostRAPseudo() method, the only other addition is that this class owns an instance of the previously defined class, M88kRegisterInfo:
+M88kInstrInfo类派生自生成的m88kgenstrinfo类。除了覆写expandPostRAPseudo()方法之外，唯一的其他添加是该类拥有先前定义的类M88kRegisterInfo的实例:
 
 \begin{cpp}
 namespace llvm {
@@ -139,11 +139,11 @@ public:
 \end{cpp}
 \end{enumerate}
 
-The implementation is stored in the M88kInstrInfo.cpp class:
+实现存储在M88kInstrInfo.cpp类中:
 
 \begin{enumerate}
 \item
-Like the header file, the implementation begins with including the generated code:
+与头文件一样，实现从包含生成的代码开始:
 
 \begin{cpp}
 #define GET_INSTRINFO_CTOR_DTOR
@@ -152,14 +152,14 @@ Like the header file, the implementation begins with including the generated cod
 \end{cpp}
 
 \item
-Then, we define the anchor() method, which is used to pin the vtable to this file:
+然后，定义anchor()方法，用于将虚参表固定到该文件:
 
 \begin{cpp}
 void M88kInstrInfo::anchor() {}
 \end{cpp}
 
 \item
-Finally, we expand RET in the expandPostRAPseudo() method. As its name suggests, this method is invoked after the register allocator runs and is intended to expand the pseudoinstruction, which may still be mixed with the machine code. If the opcode of the machine instruction, MI, is the pseudo-instruction, RET, we must insert the jmp \%r1 jump instruction, which is the instruction to exit a function. Then, we copy all implicit operands that represent the values to return and we delete the pseudo instruction. If we need other pseudo-instructions during code generation, then we can extend this function to expand them here too:
+最后，在expandPostRAPseudo()方法中展开RET。顾名思义，这个方法是在寄存器分配器运行后调用的，目的是扩展伪指令，伪指令可能仍然与机器码混合在一起。若机器指令MI的操作码是伪指令RET，则必须插入jmp \%r1跳转指令，该指令是退出函数的指令。然后，复制所有表示要返回值的隐式操作数，并删除伪指令。若在代码生成过程中需要其他伪指令，则可以扩展这个函数来扩展它们:
 
 \begin{cpp}
 bool M88kInstrInfo::expandPostRAPseudo(
@@ -189,9 +189,9 @@ bool M88kInstrInfo::expandPostRAPseudo(
 
 \end{enumerate}
 
-Both classes have minimal implementations. If you continue to develop the target, then many more methods need to be overridden. It is worth reading the comments in the TargetInstrInfo and TargetRegisterInfo base classes, which you can find in the llvm/include/llvm/ CodeGen directory.
+这两个类都有最小的实现。若继续开发目标，需要覆写更多的方法。TargetInstrInfo和TargetRegisterInfo基类中的注释值得一读，可以在llvm/include/llvm/CodeGen目录中找到。
 
-We still need more classes to get the instruction selection running. Next, we’ll look at frame lowering.
+还需要更多的类来运行指令选择。接下来，我们将了解帧的向下转译。
 
 
 

@@ -1,39 +1,39 @@
 
-In this section, we will explore how to implement a new machine function pass within LLVM that runs after instruction selection. Specifically, a MachineFunctionPass class will be created, which is a subset of the original FunctionPass class within LLVM that can be run with opt. This class adapts the original infrastructure to allow for the implementation of passes that operate on the MachineFunction representation in the backend through llc.
+本节中，我探讨如何在LLVM中实现一个在指令选择后运行的新机器函数通道。具体来说，将创建一个MachineFunctionPass类，它是LLVM中原始FunctionPass类的一个子集，可以与opt一起运行。该类调整了原始基础设施，以通过llc在后端对MachineFunction表示进行操作的通道实现。
 
-It is important to note that the implementation of passes within the backend utilizes the interfaces of the legacy pass manager, rather than the new pass manager. This is because LLVM currently does not have a complete working implementation of the new pass manager within the backend. Due to this, this chapter will follow the method of adding a new pass within the legacy pass manager pipeline.
+需要注意的是，后端中的通道实现利用遗留的通道管理器接口，而不是新的通道管理器。这是因为LLVM目前在后端，没有一个完整的新通道管理器的工作实现。因此，本章将遵循在遗留通道管理器流水线中添加新通道的方法。
 
-In terms of the actual implementation, such as function passes, machine function passes optimize a single (machine) function at a time, but instead of overriding the runOnFunction() method, machine function passes override the runOnMachineFunction() method. The machine function pass that will be implemented in this section is a pass that checks for when a division by zero occurs, specifically, to insert code that traps in the backend. This type of pass is important for the M88k target due to hardware limitations on MC88100 as this CPU does not reliably detect division by zero situations.
+实现方面，机器函数通道一次优化单个(机器)函数，但不是覆写runOnFunction()方法，而是覆写runOnMachineFunction()方法。本节将实现的机器函数通道是一个通道，用于检查何时发生除零行为，特别是插入后端捕获的代码。由于MC88100上的硬件限制，因为该CPU不能可靠地检测除零情况，所以这种类型的通道对于M88k目标很重要。
 
-Continuing from the previous chapter’s implementation of the backend, let’s examine how a backend machine function pass is implemented!
+继续上一章的后端实现，来看看后端机器函数通道是如何实现的!
 
-\mySubsubsection{13.1.1.}{Implementing the top-level interface for the M88k target}
+\mySubsubsection{13.1.1.}{实现了M88k目标的顶层接口}
 
-Firstly, within llvm/lib/Target/M88k/M88k.h, let’s add two prototypes inside the llvm namespace declaration that will be used later:
+首先，在llvm/lib/Target/M88k/M88k.h中，在llvm命名空间声明中添加两个原型，以便稍后使用:
 
 \begin{enumerate}
 \item
-The machine function pass that will be implemented will be called M88kDivInstrPass. We will add a function declaration that initializes this pass and takes in the pass registry, which is a class that manages the registration and initialization of all passes:
+将要实现的机器函数通道称为M88kDivInstrPass，将添加一个函数声明来初始化这个通道，并接受通道注册表，这是一个管理所有通道的注册和初始化的类:
 
 \begin{cpp}
 void initializeM88kDivInstrPass(PassRegistry &);
 \end{cpp}
 
 \item
-Next, the actual function that creates the M88kDivInstr pass is declared, with the M88k target machine information as its argument:
+接下来，声明创建M88kDivInstr通道的实际函数，将M88k目标机器信息作为其参数:
 
 \begin{cpp}
 FunctionPass *createM88kDivInstr(const M88kTargetMachine &);
 \end{cpp}
 \end{enumerate}
 
-\mySubsubsection{13.1.2.}{Adding the TargetMachine implementation for machine function passes}
+\mySubsubsection{13.1.2.}{为机器函数通道添加TargetMachine实现}
 
-Next, we will analyze some of the changes that are required in llvm/lib/Target/M88k/ M88kTargetMachine.cpp:
+接下来，我们将分析llvm/lib/Target/M88k/M88kTargetMachine.cpp中需要进行的一些更改:
 
 \begin{enumerate}
 \item
-Within LLVM, it’s common to give the user the option to toggle passes on or off. So, let’s provide the user the same flexibility with our machine function pass. We’ll start by declaring a command-line option called m88k-no-check-zero-division and initializing it to false, which implies that there will always be a check for zero division unless the user explicitly turns this off. We’ll add this under the llvm namespace declaration and is an option for llc:
+LLVM中，通常为用户提供打开或关闭传递的选项，所以我们为用户提供与机器功能通道相同的灵活性。首先声明一个名为m88k-no-check-zero-division的命令行选项，并将其初始化为false，所以除非用户显式地将其关闭，否则将始终检查是否有零除法。我们将把它添加到llvm命名空间声明中，并且是llc的一个选项:
 
 \begin{cpp}
 using namespace llvm;
@@ -44,7 +44,7 @@ static cl::opt<bool>
 \end{cpp}
 
 \item
-It is also customary to create a formal method that returns the command-line value so that we can query it to determine whether the pass will be run. Our original command-line option will be wrapped in the noZeroDivCheck() method so that we can utilize the commandline result later:
+还创建一个返回命令行值的正式方法，以便查询它以确定是否将运行该通道。我们最初的命令行选项将封装在noZeroDivCheck()方法中，以便稍后可以使用命令行结果:
 
 \begin{cpp}
 M88kTargetMachine::~M88kTargetMachine() {}
@@ -52,7 +52,7 @@ bool M88kTargetMachine::noZeroDivCheck() const { return NoZeroDivCheck; }
 \end{cpp}
 
 \item
-Next, inside LLVMInitializeM88kTarget(), where the M88k target and passes are registered and initialized, we will insert a call to the initializeM88kDivInstrPass() method that was declared earlier in llvm/lib/Target/M88k/M88k.h:
+接下来，在LLVMInitializeM88kTarget()中，M88k目标和通道注册和初始化，我们将插入对initializeM88kDivInstrPass()方法的调用，该方法先前在llvm/lib/target/M88k/M88k.h中声明:
 
 \begin{cpp}
 extern "C" LLVM_EXTERNAL_VISIBILITY void
@@ -65,7 +65,7 @@ LLVMInitializeM88kTarget() {
 \end{cpp}
 
 \item
-The M88k target also needs to override addMachineSSAOptimization(), which is a method that adds passes to optimize machine instructions when they are in SSA form. Essentially, our machine function pass is added as a type of machine SSA optimization. This method is declared as a function that is to be overridden. We will add the full implementation at the end of M88kTargetMachine.cpp:
+M88k目标还需要覆盖addMachineSSAOptimization()，这是一个方法，当机器指令是SSA形式时，它添加通道来优化机器指令。从本质上讲，我们的机器函数通道是作为一种机器SSA优化添加的，此方法声明为一个将覆写的函数。我们将在M88kTargetMachine.cpp的末尾添加完整的实现:
 
 \begin{cpp}
     bool addInstSelector() override;
@@ -80,7 +80,7 @@ void M88kPassConfig::addMachineSSAOptimization() {
 \end{cpp}
 
 \item
-Our method that returns the command-line option to toggle the machine function pass on and off (the noZeroDivCheck() method) is also declared in M88kTargetMachine.h:
+我们的方法返回命令行选项来切换机器函数传递(noZeroDivCheck()方法)也在M88kTargetMachine.h中声明:
 
 \begin{cpp}
     ~M88kTargetMachine() override;
@@ -88,13 +88,13 @@ Our method that returns the command-line option to toggle the machine function p
 \end{cpp}
 \end{enumerate}
 
-\mySubsubsection{13.1.3.}{Developing the specifics of the machine function pass}
+\mySubsubsection{13.1.3.}{开发具体的机器功能通道}
 
-Now that the implementation in the M88k target machine is completed, the next step will be to develop the machine function pass itself. The implementation is contained within the new file, llvm/lib/ Target/M88k/M88kDivInstr.cpp:
+现在，完成了在M88k目标机上的实现，下一步将是开发机器功能通道本身。实现包含在新文件llvm/lib/Target/M88k/m88kdivinstrument.cpp中:
 
 \begin{enumerate}
 \item
-The necessary headers for our machine function pass are added first. This includes headers that give us access to the M88k target information and headers that allow us to operate on machine functions and machine instructions:
+首先，添加机器函数通道所需的头文件。这包括让我们访问M88k目标信息的头文件和允许操作机器函数和机器指令的头文件:
 
 \begin{cpp}
 #include "M88k.h"
@@ -111,14 +111,14 @@ The necessary headers for our machine function pass are added first. This includ
 \end{cpp}
 
 \item
-After that, we will add some code to prepare for our machine function pass. The first is a DEBUG\_TYPE definition that is named m88k-div-instr, which is used for fine-grained control when debugging. Specifically, defining this DEBUG\_TYPE allows users to specify the machine function pass name and view any debugging information that is pertinent to the pass when debug information is enabled:
+之后，将添加一些代码来准备我们的机器函数通道。第一个是名为m88k-div-instr的DEBUG\_TYPE定义，用于调试时的细粒度控制。具体来说，定义这个DEBUG\_TYPE允许用户指定机器函数传递名称，并在调试信息启用时查看与该传递相关的调试信息:
 
 \begin{cpp}
 #define DEBUG_TYPE "m88k-div-instr"
 \end{cpp}
 
 \item
-We also specify that the llvm namespace is being used, and a STATISTIC value for our machine function is also declared. This statistic, called InsertedChecks, keeps track of how many division-by-zero checks are inserted by the compiler. Finally, an anonymous namespace is declared to encapsulate the subsequent machine function pass implementation:
+还指定使用llvm名称空间，并为机器函数声明一个STATISTIC值。这个统计数据称为InsertedChecks，其跟踪编译器插入了多少个除零检查。最后，声明一个匿名命名空间来封装后续的机器函数通道实现:
 
 \begin{cpp}
 using namespace llvm;
@@ -128,7 +128,7 @@ namespace {
 \end{cpp}
 
 \item
-As mentioned previously, this machine function pass aims to check for division by zero cases and inserts instructions that will cause the CPU to trap. These instructions require condition codes, so an enum value that we call CC0 is defined with condition codes that are valid for the M88k target, along with their encodings:
+如前所述，这个机器函数通道的目的是检查除零的情况，并插入会导致CPU陷入陷阱的指令。这些指令需要条件码，所以们称之为CC0的枚举值定义了对M88k目标有效的条件码，以及它们的编码:
 
 \begin{cpp}
 enum class CC0 : unsigned {
@@ -142,7 +142,7 @@ enum class CC0 : unsigned {
 \end{cpp}
 
 \item
-Let’s create the actual class for our machine function pass next, called M88kDivInstr. Firstly, we create it as an instance that inherits and is of the MachineFunctionPass type. Next, we declare various necessary instances that our M88kDivInstr pass will require. This includes M88kBuilder, which we will create and elaborate on later, and M88kTargetMachine, which contains target instruction and register information. Furthermore, we also require the register bank information and the machine register information when emitting instructions. An AddZeroDivCheck Boolean is also added to represent the previous command-line option, which turns our pass on or off:
+接下来，让为机器函数通道创建实际的类，称为M88kDivInstr。首先，将其创建为继承MachineFunctionPass类型的实例。接下来，声明M88kDivInstr传递将需要的各种必要实例。这包括M88kBuilder(将在后面创建并详细介绍)和M88kTargetMachine(包含目标指令和寄存器信息)。此外，在发出指令时，还需要寄存器库信息和机器寄存器信息。还添加了一个AddZeroDivCheck布尔值来表示前面的命令行选项，可以打开或关闭我们的通道:
 
 \begin{cpp}
 class M88kDivInstr : public MachineFunctionPass {
@@ -156,7 +156,7 @@ class M88kDivInstr : public MachineFunctionPass {
 \end{cpp}
 
 \item
-For the public variables and methods of the M88kDivInstr class, we declare an identification number that LLVM will use to identify our pass, as well as the M88kDivInstr constructor, which takes in M88kTargetMachine. Next, we override the getRequiredProperties() method, which represents the properties that MachineFunction may have at any time during the optimization, and we also override the runOnMachineFunction() method, which will be one of the primary methods that our pass will run when checking for any division by zero. The second important function that is publicly declared is the runOnMachineBasicBlock() function, which will be executed from inside runOnMachineFunction():
+对于M88kDivInstr类的公共变量和方法，我们声明了一个标识号，LLVM将使用它来标识我们的通道，以及M88kDivInstr构造函数，接受M88kTargetMachine。接下来，覆写getRequiredProperties()方法，该方法表示MachineFunction在优化过程中可能具有的属性，还要覆写runOnMachineFunction()方法，这将是我们的通道在检查任何除零时将运行的主要方法之一。第二个公开声明的重要函数是runOnMachineBasicBlock()函数，将从runOnMachineFunction()内部执行:
 
 \begin{cpp}
 public:
@@ -168,7 +168,7 @@ public:
 \end{cpp}
 
 \item
-Finally, the last part is declaring the private methods and closing off the class. The only private method we declare within the M88kDivInstr class is the addZeroDivCheck() method, which inserts the checks for division by zero after any divide instruction. As we will see later, MachineInstr will need to point to specific divide instructions on the M88k target:
+最后，最后一部分是声明私有方法和关闭类。在M88kDivInstr类中声明的唯一私有方法是addZeroDivCheck()方法，在任何除法指令之后插入对除零的检查。正如稍后将看到的，MachineInstr将需要指向M88k目标上的特定分割指令:
 
 \begin{cpp}
 private:
@@ -177,7 +177,7 @@ private:
 \end{cpp}
 
 \item
-An M88kBuilder class is created next, which is a specialized builder instance that creates M88k-specific instructions. This class keeps an instance of MachineBasicBlock (and a corresponding iterator), and DebugLoc to keep track of the debug location of this builder class. Other necessary instances include the target instruction information, the target register information, and the register bank information of the M88k target:
+接下来创建一个M88kBuilder类，是一个专门的构建器实例，用于创建特定于M88k的指令。这个类保存了MachineBasicBlock的一个实例(和一个相应的迭代器)，以及DebugLoc来跟踪这个构建器类的调试位置。其他必要的实例包括M88k目标机的目标指令信息、目标寄存器信息和寄存器库信息：
 
 \begin{cpp}
 class M88kBuilder {
@@ -190,7 +190,7 @@ class M88kBuilder {
 \end{cpp}
 
 \item
-For public methods of the M88kBuilder class, we must implement the constructor for this builder. Upon initialization, our specialized builder requires an instance of the M88kDivInstr pass to initialize the target instruction, register information, and the register bank information, as well as MachineBasicBlock and a debug location:
+对于M88kBuilder类的公共方法，必须实现该构造器的构造函数。在初始化时，专门的构建器需要一个M88kDivInstr传递的实例来初始化目标指令、寄存器信息和寄存器库信息，以及MachineBasicBlock和调试位置:
 
 \begin{cpp}
 public:
@@ -199,7 +199,7 @@ public:
 \end{cpp}
 
 \item
-Next, a method to set MachineBasicBlock inside the M88k builder is created, and the MachineBasicBlock iterator is also set accordingly:
+接下来，在M88k构造器中创建了一个方法来设置MachineBasicBlock，并且相应地设置了MachineBasicBlock迭代器:
 
 \begin{cpp}
 void setMBB(MachineBasicBlock *NewMBB) {
@@ -209,7 +209,7 @@ void setMBB(MachineBasicBlock *NewMBB) {
 \end{cpp}
 
 \item
-The constrainInst() function needs to be implemented next and is needed for when MachineInstr instances are processed. For a given MachineInstr, we check if the register class of the MachineInstr instance’s operands can be constrained through the pre-existing function, constrainSelectedInstRegOperands(). As shown here, this machine function pass requires that the register operands of the machine instruction can be constrained:
+接下来需要实现constraininstt()函数，并且在处理MachineInstr实例时需要它。对于给定的MachineInstr，检查MachineInstr实例的操作数的寄存器类，是否可以通过已有的函数constrainSelectedInstRegOperands()来约束。如图所示，这个机器函数通道可以约束机器指令的寄存器操作数:
 
 \begin{cpp}
 void constrainInst(MachineInstr *MI) {
@@ -219,7 +219,7 @@ void constrainInst(MachineInstr *MI) {
 \end{cpp}
 
 \item
-One of the instructions that this pass inserts is a BCND instruction, as defined in M88kInstrInfo.td, which is a conditional branch on the M88k target. To create this instruction, we require a condition code, which are the CC0 enums that were implemented at the beginning of M88kDivInstr.cpp – that is, a register and MachineBasicBlock. The BCND instruction is simply returned upon creation and after checking if the newly created instruction can be constrained:
+该通道插入的指令之一是BCND指令，如M88kInstrInfo中定义的那样。它是M88k目标上的一个条件分支。为了创建这个指令，需要一个条件代码，是在m88kdivinstrument.cpp开头实现的CC0枚举——一个寄存器和MachineBasicBlock。BCND指令只是在创建和检查新创建的指令是否可以约束后返回:
 
 \begin{cpp}
 MachineInstr *bcnd(CC0 Cc, Register Reg, MachineBasicBlock
@@ -234,7 +234,7 @@ MachineInstr *bcnd(CC0 Cc, Register Reg, MachineBasicBlock
 \end{cpp}
 
 \item
-Similarly, we also require a trap instruction for our machine function pass, which is a TRAP503 instruction. This instruction requires a register and raises a trap with vector 503 if the 0-th bit of the register is not set, which will be raised after a zero division. Upon creating the TRAP503 instruction, TRAP503 is checked for constraints before being returned. Moreover, this concludes the class implementation of the M88kBuilder class and completes the previously declared anonymous namespace:
+类似地，也需要一个trap指令用于我们的机器函数通道，这是一个TRAP503指令。该指令需要一个寄存器，若寄存器的第0位没有设置，则会引发一个带有矢量503的陷阱，该陷阱将在除零后引发。创建TRAP503指令时，在返回TRAP503之前会检查是否存在约束。此外，这结束了M88kBuilder类的类实现，并完成了前面声明的匿名命名空间:
 
 \begin{cpp}
     MachineInstr *trap503(Register Reg) {
@@ -248,7 +248,7 @@ Similarly, we also require a trap instruction for our machine function pass, whi
 \end{cpp}
 
 \item
-We can now start implementing the functions that perform the actual checks in the machine function pass. First, let’s explore how addZeroDivCheck() is implemented. This function simply inserts a check for division by zero between the current machine instruction, which is expected to point to either DIVSrr or DIVUrr; these are mnemonics for signed and unsigned divisions, respectively. The BCND and TRAP503 instructions are inserted, and the InsertedChecks statistic is incremented to indicate the addition of the two instructions:
+现在可以开始实现在机器函数通道中，执行实际检查的函数。首先，探索一下addZeroDivCheck()是如何实现的。该函数只是在当前机器指令之间插入一个除零检查，该指令应该指向DIVSrr或DIVUrr，这些分别是有符号除法和无符号除法的助记符。插入BCND和TRAP503指令，InsertedChecks统计量加1表示添加了两条指令:
 
 \begin{cpp}
 void M88kDivInstr::addZeroDivCheck(MachineBasicBlock &MBB,
@@ -265,7 +265,7 @@ void M88kDivInstr::addZeroDivCheck(MachineBasicBlock &MBB,
 \end{cpp}
 
 \item
-runOnMachineFunction() is implemented next and is one of the important functions to override when creating a type of function pass within LLVM. This function returns true or false, depending on if any changes have been made during the duration of the machine function pass. Furthermore, for a given machine function, we gather all the relevant M88k subtarget information, including the target instruction, target register, register bank, and machine register information.Details regarding whether or not the user turns the M88kDivInstr machine function pass on or off are also queried and stored in the AddZeroDivCheck variable. Additionally, all machine basic blocks in the machine function are analyzed for the division by zero. The function that performs the machine basic block analysis is runOnMachineBasicBlock(); we will implement this next. Finally, if the machine function has changed, this is indicated by the Changed variable that is returned:
+接下来实现runOnMachineFunction()，是在LLVM中创建函数传递类型时要覆写的重要函数之一。此函数返回true或false，取决于在机器函数传递期间是否进行了任何更改。此外，对于给定的机器功能，收集所有相关的M88k子目标信息，包括目标指令、目标寄存器、寄存器库和机器寄存器信息。关于用户是否打开或关闭M88kDivInstr机器功能传递的详细信息也会查询并存储在AddZeroDivCheck变量中。此外，对机器功能中的所有机器基本块进行除零分析。执行机器基本块分析的函数是runOnMachineBasicBlock()，接下来将实现这一点。最后，若机器函数发生了变化，则由返回的changed变量表示:
 
 \begin{cpp}
 bool M88kDivInstr::runOnMachineFunction(MachineFunction &MF) {
@@ -284,7 +284,7 @@ bool M88kDivInstr::runOnMachineFunction(MachineFunction &MF) {
 \end{cpp}
 
 \item
-For the runOnMachineBasicBlock() function, a Changed Boolean flag is also returned to indicate if the machine basic block has been changed; however, it is initially set to false. Furthermore, within a machine basic block, we need to analyze all the machine instructions and check if the instructions are the DIVUrr or DIVSrr opcodes, respectively. In addition to checking if the opcodes are divide instructions, we need to check if the user has turned our machine function pass on or off. If all of these conditions are satisfied, the division by zero checks with the conditional branch and the trap instructions are added accordingly through the addZeroDivCheck() function, which was implemented previously.
+对于runOnMachineBasicBlock()函数，还返回一个Changed布尔标志来指示机器基本块是否已更改，但它最初设置为false。此外，在一个机器基本块中，需要分析所有的机器指令，并检查这些指令是否分别是DIVUrr或DIVSrr操作码。除了检查操作码是否为分割指令外，还需要检查用户是否打开或关闭了机器功能通道。若满足所有这些条件，则用条件分支进行除零检查，并通过前面实现的addZeroDivCheck()函数相应地添加陷阱指令。
 
 \begin{cpp}
 bool M88kDivInstr::runOnMachineBasicBlock(MachineBasicBlock
@@ -305,7 +305,7 @@ bool M88kDivInstr::runOnMachineBasicBlock(MachineBasicBlock
 \end{cpp}
 
 \item
-After, we need to implement the constructor to initialize our function pass and set the appropriate machine function properties. This can be achieved by calling the initializeM88kDivInstrPass() function with the PassRegistry instance inside the constructor of the M88kDivInstr class, and also by setting the machine function properties to indicate that our pass requires machine functions to be in SSA form:
+之后，需要实现构造函数来初始化函数通道，并设置适当的机器函数属性。这可以通过调用initializem88kdivinstpass()函数来实现，在M88kDivInstr类的构造函数中使用PassRegistry实例，也可以通过设置机器函数属性来说明我们的通道需要机器函数是SSA形式:
 
 \begin{cpp}
 M88kDivInstr::M88kDivInstr(const M88kTargetMachine *TM)
@@ -320,7 +320,7 @@ const {
 \end{cpp}
 
 \item
-The next step is to initialize the ID for our machine function pass and to instantiate the INITIALIZE\_PASS macro with the details of our machine function pass. This requires the pass instance, naming information, and two Boolean arguments that indicate if the pass only examines the CFG and if the pass is an analysis pass. Since M88kDivInstr performs neither of those, two false arguments are specified to the pass initialization macro:
+下一步是初始化机器函数传递的ID，并使用机器函数通道的详细信息实例化INITIALIZE\_PASS宏。这需要通道实例、命名信息和两个布尔参数，用于指示通道是否只检查CFG，以及通道是否为分析通道。由于M88kDivInstr不执行这两种操作，因此为通道初始化宏指定了两个false参数:
 
 \begin{cpp}
 char M88kDivInstr::ID = 0;
@@ -328,7 +328,7 @@ INITIALIZE_PASS(M88kDivInstr, DEBUG_TYPE, "Handle div instructions", false, fals
 \end{cpp}
 
 \item
-Finally, the createM88kDivInstr() function creates a new instance of the M88kDivInstr pass, with a M88kTargetMachine instance. This is encapsulated into an llvm namespace, and the namespace is ended after finishing this function:
+最后，createM88kDivInstr()函数使用M88kTargetMachine实例创建M88kDivInstr通道的新实例，将封装到一个llvm命名空间中，并在完成此函数后结束命名空间:
 
 \begin{cpp}
 namespace llvm {
@@ -340,9 +340,9 @@ FunctionPass *createM88kDivInstr(const M88kTargetMachine &TM) {
 \end{enumerate}
 
 
-\mySubsubsection{13.1.4.}{Building newly implemented machine function passes}
+\mySubsubsection{13.1.4.}{构建新实现的机器函数通道}
 
-We’re almost done with implementing our new machine function pass! Now, we need to ensure CMake is aware of the new machine function pass within M88kDivinstr.cpp. This file is then added to llvm/lib/Target/M88k/CMakeLists.txt:
+我们几乎完成了实现新的机器函数通道!现在，需要确保CMake意识到m88kdivinst.cpp中的新机器功能通道。然后，将该文件添加到llvm/lib/Target/M88k/CMakeLists.txt中:
 
 \begin{cmake}
 add_llvm_target(M88kCodeGen
@@ -353,7 +353,7 @@ add_llvm_target(M88kCodeGen
     M88kISelDAGToDAG.cpp
 \end{cmake}
 
-The last step is to build LLVM with our new machine function pass implementation with the following commands. We require the -DLLVM\_EXPERIMENTAL\_TARGETS\_TO\_BUILD=M88k CMake option to build the M88k target:
+最后一步是用以下命令用我们的新机器函数传递实现构建LLVM,需要CMake选项-DLLVM\_EXPERIMENTAL\_TARGETS\_TO\_BUILD=M88k来构建M88k目标:
 
 \begin{shell}
 $ cmake -G Ninja ../llvm-project/llvm -DLLVM_EXPERIMENTAL_TARGETS_TO_
@@ -361,11 +361,11 @@ BUILD=M88k -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="llvm"
 $ ninja
 \end{shell}
 
-With that, we’ve implemented the machine function pass, but wouldn’t it be interesting to see how it works? We can demonstrate the result of this pass by passing LLVM IR through llc.
+这样，就实现了机器函数通道，但看它是如何工作的不是很有趣吗?我们可以通过llc传递LLVM IR来演示此通道的结果。
 
-\mySubsubsection{13.1.5.}{A glimpse of running a machine function pass with llc}
+\mySubsubsection{13.1.5.}{使用llc运行机器功能通道}
 
-We have the following IR, which contains a division by zero:
+我们有下面的IR，包含一个除以0的除法:
 
 \begin{shell}
 $ cat m88k-divzero.ll
@@ -381,13 +381,13 @@ define dso_local i32 @testDivZero() #0 {
 }
 \end{shell}
 
-Let’s feed it into llc:
+把它输入llc:
 
 \begin{shell}
 $ llc m88k-divzero.ll
 \end{shell}
 
-By doing this, we’ll see that, in the resulting assembly, by default, the division by zero checks, which are represented by bcnd.n (BCND) and tb0 (TRAP503), are inserted by our new machine function pass:
+在结果汇编中，默认情况下，除零检查，用bnd.n(BCND)和t0(TRAP503)表示，由我们的新机函数通道插入:
 
 \begin{shell}
 | %bb.1:
@@ -402,13 +402,13 @@ By doing this, we’ll see that, in the resulting assembly, by default, the divi
     tb0 0, %r3, 503
 \end{shell}
 
-However, let’s see what happens when we specify -{}-m88k-no-check-zero-division to llc:
+然而，来看看当为llc指定-{}-m88k-no-check-zero除法时会发生什么:
 
 \begin{shell}
 $ llc m88k-divzero.ll –m88k-no-check-zero-division
 \end{shell}
 
-This option to the backend instructs llc not to run the pass that checks for the division by zero. The resulting assembly will not contain any BCND or TRAP503 instructions. Here’s an example:
+这个后端选项指示llc不运行检查除零的传递，生成的汇编将不包含任何bnd或TRAP503指令。这里有一个例子:
 
 \begin{shell}
 | %bb.1:
@@ -418,7 +418,7 @@ This option to the backend instructs llc not to run the pass that checks for the
     subu %r2, %r0, %r2
 \end{shell}
 
-As we can see, implementing a machine function pass requires several steps, but these procedures can be used as a guideline for you to implement any type of machine function pass that fits your needs. Since we have extensively explored the backend within this section, let’s switch gears and see how we can teach the frontend about the M88k target.
+实现一个机器函数通道需要几个步骤，但是这些步骤可以作为指导方针，帮助您实现任何类型的机器函数通道，以满足需求。我们已经在本节中广泛地探讨了后端，所以切换一下方向，看看前端是如何了解M88k目标的。
 
 
 

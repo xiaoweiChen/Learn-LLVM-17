@@ -1,4 +1,4 @@
-In this chapter, you added two different instruction selections to your backend: instruction selection via the selection DAG, and global instruction selection. For this, you had to define the calling convention in the target description. In addition, you needed to implement register and instruction information classes, which give you access to information generated from the target description but which you also needed to enhance with additional information. You learned that the stack frame layout and prolog generation are needed later. To translate an example, you added a class to emit machine instructions, and you created the configuration of the backend. You also learned how global instruction selection works. Finally, you gained some guidance on how you can develop the backend on your own.
+在本章中，在后端添加了两种不同的指令选择:通过选择DAG进行指令选择和全局指令选择。为此，必须在目标描述中定义调用约定。此外，需要实现寄存器和指令信息类，它们能够访问从目标描述生成的信息，但还需要使用其他信息对其进行增强。了解到堆栈帧布局和脚本生成稍后才需要。为了转换示例，添加了一个类来发出机器指令，并创建了后端配置。还了解了全局指令选择的工作原理。最后，获得了一些关于如何自己开发后端的指导。
 
-In the next chapter, we will look at some tasks that can be done after instruction selection – we will add a new pass in the pipeline of the backend, look at how to integrate the backend into the clang compiler, and how to cross-compile to a different architecture.
+下一章中，将介绍一些在指令选择之后可以完成的任务——将在后端流水线中添加一个新的通道，看看如何将后端集成到clang编译器中，以及如何交叉编译到不同的架构中。
 

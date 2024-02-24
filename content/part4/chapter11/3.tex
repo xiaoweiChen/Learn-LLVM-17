@@ -1,8 +1,8 @@
-The ELF file format is one of the binary object file formats LLVM supports. ELF itself is defined for many CPU architectures, and there is also a definition for the M88k architecture. All we need to do is to add the definition of the relocations and some flags. The relocations are given in Chapter 4, Basics of IR Code Generation, of the System V ABI M88k Processor supplement book (see link within the Setting the stage for a new backend section at the beginning of the chapter):
+ELF文件格式是LLVM支持的二进制对象文件格式之一。ELF本身为许多CPU架构定义，M88k架构也有定义。我们所需要做的就是，添加重定位的定义和一些标志。重新定位在System V ABI M88k处理器补充书的第4章，IR代码生成基础(见本章开头设置新后端部分中的链接)中给出:
 
 \begin{enumerate}
 \item
-We need to type the following code into the llvm/include/llvm/BinaryFormat/ ELFRelocs/M88k.def file:
+我们需要在llvm/include/llvm/BinaryFormat/ELFRelocs/M88k.def文件中进行如下修改:
 
 \begin{cpp}
 #ifndef ELF_RELOC
@@ -14,7 +14,7 @@ ELF_RELOC(R_88K_COPY, 1)
 \end{cpp}
 
 \item
-We also add the following flags into the llvm/include/llvm/BinaryFormat/ELF.h file, along with the definition of the relocations:
+还在llvm/include/llvm/BinaryFormat/ELF.h文件中添加了以下标志，以及重定位的定义:
 
 \begin{cpp}
 // M88k Specific e_flags
@@ -30,10 +30,10 @@ enum {
 };
 \end{cpp}
 
-The code can be added anywhere in the file, but it is best to keep the file structured and insert it before the code for the MIPS architecture.
+代码可以添加到文件中的任何位置，但最好保持文件的结构，并在MIPS架构代码之前插入。
 
 \item
-We also need to expand some other methods. In the llvm/include/llvm/Object/ ELFObjectFile.h file are some methods that translate between enumeration members and strings. For example, we must add a new case statement to the getFileFormatName() method:
+我们还需要扩展一些其他的方法。在llvm/include/llvm/Object/ELFObjectFile.h文件中有一些在枚举成员和字符串之间进行转换的方法。例如，必须在getFileFormatName()方法中添加新的case语句:
 
 \begin{cpp}
 switch (EF.getHeader()->e_ident[ELF::EI_CLASS]) {
@@ -44,7 +44,7 @@ switch (EF.getHeader()->e_ident[ELF::EI_CLASS]) {
 \end{cpp}
 
 \item
-Similarly, we extend the getArch() method:
+类似地，可以扩展getArch()方法:
 
 \begin{cpp}
 switch (EF.getHeader().e_machine) {
@@ -54,7 +54,7 @@ switch (EF.getHeader().e_machine) {
 \end{cpp}
 
 \item
-Lastly, we use the relocation definitions in the llvm/lib/Object/ELF.cpp file, in the getELFRelocationTypeName() method:
+最后，在getELFRelocationTypeName()方法中，使用llvm/lib/Object/ELF.cpp文件中的重定位定义:
 
 \begin{cpp}
 switch (Machine) {
@@ -70,14 +70,14 @@ switch (Machine) {
 \end{cpp}
 
 \item
-To complete the support, you can valso extend the llvm/lib/ObjectYAML/ELFYAML. cpp file. This file is used by the yaml2obj and obj2yaml tools, which create an ELF file based on a YAML description, and vice versa. The first addition needs to be done in the ScalarEnumerationTraits<ELFYAML::ELF\_EM>::enumeration() method, which lists all the values for the ELF architectures:
+为了完成支持，还可以扩展llvm/lib/ObjectYAML/ELFYAML.cpp文件。该文件由yaml2obj和obj2yaml工具使用，根据YAML描述创建一个ELF文件，反之亦然。第一个添加需要在ScalarEnumerationTraits<ELFYAML::ELF\_EM>::enumeration()方法中完成，该方法列出了ELF支持架构的所有值:
 
 \begin{cpp}
 ECase(EM_88K);
 \end{cpp}
 
 \item
-Likewise, in the ScalarEnumerationTraits<ELFYAML::ELF\_REL>::enumeration() method, you need to include the definitions of the relocations again:
+同样，在ScalarEnumerationTraits<ELFYAML::ELF\_REL>::enumeration()方法中，需要再次包含重定位的定义:
 
 \begin{cpp}
     case ELF::EM_88K:
@@ -86,13 +86,13 @@ Likewise, in the ScalarEnumerationTraits<ELFYAML::ELF\_REL>::enumeration() metho
 \end{cpp}
 \end{enumerate}
 
-At this point, we have completed the support of the m88k architecture in the ELF file format. You can use the llvm-readobj tool to inspect an ELF object file, for example, created by a crosscompiler on OpenBSD. Likewise, you can create an ELF object file for the m88k architecture with the yaml2obj tool.
+至此，我们已经完成了对ELF文件格式的m88k体系结构的支持。可以使用llvm-readobj工具检查ELF对象文件，例如，由OpenBSD上的交叉编译器创建的对象文件。同样，可以使用yaml2obj工具为m88k架构创建一个ELF对象文件。
 
-\begin{myNotic}{Is adding support for an object file format mandatory?}
-Integrating support for an architecture into the ELF file format implementation requires only a couple of lines of code. If the architecture for which you are creating an LLVM backend uses the ELF format, then you should take this route. On the other hand, adding support for a completely new binary file format is a complicated task. If this is required, then an often-used approach is to only output assembler files and use an external assembler to create object files.
+\begin{myNotic}{必须添加对目标文件格式的支持?}
+对架构的支持集成到ELF文件格式实现中只需要几行代码，若要为其创建LLVM后端的脚骨使用ELF格式，则该采用这种方式。另一方面，添加对全新二进制文件格式的支持是一项复杂的任务。若需要这样做，那常用的方法是只输出汇编程序文件，并使用外部汇编程序来创建目标文件。
 \end{myNotic}
 
-With these additions, the LLVM implementation of the ELF file format now supports the M88k architecture. In the next section, we create the target description for the M88k architecture, which describes the instructions, the registers, and many more details of the architecture.
+有了这些补充，ELF文件格式的LLVM实现现在支持M88k架构。在下一节中，将创建M88k架构的目标描述，其中描述了该架构的指令、寄存器和更多细节。
 
 
 

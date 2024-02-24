@@ -1,31 +1,31 @@
-LLVM has a very flexible architecture. You can also add a new target backend to it. The core of a backend is the target description, from which most of the code is generated. In this chapter, you will learn how to add support for a historical CPU.
+LLVM具有非常灵活的架构还可以向它添加一个新的目标后端。后端的核心是目标描述，大部分代码都是从目标描述中生成的。在本章中，将学习如何添加对历史CPU的支持。
 
-In this chapter, you will cover the following:
+本章中，将学习以下主题:
 
 \begin{itemize}
 \item
-Setting the stage for a new backend introduces you to the M88k CPU architecture and shows you where to find the required information
+为创建一个新的后端做准备，介绍M88k CPU架构，并展示在哪里可以找到所需的信息
 
 \item
-Adding the new architecture to the Triple class teaches you how to make LLVM aware of a new CPU architecture
+将新架构添加到Triple类中，了解如何使LLVM意识到新的CPU架构
 
 \item
-Extending the ELF file format definition in LLVM shows you how to add support for the M88kspecific relocations to the libraries and tools that handle ELF object files
+在LLVM中扩展ELF文件格式定义，展示如何向处理ELF对象文件的库和工具中添加对特定于M88k的支持
 
 \item
-Creating the target description applies your knowledge of the TableGen language to model the register file and instructions in the target description
+了解创建目标描述将应用TableGen语言的知识，对目标描述中的注册文件和指令进行建模
 
 \item
-Adding the M88k backend to LLVM explains the minimal infrastructure required for an LLVM backend
+将M88k后端添加到LLVM，了解LLVM后端所需的最小基础结构
 
 \item
-Implementing an assembler parser shows you how to develop the assembler
+实现汇编器解析器，了解如何开发汇编器
 
 \item
-Creating the disassembler teaches you how to create the disassembler
+创建反汇编器，了解诶如何创建反汇编器
 \end{itemize}
 
-By the end of the chapter, you will know how to add a new backend to LLVM. You will acquire the knowledge to develop the register file definition and instruction definition in the target description, and you will know how to create the assembler and disassembler from that description.
+本章结束时，将了解如何为LLVM添加一个新的后端。将获得在目标描述中开发寄存器文件定义和指令定义的知识，并了解如何根据描述创建汇编程序和反汇编程序。
 
 
 
