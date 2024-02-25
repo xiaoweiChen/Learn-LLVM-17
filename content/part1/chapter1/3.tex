@@ -22,7 +22,7 @@
 
 \mySubsubsection{1.3.1.}{配置Git}
 
-LLVM项目使用Git进行版本控制。若以前没有使用过Git，那么在继续之前应该先做一些Git的基本配置:设置用户名和电子邮件地址。提交更改，将使用这两个信息。
+LLVM项目使用Git进行版本控制。若以前没有使用过Git，在继续之前应该先做一些Git的基本配置:设置用户名和电子邮件地址。提交修改，将使用这两个信息。
 
 可以使用以下命令检查是否已经在Git中配置了电子邮件和用户名:
 
@@ -31,14 +31,14 @@ $ git config user.email
 $ git config user.name
 \end{shell}
 
-前面的命令将输出在使用Git时已经设置的电子邮件和用户名，但若是第一次设置用户名和电子邮件，可以输入以下命令进行第一次配置。在以下命令中，可以简单地将Jane替换为您的姓名，将jane@email.org替换为您的电子邮件:
+前面的命令将输出在使用Git时已经设置的电子邮件和用户名，但若是第一次设置用户名和电子邮件，可以输入以下命令进行第一次配置。以下命令中，可以简单地将Jane替换为您的姓名，将jane@email.org替换为您的电子邮件:
 
 \begin{shell}
 $ git config --global user.email "jane@email.org"
 $ git config --global user.name "Jane"
 \end{shell}
 
-这些命令更改全局Git配置。在Git存储库中，可以通过不指定-{}-global选项在本地覆盖这些值。
+这些命令更改全局Git配置。在Git存储库中，可以不指定-{}-global选项在本地覆盖这些值。
 
 默认情况下，Git使用vi编辑器提交消息。若喜欢其他编辑器，可以以类似的方式更改配置。例如：要使用nano编辑器，可以输入以下命令:
 
@@ -67,7 +67,7 @@ $ git clone --config core.autocrlf=false \
   https://github.com/llvm/llvm-project.git
 \end{shell}
 
-这个Git命令将最新的源代码从GitHub克隆到一个名为llvmproject的本地目录中。现在使用以下命令，将当前目录更改为llvm-project目录:
+这个Git命令将最新的源代码从GitHub克隆到一个名为llvm-project的本地目录中。现在使用以下命令，将当前目录更改为llvm-project目录:
 
 \begin{shell}
 $ cd llvm-project
@@ -81,13 +81,13 @@ $ git checkout -b llvm-17 llvmorg-17.0.1
 
 通过前面的步骤，就克隆了整个库，并从标记创建了分支。这是最灵活的方法。
 
-Git还允许只克隆一个分支或标记(包括历史记录)。使用git clone -{}-branch release/X https://github.com/llvm/llvm-project，您只克隆版本release/17.x分支及其历史。然后，就可以看到LLVM 17发布分支的最新状态。若需要确切的发布版本，只需要像之前一样从发布标签创建一个分支。
+Git还允许只克隆一个分支或标记(包括历史记录)。使用git clone -{}-branch release/X https://github.com/llvm/llvm-project，只克隆版本release/17.x分支及其历史。然后，就可以看到LLVM 17发布分支的最新状态。若需要确切的发布版本，只需要像之前一样从发布标签创建一个分支。
 
 使用-{}-depth=1选项，就是Git的浅克隆，可以避免下载太多历史记录。这节省了时间和空间，但显然限制了在本地可以做的事情，包括根据发布标记签出分支。
 
 \mySubsubsection{1.3.3.}{创建构建目录}
 
-LLVM不支持内联构建，并且需要一个单独的构建目录。最简单的方法是在llvm-project目录中创建，这是当前目录。简单起见，我们将构建目录命名为build。这里，Unix和Windows系统的命令不同。在类Unix系统上，可以使用以下命令:
+LLVM不支持内联构建，并且需要一个单独的构建目录。最简单的方法是在llvm-project目录中创建，这是当前目录。简单起见，将构建目录命名为build。这里，Unix和Windows系统的命令不同。在类Unix系统上，可以使用以下命令:
 
 \begin{shell}
 $ mkdir build
@@ -160,7 +160,7 @@ $ cmake -DLLVM_ENABLE_PROJECTS=clang -B build -S llvm
 $ cmake –-build build
 \end{shell}
 
-因为我们告诉CMake在配置步骤中生成Ninja文件，所以这个命令在底层运行Ninja。但若为支持多构建配置的生成器(如Visual Studio)生成构建文件，则需要使用-{}-config选项指定要用于构建的配置。根据硬件资源的不同，该命令的运行时间从15分钟(具有大量CPU内核、内存和快速存储的服务器)到几个小时(具有有限内存的双核Windows笔记本)不等。
+我们告诉CMake在配置步骤中生成Ninja文件，所以这个命令在底层运行Ninja。但若为支持多构建配置的生成器(如Visual Studio)生成构建文件，则需要使用-{}-config选项指定要用于构建的配置。根据硬件资源的不同，该命令的运行时间从15分钟(具有大量CPU内核、内存和快速存储的服务器)到几个小时(具有有限内存的双核Windows笔记本)不等。
 
 默认情况下，Ninja使用所有可用的CPU内核。这有利于提高编译速度，但可能会阻止其他任务的运行;例如，在Windows操作系统的笔记本电脑上，几乎不可能在运行Ninja时上网。幸运的是，可以使用-j选项限制资源使用。
 
@@ -170,7 +170,7 @@ $ cmake –-build build
 $ cmake --build build –j2
 \end{shell}
 
-编译完成后，最佳实践是运行测试套件以检查是否一切都如预期的那样工作:
+编译完成后，运行测试检查是否一切都如预期的那样工作:
 
 \begin{shell}
 $ cmake --build build --target check-all
@@ -184,15 +184,15 @@ $ cmake --build build --target check-all
 $ build/bin/llc --version
 \end{shell}
 
-若在编译LLVM时遇到困难，那么您应该查阅入门LLVM系统文档(\url{https://releases.llvm.org/17.0.1/docs/GettingStarted.html#common-problems})中的常见问题部分，了解常见问题的解决方案。
+若在编译LLVM时遇到困难，应该查阅入门LLVM系统文档(\url{https://releases.llvm.org/17.0.1/docs/GettingStarted.html#common-problems})中的常见问题部分，了解常见问题的解决方案。
 
-最后一步，可以安装二进制文件:
+最后一步，安装二进制文件:
 
 \begin{shell}
 $ cmake --install build
 \end{shell}
 
-类Unix系统上，安装目录是/usr/local。在Windows上，使用C:\verb|\|Program Files\verb|\|LLVM。这是可以改变的，下一节将解释如何实现。
+类Unix系统上，安装目录是/usr/local。在Windows上，使用C:\verb|\|Program Files\verb|\|LLVM。这可以修改，下一节将解释如何实现。
 
 
 

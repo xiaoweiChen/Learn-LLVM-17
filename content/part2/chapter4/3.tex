@@ -3,7 +3,7 @@
 
 \mySubsubsection{4.3.1.}{代码生成器}
 
-IR模块包含为编译单元生成大括号内的所有元素。在全局级别，我们遍历模块级别的声明，创建全局变量，并调用过程的代码生成。tinylang中的全局变量会映射到llvm::GobalValue类的实例。这种映射保存在全局变量中，可用于过程代码的生成:
+IR模块包含为编译单元生成大括号内的所有元素。我们在全局级别遍历模块级别的声明，创建全局变量，并调用过程的代码生成。tinylang中的全局变量会映射到llvm::GobalValue类的实例。这种映射保存在全局变量中，可用于过程代码的生成:
 
 \begin{cpp}
 void CGModule::run(ModuleDeclaration *Mod) {
@@ -26,13 +26,13 @@ void CGModule::run(ModuleDeclaration *Mod) {
 }
 \end{cpp}
 
-该模块还包含LLVMContext类，并缓存最常用的LLVM类型。后者需要初始化，例如：对于64位整数类型需要这样初始化:
+该模块还包含LLVMContext类，并缓存最常用的LLVM类型。后者需要初始化，例如：对于64位整数类型的初始化:
 
 \begin{cpp}
 Int64Ty = llvm::Type::getInt64Ty(getLLVMCtx());
 \end{cpp}
 
-CodeGenerator类初始化LLVM IR模块并调用该模块的代码生成。最重要的是，这个类必须知道要为哪个目标架构生成代码。该信息在驱动程序中的llvm::TargetMachine类中:
+CodeGenerator类初始化LLVM IR模块并调用该模块的代码生成，这个类必须了解要为哪个目标架构生成代码。该信息在驱动程序中的llvm::TargetMachine类中:
 
 \begin{cpp}
 std::unique_ptr<llvm::Module>
@@ -48,7 +48,7 @@ CodeGenerator::run(ModuleDeclaration *Mod,
 }
 \end{cpp}
 
-为了方便使用，我们还必须为代码生成器引入一个工厂方法:
+为了方便使用，必须为代码生成器引入一个工厂方法:
 
 \begin{cpp}
 CodeGenerator *
@@ -88,7 +88,7 @@ createTargetMachine(const char *Argv0) {
 \end{cpp}
 
 \item
-首先，必须收集命令行提供的所有信息。这些是代码生成器的选项——CPU的名称和应该激活或停用的功能，以及目标的三个值:
+首先，收集命令行提供的所有信息。这些是代码生成器的选项——CPU的名称和应该激活或停用的功能，以及目标的三个值:
 
 \begin{cpp}
     llvm::Triple Triple = llvm::Triple(
@@ -137,7 +137,7 @@ createTargetMachine(const char *Argv0) {
 
 在LLVM中，IR代码通过通道运行。每次遍历都只执行一项任务，比如移除无效代码。我们将在第7章中了解更多关于通道的信息。输出汇编代码或目标文件也作为通道实现。让我们为它添加基本支持吧!
 
-我们需要包含更多的LLVM头文件。首先，需要llvm::legacy::PassManager类来保存向文件发出代码的通道。还希望能够输出LLVM IR代码，因此还需要一个通道来生成它。最后，使用llvm::ToolOutputFile类进行文件操作:
+需要包含更多的LLVM头文件。首先，需要llvm::legacy::PassManager类来保存向文件发出代码的通道。还希望能够输出LLVM IR代码，因此还需要一个通道来生成它。最后，使用llvm::ToolOutputFile类进行文件操作:
 
 \begin{cpp}
 #include "llvm/IR/IRPrintingPasses.h"
@@ -165,7 +165,7 @@ static llvm::cl::opt<std::string>
                    llvm::cl::value_desc("filename"));
 \end{cpp}
 
-新emit()方法中的第一个任务是，处理用户在命令行中没有给出的输出文件名。若从标准输入中读取输入，使用减号-表示，则将结果输出到标准输出。ToolOutputFile类了解如何处理特殊的文件名:
+新emit()方法中的第一个任务是，处理用户在命令行中没有给出的输出文件名。若从标准输入中读取输入，使用减号表示，则将结果输出到标准输出。ToolOutputFile类了解如何处理特殊的文件名:
 
 \begin{cpp}
 bool emit(StringRef Argv0, llvm::Module *M,
@@ -178,7 +178,7 @@ bool emit(StringRef Argv0, llvm::Module *M,
         }
 \end{cpp}
 
-否则，删除输入文件名的可能扩展名，并根据用户给出的命令行选项追加.ll、.s或.o作为扩展名。FileType选项在llvm/CodeGen/CommandFlags.inc头文件中定义，我们在前面包含了它。这个选项不支持发出IR代码，所以添加了new-emit-llvm选项，它只有在与汇编文件类型一起使用时才有效:
+否则，删除输入文件名的可能扩展名，并根据用户给出的命令行选项追加.ll、.s或.o作为扩展名。FileType选项在llvm/CodeGen/CommandFlags.inc头文件中定义，在前面包含了它。这个选项不支持发出IR代码，所以添加了new-emit-llvm选项，只有在与汇编文件类型一起使用时才有效:
 
 \begin{cpp}
     else {
@@ -240,7 +240,7 @@ if (EC) {
 PM.run(*M);
 \end{cpp}
 
-若没有显式地请求保留该文件，那么ToolOutputFile类会自动删除该文件。这使得错误处理更容易，因为可能有许多地方需要处理错误。我们成功地生成了代码，所以想保留这个文件:
+若没有显式地请求保留该文件，ToolOutputFile类会自动删除该文件。这使得错误处理更容易，因为可能有许多地方需要处理错误。我们成功地生成了代码，所以想保留这个文件:
 
 \begin{cpp}
 Out->keep();
@@ -281,13 +281,13 @@ END Gcd.
 $ tinylang --filetype=obj Gcd.mod
 \end{shell}
 
-若想直接在屏幕上检查生成的IR代码，请键入以下命令:
+若想直接在屏幕上检查生成的IR代码，请输入以下命令:
 
 \begin{shell}
 $ tinylang --filetype=asm --emit-llvm -o - Gcd.mod
 \end{shell}
 
-以tinylang的当前实现状态，无法在tinylang中创建完整的程序，但可以使用一个名为callgcd.c的C程序来测试生成的目标文件。请注意，调用GCD函数时使用了经过修改的名称:
+以tinylang的当前实现状态，无法在tinylang中创建完整的程序，可以使用一个名为callgcd.c的C程序来测试生成的目标文件。注意，调用GCD函数时已经修改了名称:
 
 \begin{cpp}
 #include <stdio.h>

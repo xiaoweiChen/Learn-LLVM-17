@@ -17,7 +17,7 @@ class Sema {
 #endif
 \end{cpp}
 
-实现在Sema.cpp文件中。有趣的部分是语义分析，使用访问者实现。其基本思想是，每个声明变量的名称存储在一个集合中。在创建集合时，可以检查每个名字的唯一性，再检查给定的名字是否在集合中:
+实现在Sema.cpp文件中。有趣的部分是语义分析，使用访问者实现。其基本思想是，每个声明变量的名称存储在一个集合中。创建集合时，可以检查每个名字的唯一性，再检查给定的名字是否在集合中:
 
 \begin{cpp}
 #include "Sema.h"
@@ -50,7 +50,7 @@ virtual void visit(Factor &Node) override {
 };
 \end{cpp}
 
-对于BinaryOp节点，除了两边都存在并访问之外，没有什么需要检查的:
+对于BinaryOp节点，除了两边都存在并访问之外，没什么需要检查:
 
 \begin{cpp}
 virtual void visit(BinaryOp &Node) override {
@@ -95,7 +95,7 @@ bool Sema::semantic(AST *Tree) {
 }
 \end{cpp}
 
-这里还可以做得更多。若没有使用声明的变量，也可以打印警告。我们把这个留给读者当做练习来实现。若语义分析没有错误，则可以从AST生成LLVM IR。这将在下一节中完成。
+还可以做得更多。若没有使用声明的变量，也可以打印警告。我们把这个留给读者当做练习来实现。若语义分析没有错误，则可以从AST生成LLVM IR。这将在下一节中完成。
 
 
 

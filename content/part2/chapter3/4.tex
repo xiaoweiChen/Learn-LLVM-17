@@ -1,6 +1,6 @@
-只是缺少消息的集中定义。在大型软件(如编译器)中，应该不希望到处散布消息字符串。若有更改消息或将其翻译成另一种语言的请求，那么最好将它们放在一个中心位置!一种简单的方法是，每个消息都有一个ID(枚举成员)、一个严重级别(如Error或Warning)和一个包含消息的字符串。在代码中，只需要引用消息ID即可。
+只是缺少消息的集中定义。在大型软件(如编译器)中，应该不希望到处散布消息字符串。若有修改消息或将其翻译成另一种语言的请求，最好将它们放在一个中心位置!一种简单的方法是，每个消息都有一个ID(枚举成员)、一个严重级别(如Error或Warning)和一个包含消息的字符串。在代码中，只需要引用消息ID即可。
 
-严重性级别和消息字符串仅在消息打印时使用，必须一致地管理这三项(ID、安全级别和消息)。LLVM库使用预处理器来解决这个问题，数据存储在一个后缀为.def的文件中，并包装在一个宏名称中。该文件通常包含多次，并对该宏有不同的定义。该定义位于include/tinylang/Basic/Diagnostic.def文件路径中:
+严重性级别和消息字符串仅在消息输出时使用，必须一致地管理这三项(ID、安全级别和消息)。LLVM库使用预处理器来解决这个问题，数据存储在一个后缀为.def的文件中，并包装在一个宏名称中。该文件通常包含多次，并对该宏有不同的定义。该定义位于include/tinylang/Basic/Diagnostic.def文件路径中:
 
 \begin{cpp}
 #ifndef DIAG
@@ -12,7 +12,7 @@ DIAG(err_sym_declared, Error, "symbol {0} already declared")
 #undef DIAG
 \end{cpp}
 
-第一个宏参数ID是枚举标签，第二个参数Level是严重性，第三个参数Msg是消息文本。有了这个定义，我们可以定义一个diagnosticengine类来发出错误消息。接口在include/tinylang/ Basic/Diagnostic.h文件中:
+第一个宏参数ID是枚举标签，第二个参数Level是严重性，第三个参数Msg是消息文本。有了这个定义，就可以定义一个diagnosticengine类来发出错误消息。接口在include/tinylang/ Basic/Diagnostic.h文件中:
 
 \begin{cpp}
 #ifndef TINYLANG_BASIC_DIAGNOSTIC_H
@@ -29,7 +29,7 @@ DIAG(err_sym_declared, Error, "symbol {0} already declared")
 namespace tinylang {
 \end{cpp}
 
-在包含必要的头文件之后，可以使用Diagnostic.def定义枚举。为了不污染全局命名空间，我们使用了一个叫做diag的嵌套命名空间:
+在包含必要的头文件之后，可以使用Diagnostic.def定义枚举。为了不污染全局命名空间，我们使用了名为diag的嵌套命名空间:
 
 \begin{cpp}
 namespace diag {
@@ -40,7 +40,7 @@ enum {
 } // namespace diag
 \end{cpp}
 
-DiagnosticsEngine类使用SourceMgr实例通过report()方法发送消息。消息可以有参数。为了实现这个功能，我们使用了LLVM提供的可变格式支持。消息文本和严重性级别在静态方法的帮助下检索。作为奖励，还会统计发出的错误消息的数量:
+DiagnosticsEngine类使用SourceMgr实例通过report()方法发送消息。消息可以有参数。为了实现这个功能，我们使用了LLVM提供的可变格式支持。消息文本和严重性级别在静态方法的帮助下检索，还会统计发出的错误消息的数量:
 
 \begin{cpp}
 class DiagnosticsEngine {
@@ -61,7 +61,7 @@ public:
     unsigned nunErrors() { return NumErrors; }
 \end{cpp}
 
-由于消息可以具有可变数量的参数，因此C++中的解决方案是使用可变模板。当然，LLVM提供的formatv()函数也会使用这种方法。要获得格式化的消息，只需要转发模板参数即可:
+由于消息可以具有可变数量的参数，所以C++中的解决方案是使用可变模板。当然，LLVM提供的formatv()函数也会使用这种方法。要获得格式化的消息，只需要转发模板参数即可:
 
 \begin{cpp}
     template <typename... Args>

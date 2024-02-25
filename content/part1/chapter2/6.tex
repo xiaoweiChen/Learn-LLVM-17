@@ -1,5 +1,5 @@
 
-后端的任务是从模块的LLVM IR中创建优化的机器码。IR是后端接口，可以使用C++接口或以文本形式创建。同样，IR也是从AST生成的。
+后端的任务是从模块的LLVM IR中创建优化的机器码。IR是后端接口，可以使用C++接口或以文本形式创建，IR也是从AST生成的。
 
 \mySubsubsection{2.6.1.}{LLVM IR的文本表示}
 
@@ -18,7 +18,7 @@
 
 \begin{enumerate}
 \item
-必须声明库函数，就像在c中一样，语法也类似于C。函数名之前的类型是返回类型。用括号括起来的类型名是参数类型。声明可以出现在文件的任何地方:
+必须声明库函数，就像在C中一样，语法也类似于C。函数名之前的类型是返回类型。用括号括起来的类型名是参数类型。声明可以出现在文件的任何地方:
 
 \begin{shell}
 declare i32 @calc_read(ptr)
@@ -47,7 +47,7 @@ entry:
 \end{shell}
 
 \item
-calc\_read()用来读取a变量的值。嵌套的getelemenptr指令执行索引计算，以计算指向字符串常量第一个元素的指针。函数结果被赋值给未命名的\%2变量。
+calc\_read()用来读取a变量的值。嵌套的getelemenptr指令执行索引计算，以计算指向字符串常量第一个元素的指针。函数结果赋值给未命名的\%2变量。
 
 \begin{shell}
     %2 = call i32 @calc_read(ptr @a.str)
@@ -103,7 +103,7 @@ class CodeGen
 #endif
 \end{cpp}
 
-AST包含了这些信息，所以基本思想是使用一个访问器来遍历AST。CodeGen.cpp文件的实现如下所示:
+AST包含了这些信息，所以使用一个访问器来遍历AST。CodeGen.cpp文件的实现如下所示:
 
 \begin{enumerate}
 \item
@@ -157,7 +157,7 @@ public:
 \end{cpp}
 
 \item
-对于每个函数，必须创建一个FunctionType实例。在C++术语中，这是一个函数原型。函数本身是用function实例定义的。run()方法首先在LLVM IR中定义main()函数:
+对于每个函数，必须创建一个FunctionType实例。在C++术语中，这是一个函数原型。函数本身是用函数实例定义的。run()方法首先在LLVM IR中定义main()函数:
 
 \begin{cpp}
     void run(AST *Tree) {
@@ -169,7 +169,7 @@ public:
 \end{cpp}
 
 \item
-然后用entry标签创建BB基本块，并将其附加到IR构建器:
+然后用entry标签创建BB基本块，并将其添加到IR构建器:
 
 \begin{cpp}
         BasicBlock *BB = BasicBlock::Create(M->getContext(),
@@ -197,7 +197,7 @@ public:
 \end{cpp}
 
 \item
-生成以main()函数，并返回0结束:
+生成main()函数，并返回0结束:
 
 \begin{cpp}
             Builder.CreateRet(Int32Zero);
@@ -205,7 +205,7 @@ public:
 \end{cpp}
 
 \item
-WithDecl节点保存声明的变量的名称。首先，为calc\_read()函数创建一个函数原型:
+WithDecl节点保存声明的变量的名称，为calc\_read()函数创建一个函数原型:
 
 \begin{cpp}
     virtual void visit(WithDecl &Node) override {
@@ -239,7 +239,7 @@ WithDecl节点保存声明的变量的名称。首先，为calc\_read()函数创
 \end{cpp}
 
 \item
-创建调用calc\_read()函数的IR代码，在上一步中创建的字符串作为参数传递:
+创建调用calc\_read()函数的IR代码，使用上一步中创建的字符串作为参数传递:
 
 \begin{cpp}
         CallInst *Call =
@@ -278,7 +278,7 @@ virtual void visit(Factor &Node) override {
 \end{cpp}
 
 \item
-最后，对于BinaryOp节点，必须使用正确的计算操作:
+对于BinaryOp节点，必须使用正确的计算操作:
 
 \begin{cpp}
 virtual void visit(BinaryOp &Node) override {
@@ -316,11 +316,11 @@ void CodeGen::compile(AST *Tree) {
 
 \end{enumerate}
 
-现在已经实现了编译器的前端，从读取源代码到生成IR。当然，所有这些组件必须在用户输入时一起工作，这是编译器驱动程序的任务，还需要实现运行时所需的函数。这两个都是下一节的主题。
+现在，已经实现了编译器的前端，从读取源代码到生成IR。所有这些组件必须在用户输入时一起工作，这是编译器驱动程序的任务，还需要实现运行时所需的函数。这两个都是下一节的主题。
 
 \mySubsubsection{2.6.3.}{缺失的部分——驱动程序和运行时库}
 
-前几节中的所有阶段都由Calc.cpp驱动程序粘合在一起，实现如下:声明输入表达式的参数，初始化LLVM，并调用前几节中的所有代码:
+前几节中的所有阶段都由Calc.cpp驱动程序粘合在一起:声明输入表达式的参数，初始化LLVM，并调用前几节中的所有代码:
 
 \begin{enumerate}
 \item
@@ -336,7 +336,7 @@ void CodeGen::compile(AST *Tree) {
 \end{cpp}
 
 \item
-LLVM自带声明命令行选项的系统，只需要为需要的每个选项声明一个静态变量。在此过程中，该选项会注册到一个全局命令行解析器中。这种方法的优点是，每个组件都可以在需要时添加命令行选项。我们为输入表达式声明了一个选项:
+LLVM自带声明命令行选项的系统，只需要为需要的每个选项声明一个静态变量。在此过程中，该选项会注册到一个全局命令行解析器中。这种方法的优点是，每个组件都可以在需要时添加命令行选项。我们为输入表达式声明一个选项:
 
 \begin{cpp}
 static llvm::cl::opt<std::string>
@@ -346,7 +346,7 @@ static llvm::cl::opt<std::string>
 \end{cpp}
 
 \item
-main()函数中，首先初始化LLVM库。需要ParseCommandLineOptions()来处理命令行上给出的选项。这还处理帮助信息的打印。若发生错误，此方法将退出应用程序:
+main()函数中，首先初始化LLVM库。需要ParseCommandLineOptions()来处理命令行上给出的选项。这还处理帮助信息的输出，若发生错误，使用此方法将结束应用程序的运行:
 
 \begin{cpp}
 int main(int argc, const char **argv) {
@@ -423,7 +423,7 @@ int calc_read(char *s)
 }
 \end{cpp}
 
-calc\_read()从终端读取一个整数。没有什么可以阻止用户输入字母或其他字符，所以必须仔细检查输入。若输入不是数字，则退出应用程序。更复杂的方法是让用户意识到问题，并再次要求提供一个数字。
+calc\_read()从终端读取一个整数。不能阻止用户输入字母或其他字符，所以必须仔细检查输入。若输入不是数字，则退出应用程序。更复杂的方法是让用户意识到问题，并再次要求提供一个数字。
 
 下一步是构建并试用我们的编译器calc，这是一个从表达式创建IR的应用程序。
 
@@ -460,7 +460,7 @@ llvm_map_components_to_libnames(llvm_libs Core)
 \end{cmake}
 
 \item
-最后，还需要在构建中包含src子目录，因为这是本章中完成的所有C++实现的所在:
+最后，还需要在构建中包含src子目录，这是本章中所有C++的实现:
 
 \begin{cmake}
 add_subdirectory ("src")
@@ -476,7 +476,7 @@ add_executable (calc
 target_link_libraries(calc PRIVATE ${llvm_libs})
 \end{cmake}
 
-最后，可以开始构建calc应用程序。在src目录之外，创建一个新的构建目录并对其进行修改。之后，就可以运行CMake配置和构建调用，如下所示:
+最后，可以开始构建calc应用程序。在src目录之外，创建一个新的构建目录并对其进行修改，就可以运行CMake配置和构建调用:
 
 \begin{shell}
 $ cmake -GNinja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
@@ -498,7 +498,7 @@ The result is: 12
 
 在其他Unix平台(如AArch64或PowerPC)上，需要删除-relocationmodel=pic选项。
 
-在Windows上，需要使用cl编译器，如下所示:
+在Windows上，需要使用cl编译器:
 
 \begin{shell}
 $ calc "with a: a*3" | llc –filetype=obj –o=expr.obj
@@ -508,7 +508,7 @@ Enter a value for a: 4
 The result is: 12
 \end{shell}
 
-现在，已经创建了第一个基于llvm的编译器!请花点时间练习不同的表达方式。特别要检查乘法运算符是否在加法运算符之前求值，以及使用括号是否改变了求值顺序，如我们对四则运算器期望的那样。
+现在，已经创建了第一个基于llvm的编译器!请花点时间练习不同的表达方式。特别要检查乘法运算符是否在加法运算符之前求值，以及使用括号是否改变了求值顺序(例如四则运算)。
 
 
 

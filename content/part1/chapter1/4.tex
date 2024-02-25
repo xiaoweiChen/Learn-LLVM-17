@@ -3,7 +3,7 @@ CMake系统使用CMakeLists.txt文件中的项目描述。顶层文件位于llvm
 
 根据项目描述中提供的信息，CMake检查安装了哪些编译器，检测库和符号，并创建构建系统文件，例如build.ninja或Makefile(取决于所选择的生成器)。也可以定义可重用的模块，例如:检测LLVM是否已安装的函数。这些脚本放在特殊的cmake目录(llvm/cmake)中，在生成过程中会自动搜索该目录。
 
-构建过程可以通过定义CMake变量来定制。命令行选项-D用于将变量设置为一个值，这些变量在CMake脚本中使用。CMake自己定义的变量几乎总是以CMAKE\_为前缀，这些变量可以在所有项目中使用。由LLVM定义的变量以LLVM\_为前缀，但它们只能在项目定义中包含LLVM时使用。
+构建过程可以通过定义CMake变量来定制。命令行选项-D用于将变量设置为一个值，这些变量在CMake脚本中使用。CMake自己定义的变量几乎总是以CMAKE\_为前缀，这些变量可以在所有项目中使用。由LLVM定义的变量以LLVM\_为前缀，但只能在项目定义中包含LLVM时使用。
 
 \mySubsubsection{1.4.1.}{可定义的CMake变量}
 
@@ -15,9 +15,9 @@ CMake系统使用CMakeLists.txt文件中的项目描述。顶层文件位于llvm
 $ CC=clang17 CXX=clang++17 cmake –B build –S llvm
 \end{shell}
 
-这只会为cmake的调用设置环境变量的值。若有必要，可以为编译器可执行文件指定一个绝对路径。
+这只会为cmake的调用设置环境变量的值，可以为编译器可执行文件指定一个绝对路径。
 
-CC是CMAKE\_C\_COMPILER CMAKE变量的默认值，CXX是CMAKE\_CXX\_COMPILER CMAKE变量的默认值。可以直接设置CMake变量，而不是使用环境变量。这相当于:
+CC是CMAKE\_C\_COMPILER CMAKE变量的默认值，CXX是CMAKE\_CXX\_COMPILER CMAKE变量的默认值。可以直接设置CMake变量，而不是使用环境变量:
 
 \begin{shell}
 $ cmake –DCMAKE_C_COMPILER=clang17 \
@@ -88,8 +88,6 @@ $ cmake --help-variable-list
 
 除了没有内置帮助之外，LLVM定义的构建配置变量的工作方式与CMake定义的相同。最有用的变量如下表所示，对首次安装LLVM的用户有用的变量和对更高级的LLVM用户有用的变量。
 
-对于首次安装LLVM的用户有用的变量
-
 % Please add the following required packages to your document preamble:
 % \usepackage{longtable}
 % Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
@@ -124,8 +122,6 @@ LLVM\_ENABLE\_PROJECTS &
 表1.2 - 对于首次安装LLVM的用户有用的变量
 \end{center}
 
-LLVM进阶用户的变量
-
 % Please add the following required packages to your document preamble:
 % \usepackage[normalem]{ulem}
 % \useunder{\uline}{\ul}{}
@@ -157,7 +153,7 @@ LLVM\_ENABLE\_THREADS &
 \end{tabular} \\ \hline
 LLVM\_ENABLE\_EH &
 \begin{tabular}[c]{@{}l@{}}
-LLVM项目不使用C++异常处理，因此在默认情况下关闭\\ 异常支持。此设置可能与项目所链接的其他库不兼容。若\\ 需要，可以通过指定-DLLVM\_ENABLE\_EH=ON来启用异\\ 常支持。
+LLVM项目不使用C++异常处理，因此在默认情况下关闭\\ 异常支持。此设置可能与项目所链接的其他库不兼容。若\\ 需要，可以指定-DLLVM\_ENABLE\_EH=ON来启用异常支\\ 持。
 \end{tabular} \\ \hline
 LLVM\_ENABLE\_RTTI &
 \begin{tabular}[c]{@{}l@{}}
