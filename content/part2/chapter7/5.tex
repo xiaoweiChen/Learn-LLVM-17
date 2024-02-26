@@ -1,17 +1,17 @@
 
-我们在前面章节中开发的tinylang编译器，但没有对IR代码进行优化。在接下来的小节中，我们将在编译器中添加一个优化流水线来实现这一目标。
+我们在前面章节中开发的tinylang编译器，但没有对IR代码进行优化。接下来的小节中，我们将在编译器中添加一个优化流水线来实现这一目标。
 
 \mySubsubsection{7.5.1.}{创建优化流水线}
 
-PassBuilder类是设置优化流水线的核心。这个类知道所有已注册的通道，并且可以从文本描述构造一个通道流水线。可以使用这个类根据命令行给出的描述创建通道流水线，或者根据所请求的优化级别使用默认流水线。我们还支持使用通道插件，例如：在前一节中讨论的ppprofiler通道插件。这样，就可以模拟opt工具的部分功能，并为命令行选项使用类似的名称。
+PassBuilder类是设置优化流水线的核心。这个类知道所有已注册的通道，并且可以从文本描述构造一个通道流水线。可以使用这个类根据命令行给出的描述创建通道流水线，或者根据所请求的优化级别使用默认流水线。还支持使用通道插件，例如：在前一节中讨论的ppprofiler通道插件，就可以模拟opt工具的部分功能，并为命令行选项使用类似的名称。
 
-PassBuilder类填充ModulePassManager类的实例，ModulePassManager类是通道管理器，保存构造的通道流水线并运行，代码生成通道仍然使用旧的通道管理器。因此，必须保留旧的通道管理器。
+PassBuilder类填充ModulePassManager类的实例，ModulePassManager类是通道管理器，保存构造的通道流水线并运行，代码生成通道仍然使用旧的通道管理器，所以必须保留旧的通道管理器。
 
 为了实现它，我们将扩展tinylang编译器中的tools/driver/Driver.cpp文件:
 
 \begin{enumerate}
 \item
-我们将使用新的类，因此将从添加新的包含文件开始。llvm/Passes/PassBuilder.h文件定义了PassBuilder类，llvm/Passes/PassPlugin.h文件是插件支持所必需的。最后，llvm/Analysis/ targettransformminfo.h文件提供了一个IR级转换，并与目标特定信息连接起来的通道:
+这里将使用新的类，所以将从添加新的包含文件开始。llvm/Passes/PassBuilder.h文件定义了PassBuilder类，llvm/Passes/PassPlugin.h文件是插件支持所必需的。最后，llvm/Analysis/targettransformminfo.h文件提供了一个IR级转换，并与目标特定信息连接起来的通道:
 
 \begin{cpp}
 #include "llvm/Passes/PassBuilder.h"
@@ -20,7 +20,7 @@ PassBuilder类填充ModulePassManager类的实例，ModulePassManager类是通�
 \end{cpp}
 
 \item
-要使用新通道管理器的某些特性，必须添加三个命令行选项，使用与opt工具相同的名称。-{}-passes选项允许通过管道的文本规范，而-{}-load-pass-plugin选项允许使用通道插件。若给出了-{}-debug-pass-manager选项，则通道管理器会打印出执行的通道信息:
+要使用新通道管理器的某些特性，必须添加三个命令行选项，使用与opt工具相同的名称。-{}-passes选项允许通过管道的文本规范，而-{}-load-pass-plugin选项允许使用通道插件。若给出了-{}-debug-pass-manager选项，则通道管理器会输出执行通道的信息:
 
 \begin{cpp}
 static cl::opt<bool>
@@ -53,7 +53,7 @@ static cl::opt<signed char> OptLevel(
 \end{cpp}
 
 \item
-LLVM的插件机制支持静态链接插件的插件注册表，它是在项目配置期间创建的。为了利用这个注册表，必须包含llvm/Support/Extension.def数据库文件，以创建返回插件信息的函数原型:
+LLVM的插件机制支持静态链接插件的插件注册表，是在项目配置期间创建的。为了利用这个注册表，必须包含llvm/Support/Extension.def数据库文件，以创建返回插件信息的函数原型:
 
 \begin{cpp}
 #define HANDLE_EXTENSION(Ext) \
@@ -62,7 +62,7 @@ LLVM的插件机制支持静态链接插件的插件注册表，它是在项目�
 \end{cpp}
 
 \item
-现在，必须用一个新版本替换现有的emit()函数。此外，必须在函数的顶部声明所需的PassBuilder实例:
+现在，必须用一个新版本替换现有的emit()函数，必须在函数的顶部声明所需的PassBuilder实例:
 
 \begin{cpp}
 bool emit(StringRef Argv0, llvm::Module *M,
@@ -108,7 +108,7 @@ ModuleAnalysisManager MAM(DebugPM);
 \end{cpp}
 
 \item
-接下来，必须使用对PassBuilder实例上各自的注册方法的调用来填充分析管理器。通过此调用，分析管理器将使用默认分析通道填充，并运行注册回调。我们还必须确保功能分析管理器使用默认别名分析流水线，并且所有的分析管理器都知道彼此的存在:
+接下来，必须使用对PassBuilder实例上各自的注册方法的调用来填充分析管理器。分析管理器将使用默认分析通道填充，并运行注册回调。还必须确保功能分析管理器使用默认别名分析流水线，并且所有的分析管理器都知道彼此的存在:
 
 \begin{cpp}
 FAM.registerPass(
@@ -128,7 +128,7 @@ ModulePassManager MPM(DebugPM);
 \end{cpp}
 
 \item
-现在，需要实现两种不同的方法，用通道流水线填充模块通道管理器。若用户在命令行上提供了一个通道流水线——也就是说，使用了-{}-passes选项——则使用这个作为通道流水线:
+现在，需要实现两种不同的方法，用通道流水线填充模块通道管理器。若用户在命令行上提供了一个通道流水线——使用了-{}-passes选项——则使用这个作为通道流水线:
 
 \begin{cpp}
 if (!PassPipeline.empty()) {
@@ -166,7 +166,7 @@ else {
 
 
 \item
-IR代码上运行转换的通道流水线就已经设置好了。这一步之后，需要一个打开的文件来写入结果。系统汇编器和LLVM IR输出是基于文本的，所以应该为其设置OF\_Text标志:
+IR代码上运行转换的通道流水线就已经设置好了。之后，需要一个打开的文件来写入结果。系统汇编器和LLVM IR输出是基于文本的，所以应该为其设置OF\_Text标志:
 
 \begin{cpp}
 std::error_code EC;
@@ -216,7 +216,7 @@ else {
 \end{cpp}
 
 \item
-所有这些准备工作之后，准备执行通道。首先，必须在IR模块上运行优化流水线，再运行代码生成通道。在所有这些工作之后，保留输出文件:
+所有这些准备工作之后，准备执行通道。必须在IR模块上运行优化流水线，再运行代码生成通道。在所有这些工作之后，保留输出文件:
 
 \begin{cpp}
     MPM.run(*M, MAM);
@@ -227,7 +227,7 @@ else {
 \end{cpp}
 
 \item
-虽然代码很多，但过程很简单。我们也必须更新tools/driver/CMakeLists.txt构建文件中的依赖项，除了添加目标组件，还必须添加来自LLVM的所有转换和代码生成组件。这些名称大致类似于源代码所在的目录名称。在配置过程中，组件名会转换为链接库名:
+虽然代码很多，但过程很简单。我们也必须更新tools/driver/CMakeLists.txt构建文件中的依赖项，除了添加目标组件，还必须添加来自LLVM的所有转换和代码生成组件，这些名称大致类似于源代码所在的目录名称。在配置过程中，组件名会转换为链接库名:
 
 \begin{cmake}
 set(LLVM_LINK_COMPONENTS ${LLVM_TARGETS_TO_BUILD}
@@ -239,7 +239,7 @@ set(LLVM_LINK_COMPONENTS ${LLVM_TARGETS_TO_BUILD}
 \end{cmake}
 
 \item
-编译器驱动支持插件，我们必须声明这个支持:
+编译器驱动支持插件，必须声明这个支持:
 
 \begin{cmake}
 target_link_libraries(tinylang
@@ -260,27 +260,27 @@ $ ninja
 
 对构建系统文件的更改会自动检测，并且在编译和链接更改的源代码前运行cmake。若需要重新运行配置步骤，请按照第1章，编译tinylang应用程序部分中的说明进行操作。
 
-由于我们已经使用了opt工具的选项作为蓝图，所以应该尝试运行tinylang，使用这些选项来加载一个通道插件并运行通道，就像我们在前几节中所做的那样。
+我们已经使用了opt工具的选项作为蓝图，所以应该尝试运行tinylang，使用这些选项来加载一个通道插件并运行通道。
 
-当前的实现中，既可以运行默认的传递管道，也可以自己构造一个。后者是非常灵活的，但在几乎所有情况下，它都是多余的。默认的管道在类C语言中运行得非常好，但缺少的是一种扩展通道流水线的方法。我们将在下一节中讨论如何实现它。
+当前的实现中，既可以运行默认的传递管道，也可以自己构造一个。后者是非常灵活的，但它几乎是多余的。默认管道在类C语言中运行得非常好，但缺少的是一种扩展通道流水线的方法。我们将在下一节中讨论如何实现它。
 
 \mySubsubsection{7.5.2.}{扩展通道流水线}
 
-上一节中，使用PassBuilder类从用户提供的描述或预定义的名称创建了一个通道流水线。现在，让我们看一看定制通道流水线的另一种方法:扩展点。
+上一节中，使用PassBuilder类从用户提供的描述或预定义的名称创建了一个通道流水线。现在，让我们看看定制通道流水线的另一种方法:扩展点。
 
-在传递管道的构造过程中，传递构建器允许添加用户贡献的传递。这些地方被为扩展点。存在一些扩展点，如下所示:
+通道流水线的构造过程中，通道构建器允许添加用户提供的通道，这些点称为扩展点。一些扩展点的特特征，如下所示:
 
 \begin{itemize}
 \item
-管道开始扩展点，允许在管道的开头添加通道
+流水线起始扩展点，允许在流水线的开头添加通道
 
 \item
-窥视孔扩展点，允许在每个指令组合器实例传递之后添加通道
+窥视孔扩展点，允许在每个指令组合器实例通道之后添加通道
 \end{itemize}
 
-还存在其他扩展点。要使用扩展点，必须注册回调。在通道流水线的构造过程中，回调在定义的扩展点上运行，并且可以向给定的通道管理器添加通道。
+还存在其他扩展点。要使用扩展点，必须注册回调。通道流水线的构造过程中，回调在定义的扩展点上运行，并且可以向给定的通道管理器添加通道。
 
-要为流水线的起始扩展点注册回调函数，必须调用PassBuilder类的registerPipelineStartEPCallback()方法。例如，要在流水线的开头添加PPProfiler传递，需要调用createModuleToFunctionPassAdaptor()模板函数，将该通道修改为模块通道，然后将其添加到模块通道管理器:
+要为流水线的起始扩展点注册回调函数，必须调用PassBuilder类的registerPipelineStartEPCallback()方法。例如，要在流水线的开头添加PPProfiler通道，需要调用createModuleToFunctionPassAdaptor()模板函数，将该通道修改为模块通道，然后将其添加到模块通道管理器:
 
 \begin{cpp}
 PB.registerPipelineStartEPCallback(
@@ -295,7 +295,7 @@ PB.registerPipelineStartEPCallback(
 
 \begin{enumerate}
 \item
-首先，必须为用户创建一个新的命令行来指定管道描述。同样，从opt工具中获取选项名:
+首先，必须为用户创建一个新的命令行来指定管道描述，从opt工具中获取选项名:
 
 \begin{cpp}
 static cl::opt<std::string> PipelineStartEPPipeline(
@@ -304,7 +304,7 @@ static cl::opt<std::string> PipelineStartEPPipeline(
 \end{cpp}
 
 \item
-使用Lambda函数作为回调是最方便的方式。为了解析管道描述，必须调用PassBuilder实例的parsepaspipeline()方法。这些通道会添加到PM通道管理器中，并作为Lambda函数的参数。若发生错误，只打印错误消息，而不停止应用程序。可以在调用crossRegisterProxies()方法之后添加以下代码片段:
+使用Lambda函数作为回调是最方便的方式。为了解析管道描述，必须调用PassBuilder实例的parsepaspipeline()方法。这些通道会添加到PM通道管理器中，并作为Lambda函数的参数。若发生错误，只打印错误消息，而不停止应用程序。在调用crossRegisterProxies()方法后，添加以下代码:
 
 \begin{cpp}
 PB.registerPipelineStartEPCallback(
@@ -324,11 +324,11 @@ PB.registerPipelineStartEPCallback(
 \end{myTip}
 
 \item
-现在是时候尝试不同的传递管理器选项了。使用-{}-debugpass-manager选项，可以了解哪些通道以何种顺序执行。还可以在每次传递之前或之后打印IR，这可以通过-{}-print-before-all和-{}-print-after-all选项完成。若创建了自己的通道流水线，就可以在感兴趣的地方插入打印通道。例如，可以尝试-{}-passes="print,inline,print"选项。此外，为了识别哪一个通道改变了IR代码，可以使用-{}-printchanged选项，只会在IR代码与之前通道的结果相比发生了变化时打印出来，大大减少的输出使得跟踪IR修改变得更加容易。
+是时候尝试不同的传递管理器选项了。使用-{}-debugpass-manager选项，可以了解哪些通道以何种顺序执行。还可以在每个通道执行前后打印IR，通过-{}-print-before-all和-{}-print-after-all选项完成。若创建了自己的通道流水线，就可以在感兴趣的地方插入打印通道。例如，可以尝试-{}-passes="print,inline,print"选项。此外，为了识别哪一个通道改变了IR代码，可以使用-{}-printchanged选项，只会在IR代码与之前通道的结果相比发生了变化时打印出来，大大减少的输出使得跟踪IR修改变得更加容易。
 
-PassBuilder类有一个嵌套的OptimizationLevel类来表示六个不同的优化级别。而不是使用“default<O?”>"流水描述作为parsePassPipeline()方法的参数，也可以调用buildPerModuleDefaultPipeline()方法，为请求级别构建默认的优化管道——除了级别0，此优化级别意味着不执行任何优化。
+PassBuilder类有一个嵌套的OptimizationLevel类来表示六个不同的优化级别。而不是使用“default<O?”>"流水描述作为parsePassPipeline()方法的参数，也可以调用buildPerModuleDefaultPipeline()方法，为请求级别构建默认的优化管道——除了级别0，此优化级别不执行任何优化。
 
-因此，没有通道添加到通道管理器中。若仍然想要运行某个通道，则可以手动将其添加到通道管理器中。在这个级别上运行的一个简单通道是AlwaysInliner通道，将一个带有always\_inline属性的函数内联到调用者中。在将优化级别的命令行选项值转换为OptimizationLevel类的相应成员之后，可以这样实现:
+没有通道添加到通道管理器中，若仍然想要运行某个通道，则可以手动将其添加到通道管理器中。这个级别上运行的一个简单通道是AlwaysInliner通道，将一个带有always\_inline属性的函数内联到调用者中，将优化级别的命令行选项值转换为OptimizationLevel类的相应成员之后，可以这样实现:
 
 \begin{cpp}
 PassBuilder::OptimizationLevel Olevel = …;
@@ -338,12 +338,12 @@ else
     MPM = PB.buildPerModuleDefaultPipeline(OLevel, DebugPM);
 \end{cpp}
 
-当然，可以以这种方式向通道管理器添加多个通道。在构造通道流水线时，PassBuilder也使用addPass()方法。
+当然，可以以这种方式向通道管理器添加多个通道。构造通道流水线时，PassBuilder也使用addPass()方法。
 
 \end{enumerate}
 
 \begin{myTip}{运行扩展点的回调}
-因为没有为优化级别O0填充通道流水线，所以注册的扩展点不会调用。若使用扩展点来注册应该在O0级别运行的通道，会有问题。可以使用runRegisteredEPCallbacks()来运行注册的扩展点回调，从而产生一个仅由通过扩展点注册通道填充的通道管理器。
+因为没有为优化级别O0填充通道流水线，所以注册的扩展点不会调用。使用扩展点来注册应该在O0级别运行的通道会有问题，可以使用runRegisteredEPCallbacks()来运行注册的扩展点回调，从而产生一个仅由通过扩展点注册通道填充的通道管理器。
 \end{myTip}
 
 通过将优化流水线添加到tinylang中，既创建了一个类似于clang的优化编译器。LLVM社区致力于在每个版本中改进优化和优化管道，所以很少不使用默认管道。大多数情况下，添加新通道是为了实现编程语言的某些语义。

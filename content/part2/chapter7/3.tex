@@ -1,7 +1,7 @@
 
-一个通道可以在LLVM IR上执行任意复杂的转换。为了说明添加新通道的机制，我们添加一个执行简单检测的通道。
+一个通道可以在LLVM IR上执行任意复杂度的转换。为了说明添加新通道的机制，我们添加一个执行简单检测的通道。
 
-为了研究程序的性能，了解函数被调用的频率和运行的时间是很有趣的。收集这些数据的一种方法是在每个函数中插入计数器，这个过程称为插装。我们将编写一个简单的插装传递，在每个函数的入口和每个退出点插入一个特殊的函数调用，这些函数收集计时信息并将其写入文件。因此，可以创建一个非常基本的分析器，将其命名为“穷人”(poor people)分析器，或者简而言之——ppprofiler。我们将开发新通道，以便其可以作为一个独立的插件使用，或者作为一个插件添加到LLVM源代码树中。最后，我们将了解如何将LLVM自带的通道集成到框架中。
+为了研究程序的性能，了解函数被调用的频率和运行的时间是很有趣的。收集这些数据的一种方法是在每个函数中插入计数器，这个过程称为插装。我们将编写一个简单的插装通道，在每个函数的入口和每个退出点插入一个特殊的函数调用，这些函数收集计时信息并将其写入文件。因此，可以创建一个非常基本的分析器，将其命名为“穷人”(poor people)分析器，或者简而言之——ppprofiler。我们将开发新通道，以便其可以作为一个独立的插件使用，或者作为一个插件添加到LLVM源代码树中。最后，我们将了解如何将LLVM自带的通道集成到框架中。
 
 \mySubsubsection{7.3.1.}{将ppprofiler作为插件进行开发}
 
@@ -45,11 +45,11 @@ ALWAYS_ENABLED_STATISTIC(
 \end{cpp}
 
 \begin{myNotic}{Note}
-可以使用两个宏来定义计数器变量。若使用STATISTIC宏，则只有在启用断言的情况下，或者在CMake命令行中将LLVM\_FORCE\_ENABLE\_STATS设置为ON时，才会在调试构建中收集统计值。若使用ALWAYS\_ENABLED\_STATISTIC宏，则总是收集统计值。但使用-stats命令行选项打印统计信息只适用于前两种方法。若需要，可以通过调用llvm::PrintStatistics(llvm::raw\_ostream)函数打印收集的统计信息。
+可以使用两个宏来定义计数器变量。若使用STATISTIC宏，则只有在启用断言的情况下，或者在CMake命令行中将LLVM\_FORCE\_ENABLE\_STATS设置为ON时，才会在调试构建中收集统计值。若使用ALWAYS\_ENABLED\_STATISTIC宏，则总是收集统计值。但使用-stats命令行选项输出统计信息只适用于前两种方法。若需要，可以通过调用llvm::PrintStatistics(llvm::raw\_ostream)函数打印收集的统计信息。
 \end{myNotic}
 
 \item
-接下来，必须在匿名命名空间中声明通道类，这个类继承自PassInfoMixin模板。这个模板只添加了一些样板代码，比如name()方法，不用于确定传递的类型，run()方法在执行传递时由LLVM调用。我们还需要一个名为instrument()的辅助方法:
+接下来，必须在匿名命名空间中声明通道类，这个类继承自PassInfoMixin模板。这个模板只添加了一些样板代码，比如name()方法，不用于确定传递的类型，run()方法在执行传递时由LLVM调用，还需要一个名为instrument()的辅助方法:
 
 \begin{cpp}
 namespace {
@@ -68,7 +68,7 @@ private:
 \end{cpp}
 
 \item
-现在，让我们定义如何插装函数。除了要检测的函数外，还要传递要调用的函数:
+现在，来定义如何插装函数。除了要检测的函数外，还要通道要调用的函数:
 
 \begin{cpp}
 void PPProfilerIRPass::instrument(llvm::Function &F,
@@ -99,7 +99,7 @@ void PPProfilerIRPass::instrument(llvm::Function &F,
 \end{cpp}
 
 \item
-接下来，我们将插入对\_\_ppp\_enter()函数的调用，并将名称作为参数传递:
+接下来，将插入对\_\_ppp\_enter()函数的调用，并将名称作为参数传递:
 
 \begin{cpp}
     Builder.CreateCall(EnterFn->getFunctionType(), EnterFn,
@@ -107,7 +107,7 @@ void PPProfilerIRPass::instrument(llvm::Function &F,
 \end{cpp}
 
 \item
-要调用\_\_ppp\_exit()函数，必须定位所有返回指令。方便的是，调用SetInsertionPoint()函数设置的插入点在作为参数传递的指令之前，所以可以在该点插入调用:
+要调用\_\_ppp\_exit()函数，必须定位所有返回指令。SetInsertionPoint()函数设置的插入点在作为参数传递的指令之前，所以可以在该点插入调用:
 
 \begin{cpp}
     for (BasicBlock &BB : F) {
@@ -123,7 +123,7 @@ void PPProfilerIRPass::instrument(llvm::Function &F,
 \end{cpp}
 
 \item
-接下来，我们将实现run()方法。LLVM传递通道所工作的模块和一个分析管理器，若需要，可以从中请求分析结果:
+接下来，将实现run()方法。LLVM通道所工作的模块和一个分析管理器，若需要，可以从中请求分析结果:
 
 \begin{cpp}
 PreservedAnalyses
@@ -132,7 +132,7 @@ PPProfilerIRPass::run(Module &M,
 \end{cpp}
 
 \item
-这里有一个小麻烦:若在实现的运行时模块检测到\_\_ppp\_enter()和\_\_ppp\_exit()函数，因为我们创建了一个无限递归，就会遇到麻烦。为了避免这种情况，若定义了其中一个函数，必须什么都不做:
+这里有一个小麻烦:若在实现的运行时模块检测到\_\_ppp\_enter()和\_\_ppp\_exit()函数，则创建了一个无限递归，就会遇到麻烦。为了避免这种情况，若定义了其中一个函数，必须什么都不做:
 
 \begin{cpp}
     if (M.getFunction("__ppp_enter") ||
@@ -142,7 +142,7 @@ PPProfilerIRPass::run(Module &M,
 \end{cpp}
 
 \item
-现在，我们准备声明函数。首先，创建函数类型，然后是函数:
+现在，我们准备声明函数。首先，创建函数类型，然后是函数体:
 
 \begin{cpp}
     Type *VoidTy = Type::getVoidTy(M.getContext());
@@ -159,7 +159,7 @@ PPProfilerIRPass::run(Module &M,
 \end{cpp}
 
 \item
-现在需要做的就是循环遍历模块的所有函数，并通过调用instrument()方法检测找到的函数。当然，需要忽略函数声明，它们只是原型。也可能存在没有名称的函数，这与我们的方法不兼容。我们也会过滤掉这些函数:
+现在需要做的就是循环遍历模块的所有函数，并通过调用instrument()方法检测找到的函数。需要忽略函数声明，它们只是原型。也可能存在没有名称的函数，这与我们的方法不兼容，就会过滤掉这些函数:
 
 \begin{cpp}
     for (auto &F : M.functions()) {
@@ -169,17 +169,17 @@ PPProfilerIRPass::run(Module &M,
 \end{cpp}
 
 \item
-最后，必须声明，我们没有保留任何分析。这很可能过于悲观，但我们这样做是出于安全考虑:
+最后，必须声明，我们没有保留任何分析。这很可能过于悲观，但这样做是出于安全考虑:
 
 \begin{cpp}
     return PreservedAnalyses::none();
 }
 \end{cpp}
 
-新通道的功能现在已经实现了。为了能够使用我们的通道，需要用PassBuilder对象注册它。这可以通过两种方式实现:静态或动态。若插件是静态链接的，则需要提供一个名为get<PluginName>PluginInfo()的函数。要使用动态链接，需要提供llvmGetPassPluginInfo()函数。在这两种情况下，都会返回一个PassPluginLibraryInfo结构体的实例，它提供了关于插件的一些基本信息。最重要的是，这个结构体包含一个指向注册传递的函数的指针。现在，让我们把它添加到源文件中。
+新通道的功能现在已经实现了。为了能够使用我们的通道，需要用PassBuilder对象注册。这可以通过两种方式实现:静态或动态。若插件静态链接，则需要提供一个名为get<PluginName>PluginInfo()的函数。要使用动态链接，需要提供llvmGetPassPluginInfo()函数。这两种情况下，都会返回一个PassPluginLibraryInfo结构体的实例，提供了关于插件的一些基本信息。最重要的是，结构体包含一个指向注册通道的函数指针。现在，让我们把它添加到源文件中。
 
 \item
-在RegisterCB()函数中，注册了一个Lambda函数，该函数将在解析通道流水线字符串时调用。若通道的名称是ppprofiler，将我们的传递添加到模块通道管理器中。这些回调将在下一节中展开:
+RegisterCB()函数中，注册了一个Lambda函数，该函数将在解析通道流水线字符串时调用。若通道的名称是ppprofiler，将通道添加到模块通道管理器中。这些回调将在下一节中展开:
 
 \begin{cpp}
 void RegisterCB(PassBuilder &PB) {
@@ -206,7 +206,7 @@ llvm::PassPluginLibraryInfo getPPProfilerPluginInfo() {
 \end{cpp}
 
 \item
-最后，若插件动态链接，则在加载插件时调用llvmGetPassPluginInfo()函数。但当将此代码静态地链接到工具中时，可能会出现链接器错误，因为该函数可能在多个源文件中定义。解决方案是使用宏来保护函数:
+若插件动态链接，则在加载插件时调用llvmGetPassPluginInfo()函数。但当将此代码静态地链接到工具中时，可能会出现链接器错误，因为该函数可能在多个源文件中定义。解决方案是使用宏来保护函数:
 
 \begin{cpp}
 #ifndef LLVM_PPPROFILER_LINK_INTO_TOOLS
@@ -227,7 +227,7 @@ llvmGetPassPluginInfo() {
 
 \mySamllsection{利用LLVM源代码树中的插件机制}
 
-在LLVM IR上执行转换的传递源位于llvm-project/ llvm/lib/Transforms目录中。在这个目录中，创建一个名为PPProfiler的新目录，并将源文件PPProfiler.cpp复制到其中，不需要对源代码进行任何更改!
+LLVM IR上执行转换的传递源位于llvm-project/llvm/lib/Transforms目录中。这个目录中，创建一个名为PPProfiler的新目录，并将源文件PPProfiler.cpp复制到其中，不需要对源代码进行任何更改!
 
 为了将新插件集成到构建系统中，创建一个名为CMakeLists.txt的文件，内容如下:
 
@@ -253,9 +253,9 @@ CMake将检测到构建描述中的变化，并重新运行配置步骤。这里
 -- Registering PPProfiler as a pass plugin (static build: OFF)
 \end{shell}
 
-这告诉您该插件已检测到并已构建为动态库。在安装步骤之后，在<install directory>/lib目录下，将找到动态库PPProfiler.so。
+这说明该插件已检测到并已构建为动态库。安装完成后，在<install directory>/lib目录下，将找到动态库PPProfiler.so。
 
-目前为止，与前一节的通道插件的唯一区别是，动态库是作为LLVM的一部分安装的，但也可以静态地将新插件链接到LLVM工具。要做到这一点，需要重新运行CMake配置并在命令行中添加-DLLVM\_PPPROFILER\_LINK\_INTO\_TOOLS=ON选项。从CMake中查找以下信息以确认已更改的构建选项:
+目前为止，与前一节的通道插件的唯一区别是，动态库是作为LLVM的一部分安装的，也可以静态地将新插件链接到LLVM工具。要做到这一点，需要重新运行CMake配置并在命令行中添加-DLLVM\_PPPROFILER\_LINK\_INTO\_TOOLS=ON选项。从CMake中查找以下信息以确认已更改的构建选项:
 
 \begin{shell}
 -- Registering PPProfiler as a pass plugin (static build: ON)
@@ -278,11 +278,11 @@ HANDLE_EXTENSION(PPProfiler)
 \end{shell}
 \end{itemize}
 
-此外，所有支持此扩展机制的工具都将获得新的通道。在创建优化流水线一节中，将了解如何在编译器中执行此操作。
+此外，所有支持此扩展机制的工具都将获得新的通道。创建优化流水线一节中，将了解如何在编译器中执行此操作。
 
-因为新的源文件位于单独的目录中，所以这种方法工作得很好，并且只修改一个现有文件。若试图保持修改后的LLVM源树与主存储库同步，这将最小化合并冲突的可能性。
+因为新的源文件位于单独的目录中，所以这种方法工作得很好，并且只修改一个现有文件。若试图保持修改后的LLVM源树与主存储库同步，这将最小化合并冲突。
 
-在某些情况下，将新通道添加为插件并不是最好的方法，LLVM提供的通道使用不同的方式进行注册。若您开发了一个新通道并建议将其添加到LLVM，并且LLVM社区接受了您的贡献，那么可以使用相同的注册机制。
+某些情况下，将新通道添加为插件并不是最好的方法，LLVM提供的通道使用不同的方式进行注册。若开发了一个新通道，并将其添加到LLVM，并且LLVM社区接受了您的贡献，可以使用注册机制。
 
 \mySamllsection{将通道集成到注册表中}
 
@@ -343,7 +343,7 @@ add_llvm_component_library(LLVMPPProfiler
 add_subdirectory(PPProfiler)
 \end{cmake}
 
-在LLVM内部，可用的通行证保存在llvm/lib/Passes/PassRegistry.def数据库文件中，需要更新这个文件。新的传递是一个模块传递，因此需要在文件中搜索定义模块传递的部分，例如，搜索MODULE\_PASS宏。在这个部分中，添加以下行:
+LLVM内部，可用的通道保存在llvm/lib/Passes/PassRegistry.def数据库文件中，需要更新这个文件。新通道是一个模块通道，因此需要在文件中搜索定义模块通道部分，例如，搜索MODULE\_PASS宏。在这个部分中，添加以下行:
 
 \begin{shell}
 MODULE_PASS("ppprofiler", PPProfilerIRPass())
@@ -357,7 +357,7 @@ MODULE_PASS("ppprofiler", PPProfilerIRPass())
 
 这些都是基于新通道的插件版本所必需的源码更改。
 
-由于您创建了一个新的LLVM组件，还需要在llvm/lib/Passes/CMakeLists.txt文件中添加链接依赖项。在LINK\_COMPONENTS关键字下，需要添加一行新组件的名称:
+由于创建了一个新的LLVM组件，还需要在llvm/lib/Passes/CMakeLists.txt文件中添加链接依赖项。在LINK\_COMPONENTS关键字下，需要添加一行新组件的名称:
 
 \begin{shell}
 PPProfiler
@@ -365,7 +365,7 @@ PPProfiler
 
 现在，可以开始构建和安装LLVM了，所有LLVM工具都可以使用新的通道ppprofiler。它已经编译到libLLVMPPProfiler.a库中，并且可以作为PPProfiler组件在构建系统中使用。
 
-目前，我们已经讨论了如何创建一个新的通道。在下一节中，我们将研究如何使用ppprofiler通道。
+我们已经讨论了如何创建一个新的通道。在下一节中，将研究如何使用ppprofiler通道。
 
 
 

@@ -1,4 +1,4 @@
-LLVM IR 中的异常处理与平台支持密切相关。在此，我们将使用 libunwind来了解最常见的异常处理类型。C++可以充分发挥libunwind的潜力，先来看一个C++示例，其中bar()函数可以抛出一个 int 或 double 值：
+LLVM IR 中的异常处理与平台支持密切相关，将使用libunwind来了解最常见的异常处理类型。C++可以充分发挥libunwind的潜力，先来看一个C++示例，其中bar()函数可以抛出一个int或double值：
 
 \begin{cpp}
 int bar(int x) {
@@ -23,7 +23,7 @@ int foo(int x) {
 }
 \end{cpp}
 
-抛出异常需要两次调用运行时库，可以在bar()函数中看到。首先，调用\_\_cxa\_allocate\_exception()为异常分配内存，这个函数接受要分配的字节数作为参数。异常负载(本例中的int或double值)被复制到分配的内存中，再通过\_\_cxa\_throw()引发异常。这个函数接受三个参数:指向已分配异常的指针、有关有效负载的类型信息，以及指向析构函数的指针(若异常有效负载有一个的话)。\_\_cxa\_throw()函数启动堆栈展开过程，并且永远不会返回。在LLVM IR中，这是对int值执行的，如下所示:
+抛出异常需要两次调用运行时库，可以在bar()函数中看到。\_\_cxa\_allocate\_exception()为异常分配内存，这个函数接受要分配的字节数作为参数。异常负载(本例中的int或double值)被复制到分配的内存中，再通过\_\_cxa\_throw()引发异常。这个函数接受三个参数:指向已分配异常的指针、有关有效负载的类型信息，以及指向析构函数的指针(若异常有有效负载有的话)。\_\_cxa\_throw()函数启动堆栈展开过程，并且永远不会返回。LLVM IR中，对int值执行:
 
 \begin{shell}
 %eh = call ptr @__cxa_allocate_exception(i64 4)
@@ -34,14 +34,14 @@ unreachable
 
 \_ZTIi是描述int类型的类型信息。对于double类型，则为\_ZTId。
 
-目前，还没有做特定于LLVM的工作。这一点在foo()函数中发生了变化，对bar()的调用可能引发异常。若是int类型异常，控制流必须转移到catch的IR代码。为此，必须使用invoke指令，而非call指令:
+目前，还没有做特定于LLVM的工作。这一点在foo()函数中发生了变化，对bar()的调用可能引发异常。若是int类型异常，控制流必须转移到catch的IR代码。所以，必须使用invoke指令，而非call指令:
 
 \begin{shell}
 %y = invoke i32 @_Z3bari(i32 %x) to label %next
                                  unwind label %lpad
 \end{shell}
 
-这两条指令的区别在于，invoke有两个相关联的标签。在函数正常结束时，第一个标号表示执行继续，通常以ret指令结束。在示例代码中，这个标签名为\%next。若发生异常，则在标号为\%lpad的“着陆台”上继续执行。
+这两条指令的区别在于，invoke有两个相关联的标签。在函数正常结束时，第一个标号表示执行继续，通常以ret指令结束。示例代码中，这个标签名为\%next。若发生异常，则在标号为\%lpad的“着陆垫”上继续执行。
 
 著陆台是一个基本的块，必须以landingpad指令开始。landingpad指令向LLVM提供有关处理过的异常类型的信息。例如，一个着陆台可能是这样的:
 
@@ -57,25 +57,25 @@ lpad:
 
 \begin{itemize}
 \item
-cleanup:表示存在用于清理当前状态的代码，用于调用局部对象的析构函数。若此标记存在，则在堆栈展开期间调用着陆垫。
+cleanup:表示存在用于清理当前状态的代码，用于调用局部对象的析构函数。若此标记存在，则在堆栈展开期间调用着陆垫指令。
 
 \item
-catch:是类型-值对的列表，表示可以处理的异常类型。若在此列表中找到抛出的异常类型，则调用着陆垫。在foo()函数的情况下，该值是指向int类型的C++运行时类型信息的指针，类似于\_\_cxa\_throw()函数的参数。
+catch:是类型-值对的列表，表示可以处理的异常类型。若在此列表中找到抛出的异常类型，则调用着陆垫指令。在foo()函数的情况下，该值是指向int类型的C++运行时类型信息的指针，类似于\_\_cxa\_throw()函数的参数。
 
 \item
-filter:指定一个异常类型数组。若在数组中找不到当前异常的异常类型，则调用着陆垫，用于实现throw()规范。对于foo()函数，数组只有一个成员——int类型的类型信息。
+filter:指定一个异常类型数组。若在数组中找不到当前异常的异常类型，则调用着陆垫指令，用于实现throw()规范。对于foo()函数，数组只有一个成员——int类型的类型信息。
 \end{itemize}
 
-着陆平台指令的结果类型是\{ptr, i32 \}结构。第一个元素是指向抛出异常的指针，第二个元素是类型选择器。从结构体中进行提取:
+着陆平垫指令的结果类型是\{ptr, i32 \}结构。第一个元素是指向抛出异常的指针，第二个元素是类型选择器。从结构体中进行提取:
 
 \begin{shell}
 %exc.ptr = extractvalue { ptr, i32 } %exc, 0
 %exc.sel = extractvalue { ptr, i32 } %exc, 1
 \end{shell}
 
-类型选择器是一个数字，可以帮助确定为什么要调用着陆垫。若当前异常类型与landingpad指令的catch部分给出的异常类型匹配，则该值为正值。若当前异常类型不匹配过滤部分给出的值，则值为负。若应该调用清理代码，则为0。
+类型选择器是一个数字，可以帮助确定为什么要调用着陆垫指令。若当前异常类型与landingpad指令的catch部分给出的异常类型匹配，则该值为正值。若当前异常类型不匹配过滤部分给出的值，则值为负。若应该调用清理代码，则为0。
 
-类型选择器是类型信息表的偏移量，由着陆垫指令的catch和filter部分给出的值构造而成。在优化过程中，多个着陆垫指令可以合并为一个，所以在IR级别上该表的结构是未知的。要检索给定类型的类型选择器，需要调用内部的@llvm.eh.typeid.for的函数。我们需要它来检查类型选择器值是否与int的类型信息相对应，以便执行catch (int e) \{\}块中的代码:
+类型选择器是类型信息表的偏移量，由着陆垫指令的catch和filter部分给出的值构造而成。优化过程中，多个着陆垫指令可以合并为一个，所以在IR级别上该表的结构是未知的。要检索给定类型的类型选择器，需要调用内部的@llvm.eh.typeid.for的函数。需要它来检查类型选择器值是否与int的类型信息相对应，以便执行catch (int e) \{\}块中的代码:
 
 \begin{shell}
 %tid.int = call i32 @llvm.eh.typeid.for(ptr @_ZTIi)
@@ -83,9 +83,9 @@ filter:指定一个异常类型数组。若在数组中找不到当前异常的�
 br i1 %tst.int, label %catchint, label %filterorcleanup
 \end{shell}
 
-异常的处理是通过调用\_\_cxa\_begin\_catch()和\_\_cxa\_end\_catch()实现的。\_\_cxa\_begin\_catch()函数需要一个参数—当前异常—是着陆垫指令返回的值之一，返回一个指向异常负载的指针——在本例中是一个int值。
+异常的处理是通过调用\_\_cxa\_begin\_catch()和\_\_cxa\_end\_catch()实现的。\_\_cxa\_begin\_catch()函数需要一个参数——当前异常——是着陆垫指令返回的值之一，返回一个指向异常负载的指针——本例中是int值。
 
-\_\_cxa\_end\_catch()函数标志着异常处理的结束，并释放用\_\_cxa\_allocate\_exception()分配的内存。请注意，若在catch块中抛出另一个异常，则运行时行为会复杂得多。异常处理方法如下:
+\_\_cxa\_end\_catch()函数标志着异常处理的结束，并释放用\_\_cxa\_allocate\_exception()分配的内存。注意，若在catch块中抛出另一个异常，则运行时行为会复杂得多。异常处理方法如下:
 
 \begin{shell}
 catchint:
@@ -113,14 +113,14 @@ unreachable
 
 同样，该处理程序也不会返回。
 
-这种情况下不需要清理，所有清理代码所做的就是恢复堆栈展开的执行:
+这种情况下不需要清理，所有清理代码要做的就是恢复堆栈展开的执行:
 
 \begin{shell}
 cleanup:
 resume { ptr, i32 } %exc
 \end{shell}
 
-libunwind驱动堆栈展开过程，但没有绑定到语言。依赖于语言的处理在个性函数中完成。对于Linux上的C++，个性函数(personality function)称为\_\_gxx\_personality\_v0()。根据平台或编译器的不同，这个名称可能有所不同。每个需要参与堆栈展开的函数都有一个个性函数。此个性函数分析函数是否捕获异常、是否具有不匹配的筛选器列表或是否需要清理调用，将这些信息返回给解卷器，解卷器采取相应的行动。在LLVM IR中，个性函数的指针是作为函数定义的一部分给出的:
+libunwind驱动堆栈展开过程，但没有绑定到语言，依赖于语言的处理在个性函数中完成。对于Linux上的C++，个性函数(personality function)称为\_\_gxx\_personality\_v0()。根据平台或编译器的不同，这个名称可能有所不同。每个需要参与堆栈展开的函数都有一个个性函数。此个性函数分析函数是否捕获异常、是否具有不匹配的筛选器列表或是否需要清理调用，将这些信息返回给解卷器，解卷器采取相应的行动。在LLVM IR中，个性函数的指针是作为函数定义的一部分给出的:
 
 \begin{shell}
 define i32 @_Z3fooi(i32) personality ptr @__gxx_personality_v0
@@ -132,7 +132,7 @@ define i32 @_Z3fooi(i32) personality ptr @__gxx_personality_v0
 
 \begin{enumerate}
 \item
-来看看如何创建这个IR，在第2章中创建了calc表达式编译器。现在，将扩展表达式编译器的代码生成器，以便在执行除零操作时引发并处理异常。生成的IR将检查除法的除数是否为0。若为true，则会引发异常。我们还将在函数中添加一个着陆垫指令，用来捕获异常并打印Divide by 0 !到控制台，并结束计算。在这个简单的例子中，不需要使用异常处理，但可以让我们专注于代码生成过程。我们必须将所有代码添加到CodeGen.cpp文件中，首先添加所需的新字段和一些辅助方法。首先，需要存储\_\_cxa\_allocate\_exception()和\_\_cxa\_throw()函数的LLVM声明，它们由函数类型和函数本身组成。需要一个GlobalVariable实例来保存类型信息，还需要引用控制着陆垫指令的基本块和包含不可达指令的基本块:
+来看看如何创建这个IR，在第2章中创建了calc表达式编译器。将扩展表达式编译器的代码生成器，以便在执行除零操作时引发并处理异常。生成的IR将检查除法的除数是否为0。若为true，则会引发异常。还将在函数中添加一个着陆垫指令，用来捕获异常并打印Divide by 0 !到控制台，并结束计算。这个简单的例子中，不需要使用异常处理，但可以让专注于代码生成过程。必须将所有代码添加到CodeGen.cpp文件中，首先添加所需的新字段和一些辅助方法，需要存储\_\_cxa\_allocate\_exception()和\_\_cxa\_throw()函数的LLVM声明，其由函数类型和函数本身组成。需要一个GlobalVariable实例来保存类型信息，还需要引用控制着陆垫指令的基本块和包含不可达指令的基本块:
 
 \begin{cpp}
 GlobalVariable *TypeInfo = nullptr;
@@ -145,7 +145,7 @@ BasicBlock *UnreachableBB = nullptr;
 \end{cpp}
 
 \item
-我们还将添加一个新的辅助函数，来比较两个值的IR。createICmpEq()函数接受Left和Right值作为参数进行比较，创建一个比较指令来测试值是否相等，并为两个基本块创建一个分支指令，用于相等和不相等的情况。这两个基本块通过TrueDest和FalseDest参数中的引用返回。此外，新的基本块的标签可以在TrueLabel和FalseLabel参数中给出。代码如下:
+还要添加一个新辅助函数，来比较两个值的IR。createICmpEq()函数接受Left和Right值作为参数进行比较，创建一个比较指令来测试值是否相等，并为两个基本块创建一个分支指令，用于相等和不相等的情况，这两个基本块通过TrueDest和FalseDest参数中的引用返回。此外，新基本块的标签可以在TrueLabel和FalseLabel参数中给出:
 
 \begin{cpp}
 void createICmpEq(Value *Left, Value *Right,
@@ -188,7 +188,7 @@ void createFunc(FunctionType *&Fty, Function *&Fn,
 
 \begin{enumerate}
 \item
-新的addThrow()方法首先检查TypeInfo字段是否已初始化。若还没有初始化，则会创建一个i8指针类型的全局外部常量\_ZTIi。这代表了描述C++ int类型的C++元数据:
+新的addThrow()方法首先检查TypeInfo字段是否已初始化。若还没有初始化，则会创建一个i8指针类型的全局外部常量\_ZTIi。这代表了描述C++ int类型的元数据:
 
 \begin{cpp}
 void addThrow(int PayloadVal) {
@@ -201,7 +201,7 @@ void addThrow(int PayloadVal) {
 \end{cpp}
 
 \item
-初始化继续使用我们的助手createFunc()方法为\_\_cxa\_allocate\_exception()和\_\_cxa\_throw()函数创建IR声明:
+初始化继续使用辅助createFunc()方法为\_\_cxa\_allocate\_exception()和\_\_cxa\_throw()函数创建IR声明:
 
 \begin{cpp}
         createFunc(AllocEHFty, AllocEHFn,
@@ -213,7 +213,7 @@ void addThrow(int PayloadVal) {
 \end{cpp}
 
 \item
-使用异常处理的函数需要一个个性函数，它有助于堆栈展开。我们添加了IR代码来声明C++库中的\_\_gxx\_personality\_v0()个性函数，并将其设置为当前函数的个性例程。当前函数没有存储为一个字段，但可以使用Builder实例来查询当前的基本块，其将函数存储为Parent字段:
+使用异常处理的函数需要一个个性函数，有助于堆栈展开。添加了IR代码来声明C++库中的\_\_gxx\_personality\_v0()个性函数，并将其设置为当前函数的个性例程。当前函数没有存储为一个字段，可以使用Builder实例来查询当前的基本块，其将函数存储为Parent字段:
 
 \begin{cpp}
         FunctionType *PersFty;
@@ -227,7 +227,7 @@ void addThrow(int PayloadVal) {
 \end{cpp}
 
 \item
-接下来，必须创建并填充着陆台指令的基本块。首先，需要保存指向当前基本块的指针。然后，创建一个新的基本块，在构建器中进行设置，以便它可以用作插入指令的基本块，并调用addLandingPad()方法。该方法生成用于处理异常的IR代码，将在下一节捕获异常中进行描述。这段代码填充了着陆台指令的基本块:
+接下来，必须创建并填充着陆台指令的基本块。首先，需要保存指向当前基本块的指针，再创建一个新的基本块，在构建器中进行设置，以便可以用作插入指令的基本块，并调用addLandingPad()方法。该方法生成用于处理异常的IR代码，将在下一节捕获异常中进行描述。这段代码填充了着陆垫指令的基本块:
 
 \begin{cpp}
         BasicBlock *SaveBB = Builder.GetInsertBlock();
@@ -250,7 +250,7 @@ void addThrow(int PayloadVal) {
 \end{cpp}
 
 \item
-要抛出异常，需要通过调用\_\_cxa\_allocate\_exception()函数为异常和负载分配内存。我们的有效负载是C++ int类型，通常大小为4字节。我们为size创建一个常量无符号值，并将其作为参数调用函数。函数类型和函数声明已经初始化，所以只需要创建调用指令:
+要抛出异常，通过调用\_\_cxa\_allocate\_exception()函数为异常和负载分配内存。我们的有效负载是C++ int类型，通常大小为4字节，再为size创建一个常量无符号值，并将其作为参数调用函数。函数类型和函数声明已经初始化，所以只需要创建调用指令:
 
 \begin{cpp}
     Constant *PayloadSz =
@@ -271,7 +271,7 @@ void addThrow(int PayloadVal) {
 \end{cpp}
 
 \item
-最后，必须通过调用\_\_cxa\_throw()函数来抛出异常。由于这个函数引发了一个异常，该异常也在同一个函数中处理，因此需要使用invoke指令，而非call指令。与调用指令不同，因为它有两个后继基本块，所以调用指令会结束一个基本块，这些是UnreachableBB和LPadBB基本块。若函数没有引发异常，控制流将转移到UnreachableBB基本块。由于\_\_cxa\_throw()函数的设计，这种情况永远不会发生，因为控制流会转移到LPadBB基本块来处理异常。这样就完成了addThrow()方法的实现:
+最后，必须通过调用\_\_cxa\_throw()函数来抛出异常。由于这个函数引发了一个异常，该异常也在同一个函数中处理，所以需要使用invoke指令，而非call指令。与调用指令不同，因为它有两个后继基本块，所以调用指令会结束一个基本块，这些是UnreachableBB和LPadBB基本块。若函数没有引发异常，控制流将转移到UnreachableBB基本块。由于\_\_cxa\_throw()函数的设计，因为控制流会转移到LPadBB基本块来处理异常，所以这种情况永远不会发生。这样就完成了addThrow()方法的实现:
 
 \begin{cpp}
     Builder.CreateInvoke(
@@ -292,7 +292,7 @@ void addThrow(int PayloadVal) {
 
 \begin{enumerate}
 \item
-在生成的IR中，需要从C++运行时库中调用\_\_cxa\_begin\_catch()和\_\_cxa\_end\_catch()函数。为了打印错误消息，将从C运行时库生成对puts()函数的调用。此外，为了从异常中获取类型信息，必须生成对llvm.eh.typeid.for指令的调用。还需要FunctionType和Function实例，我们将利用createFunc()方法来创建它们:
+生成的IR中，需要从C++运行时库中调用\_\_cxa\_begin\_catch()和\_\_cxa\_end\_catch()函数。为了输出错误消息，将从C运行时库生成对puts()函数的调用。此外，为了从异常中获取类型信息，必须生成对llvm.eh.typeid.for指令的调用。还需要FunctionType和Function实例，我们将利用createFunc()方法来创建它们:
 
 \begin{cpp}
 void addLandingPad() {
@@ -313,7 +313,7 @@ void addLandingPad() {
 \end{cpp}
 
 \item
-着陆台指令是我们生成的第一条指令。结果类型是一个包含i8指针和i32类型字段的结构体。这个结构是通过调用StructType::get()函数生成的。此外，由于需要处理C++ int类型的异常，还需要将this作为子句添加到landingpad指令中，该指令必须是i8指针类型的常量，所以需要生成一个位转换指令来将TypeInfo值转换为这种类型。之后，必须将指令返回的值存储在Exc变量中，供后续使用:
+着陆台指令是我们生成的第一条指令，结果类型是一个包含i8指针和i32类型字段的结构体。这个结构是通过调用StructType::get()函数生成的。此外，由于需要处理C++ int类型的异常，还需要将this作为子句添加到landingpad指令中，该指令必须是i8指针类型的常量，所以需要生成一个位转换指令来将TypeInfo值转换为这种类型，再将指令返回的值存储在Exc变量中，供后续使用:
 
 \begin{cpp}
     LandingPadInst *Exc = Builder.CreateLandingPad(
@@ -335,7 +335,7 @@ void addLandingPad() {
 \end{cpp}
 
 \item
-要生成用于比较的IR，必须调用createICmpEq()函数。这个函数还生成了两个基本块，我们将它们存储在TrueDest和FalseDest变量中:
+要生成用于比较的IR，必须调用createICmpEq()函数。这个函数还生成了两个基本块，将它们存储在TrueDest和FalseDest变量中:
 
 \begin{cpp}
     BasicBlock *TrueDest, *FalseDest;
@@ -352,7 +352,7 @@ void addLandingPad() {
 \end{cpp}
 
 \item
-若这两个值相等，则控制流在TrueDest基本块处继续。首先，生成IR代码，以便从存储在Exc变量中的着陆平台指令的返回值中提取指向异常的指针。然后，生成对\_\_cxa\_begin\_catch()函数的调用，将指向异常的指针作为参数传递。这表示在运行时开始处理异常:
+若这两个值相等，则控制流在TrueDest基本块处继续。生成IR代码，以便从存储在Exc变量中的着陆平台指令的返回值中，提取指向异常的指针。生成对\_\_cxa\_begin\_catch()函数的调用，将指向异常的指针作为参数传递。这表示在运行时开始处理异常:
 
 \begin{cpp}
     Builder.SetInsertPoint(TrueDest);
@@ -363,7 +363,7 @@ void addLandingPad() {
 \end{cpp}
 
 \item
-通过调用puts()函数来处理异常，将消息打印到控制台。为此，我们通过调用CreateGlobalStringPtr()函数生成一个指向该字符串的指针，然后在生成的调用中将该指针作为参数传递给puts()函数:
+再用puts()函数来处理异常，将消息输出到控制台，这里通过调用CreateGlobalStringPtr()函数生成一个指向该字符串的指针，在生成的调用中将该指针作为参数传递给puts()函数:
 
 \begin{cpp}
     Value *MsgPtr = Builder.CreateGlobalStringPtr(
@@ -372,7 +372,7 @@ void addLandingPad() {
 \end{cpp}
 
 \item
-现在我们已经处理了异常，必须生成对\_\_cxa\_end\_catch()函数的调用，以通知运行时有关它的信息。最后，从函数返回一个aret指令:
+现在已经处理了异常，必须生成对\_\_cxa\_end\_catch()函数的调用，以通知运行时有关它的信息。最后，从函数返回一个aret指令:
 
 \begin{cpp}
     Builder.CreateCall(EndCatchFty, EndCatchFn);
@@ -388,7 +388,7 @@ void addLandingPad() {
 
 \mySubsubsection{6.1.3.}{将异常处理代码集成到应用程序中}
 
-除法的IR是在visit(BinaryOp \&)方法中生成的，必须生成一个IR来将除数与0进行比较，而不是仅仅生成一个sdiv指令。若除数为0，则控制流继续在基本块中运行，从而引发异常。否则，控制流将在带有sdiv指令的基本块中继续。在createICmpEq()和addThrow()函数的帮助下，可以很容易地编写如下代码:
+除法的IR是在visit(BinaryOp \&)方法中生成的，必须生成一个IR来将除数与0进行比较，而不是仅仅生成一个sdiv指令。若除数为0，则控制流继续在基本块中运行，从而引发异常；否则，控制流将在带有sdiv指令的基本块中继续。在createICmpEq()和addThrow()函数的帮助下，可以编写如下代码:
 
 \begin{cpp}
     case BinaryOp::Div:
@@ -434,11 +434,11 @@ Enter a value for a: 0
 Divide by zero!
 \end{shell}
 
-在第二次运行时，输入为0，这会引发异常——像预期的那样工作了!
+第二次运行时，输入为0，这会引发异常——像预期的那样工作了!
 
-在本节中，学习了如何引发和捕获异常。生成IR的代码可以用作其他编译器的蓝图，所使用的类型信息和catch子句的数量取决于编译器的输入，但是需要生成的IR仍然遵循本节中提供的模式。
+本节中，了解了如何引发和捕获异常。生成IR的代码可以用作其他编译器的蓝图，所使用的类型信息和catch子句的数量取决于编译器的输入，但需要生成的IR仍然遵循本节中提供的模式。
 
-添加元数据是向LLVM提供进一步信息的另一种方式。下一节中，我们将添加类型元数据，以便在某些情况下支持LLVM优化器。
+添加元数据是向LLVM提供进一步信息的另一种方式。下一节中，将添加类型元数据，以便在某些情况下支持LLVM优化器。
 
 
 

@@ -5,11 +5,11 @@
 
 为了描述通用结构，LLVM使用的元数据类似于用于基于类型分析的元数据。静态结构描述了文件、编译单元、函数和词法块，以及使用的数据类型。
 
-使用的主要类是llvm::DIBuilder，需要使用llvm/IR/DIBuilder头文件来获取类声明。此构建器类提供了一个易于使用的接口来创建调试元数据。之后，元数据将添加到LLVM对象(如全局变量)中，或者在调试内部函数的调用中使用。下面是一些构建器类可以创建的重要元数据:
+使用的主要类是llvm::DIBuilder，使用llvm/IR/DIBuilder目录下的头文件来获取类声明。此构建器类提供了一个易于使用的接口来创建调试元数据。之后，元数据将添加到LLVM对象(如全局变量)中，或者在调试内部函数的调用中使用。下面是一些构建器类可以创建的元数据:
 
 \begin{itemize}
 \item
-llvm::DIFile:使用文件名和包含该文件的目录的绝对路径描述一个文件。可以使用createFile()方法来创建，文件可以包含主编译单元，也可以包含导入的声明。
+llvm::DIFile:使用文件名和包含该文件的目录的绝对路径描述一个文件。可以使用createFile()方法来创建，文件可以包含主编译单元，包含导入的声明。
 
 \item
 llvm::DICompileUnit:用于描述当前编译单元。除其他事项外，还指定源语言、特定于编译器的生产者字符串、是否启用优化，当然还有DIFile(编译单元驻留在其中)。可以通过createCompileUnit()来创建。
@@ -34,7 +34,7 @@ createBasicType()函数返回一个指向llvm::DIBasicType类的指针，创建�
 还有支持枚举、模板、类等的方法。
 \end{itemize}
 
-函数列表显示必须将源语言的每个细节添加到调试信息中，假设llvm::DIBuilder类的实例称为DBuilder，还假设在一个名为file的文件中有一些tinylang源文件。/home/llvmuser目录下的File.mod文件中，其第5行是Func():INTEGER函数，第7行包含一个局部VAR i:INTEGER声明。让我们为此创建元数据，从文件的信息开始。这里，需要指定文件名和文件所在文件夹的绝对路径:
+函数列表显示必须将源语言的每个细节添加到调试信息中，假设llvm::DIBuilder类的实例称为DBuilder，还假设在一个名为file的文件中有一些tinylang源文件。/home/llvmuser目录下的File.mod文件中，其第5行是Func():INTEGER函数，第7行包含一个局部VAR i:INTEGER声明。为此创建元数据，从文件的信息开始。这里，需要指定文件名和文件所在文件夹的绝对路径:
 
 \begin{cpp}
 llvm::DIFile *DbgFile = DBuilder.createFile("File.mod",
@@ -60,7 +60,7 @@ llvm::DICompileUnit *DbgCU = DBuilder.createCompileUnit(
 
 许多情况下，选择一种接近源语言的语言就足够了。在tinylang的例子中，这是Modula-2，使用DW\_LANG\_Modula2作为语言标识符。编译单元保存在文件中，该文件由我们前面创建的DbgFile变量表示。
 
-此外，调试信息可以携带有关生成器的信息，这些信息可以是编译器的名称和版本信息。在这里，只是传递了tinylang字符串。若不想添加这些信息，则可以简单地使用一个空字符串作为参数。
+此外，调试信息可以携带有关生成器的信息，这些信息可以是编译器的名称和版本信息。这里，只是传递了tinylang字符串。若不想添加这些信息，则可以简单地使用一个空字符串作为参数。
 
 下一组信息包括IsOptimized标志，指示编译器是否开启了优化。通常，这个标志来自于-O命令行开关，可以使用CUFlags参数将其他参数设置传递给调试器。这里没有使用这个，直接传递一个空字符串。我们也不使用Objective-C，所以将0作为Objective-C运行时参数。
 
@@ -99,42 +99,42 @@ llvm::DISubprogram *DbgFunc = DBuilder.createFunction(
 
 函数属于编译单元，在示例中，编译单元存储在DbgCU变量中。需要在源文件中指定函数的名称，即Func，并且修改后的名称存储在目标文件中。这些信息有助于调试器定位函数的机器码。根据tinylang规则，修改后的名称为\_t4File4Func，还必须指定包含函数的文件。
 
-乍一看，这可能令人惊讶，但想想C和C++中的包含机制:函数可以存储在不同的文件中，然后在主编译单元中使用\#include包含该文件。这里的情况并非如此，我们使用与编译单元使用的文件相同的文件。接下来，传递函数的行号和函数类型。函数的行号不能是函数的词法作用域开始的行号，所以可以指定不同的ScopeLine。函数也有保护，我们在这里用FlagPrivate值指定它来指示private函数。函数保护的其他可能值是FlagPublic和FlagProtected，分别用于public和protected域内的函数。
+乍一看，这可能令人惊讶，但想想C和C++中的包含机制:函数可以存储在不同的文件中，然后在主编译单元中使用\#include包含该文件。这里的情况并非如此，我们使用与编译单元使用的文件相同的文件。接下来，传递函数的行号和函数类型。函数的行号不能是函数的词法作用域开始的行号，可以指定不同的ScopeLine。函数也有保护，在这里用FlagPrivate值指定它来指示private函数。函数保护的其他可能值是FlagPublic和FlagProtected，分别用于public和protected域内的函数。
 
-除了保护级别，这里还可以指定其他标志。例如，FlagVirtual表示虚函数，FlagNoReturn表示该函数不返回给调用者。可以在LLVM include文件中找到可能值的完整列表，即llvm/include/llvm/IR/DebugInfoFlags.def。
+除了保护级别，还可以指定其他标志。例如，FlagVirtual表示虚函数，FlagNoReturn表示该函数不返回给调用者。可以在LLVM include文件中找到可能值的完整列表，即llvm/include/llvm/IR/DebugInfoFlags.def。
 
 最后，可以指定特定于函数的标志。最常用的标志是SPFlagLocalToUnit值，表明该函数是编译单元的本地函数。MainSubprogram值也经常使用，表明这个函数是应用程序的主要函数。前面提到的LLVM包含文件，还列出了与特定于函数的标志相关的所有可能值。
 
-到目前为止，我们只创建了引用静态数据的元数据。变量是动态的，因此将在下一节中探讨如何将静态元数据添加到IR代码中以访问变量。
+目前，我们只创建了引用静态数据的元数据。变量是动态的，因此将在下一节中探讨如何将静态元数据添加到IR代码中以访问变量。
 
 \mySubsubsection{6.3.2.}{跟踪变量及其值}
 
 前一节中描述的类型元数据需要与源程序的变量相关联。对于全局变量，这非常简单。llvm::DIBuilder类的createGlobalVariableExpression()函数创建描述全局变量的元数据。这包括源文件中变量的名称、修改过的名称、源文件等。LLVM IR中的全局变量由GlobalVariable类的实例表示。这个类有一个名为addDebugInfo()的方法，可将从createGlobalVariableExpression()返回的元数据节点与全局变量关联起来。
 
-对于局部变量，需要采取另一种方法。LLVM IR不知道表示局部变量的类，因为只知道值。LLVM社区开发的解决方案是将对函数的调用插入到函数的IR代码中。内在函数是LLVM知道的函数，所以可以用它做一些神奇的事情。在大多数情况下，内在函数不会导致机器级别的子例程调用。在这里，函数调用可将元数据与值关联起来，函数内最重要的调试元数据是llvm.dbg.declare和llvm.dbg.value。
+对于局部变量，需要采取另一种方法。因为只知道值，所以LLVM IR不知道表示局部变量的类。LLVM社区开发的解决方案是将对函数的调用插入到函数的IR代码中。内在函数是LLVM知道的函数，所以可以用它做一些神奇的事情。大多数情况下，内在函数不会导致机器级别的子例程调用。这里，函数调用可将元数据与值关联起来，函数内最重要的调试元数据是llvm.dbg.declare和llvm.dbg.value。
 
-llvm.dbg.declare内部变量提供信息，由前端生成，用于声明局部变量。本质上，this描述了局部变量的地址。在优化过程中，通道可以用(可能多次)调用llvm.dbg来替换这个内在的调用。值来保存调试信息并跟踪本地源变量。在优化之后，llvm.dbg.declare用于描述局部变量在内存中的程序点，所以可能会出现多次调用。
+llvm.dbg.declare内部变量提供信息，由前端生成，用于声明局部变量。本质上，this描述了局部变量的地址。优化过程中，通道可以用(可能多次)调用llvm.dbg来替换这个内在的调用。值来保存调试信息并跟踪本地源变量。优化之后，llvm.dbg.declare用于描述局部变量在内存中的程序点，所以可能会出现多次调用。
 
 另一方面，只要将局部变量设置为新值，就会调用llvm.dbg.value。这个内部变量描述的是局部变量的值，而不是它的地址。
 
-这一切是如何运作的呢?LLVM IR表示和通过LLVM::DIBuilder类进行的编程创建略有不同，因此我们将对两者进行研究。
+这一切是如何运作的呢?LLVM IR表示和通过LLVM::DIBuilder类进行的编程创建略有不同，因此将对两者进行研究。
 
-继续上一节的示例，我们将使用alloca指令为function函数中的I变量分配本地存储:
+继续上一节的示例，将使用alloca指令为function函数中的I变量分配本地存储:
 
 \begin{shell}
 @i = alloca i32
 \end{shell}
 
-之后，必须添加一个对llvm.dbg.declare的调用:
+之后，必须添加对llvm.dbg.declare的调用:
 
 \begin{shell}
 call void @llvm.dbg.declare(metadata ptr %i,
                 metadata !1, metadata !DIExpression())
 \end{shell}
 
-第一个参数是局部变量的地址。第二个参数是描述局部变量的元数据，是通过调用本地变量createAutoVariable()或调用llvm::DIBuilder类参数createParameterVariable()来创建的。最后，第三个参数描述一个地址表达式，稍后将对此进行解释。
+第一个参数是局部变量的地址。第二个参数是描述局部变量的元数据，通过调用本地变量createAutoVariable()或调用llvm::DIBuilder类参数createParameterVariable()来创建。最后，第三个参数描述一个地址表达式，稍后将对此进行解释。
 
-让我们实现IR创建，可以通过调用llvm::IRBuilder<>类的CreateAlloca()方法来为本地@i变量分配存储空间:
+来实现IR的创建，可以通过调用llvm::IRBuilder<>类的CreateAlloca()方法来为本地@i变量分配存储空间:
 
 \begin{cpp}
 llvm::Type *IntTy = llvm::Type::getInt32Ty(LLVMCtx);
@@ -165,15 +165,15 @@ DBuilder.insertDeclare(Val, DbgLocalVar,
 
 同样，必须为变量指定一个源位置。llvm::DILocation的实例是一个容器，保存与作用域相关联的位置的行和列。此外，insertDeclare()方法将调用添加到LLVM IR的内部函数。就这个函数的参数而言，需要存储在Val中的变量的地址，以及存储在DbgValVar中的变量的调试元数据。还传递了一个空地址表达式和前面创建的调试位置，与普通指令一样，需要指定将调用插入到哪个基本块中。若指定一个基本块，则在末尾插入调用。或者，可以指定一条指令，然后在该指令之前插入调用。还有一个指向alloca指令的指针，这是插入到底层基本块中的最后一条指令。因此，可以使用这个基本块，并且调用会添加在alloca指令之后。
 
-若局部变量的值发生了变化，那么必须向IR添加对llvm.dbg.value的调用，以设置局部变量的新值。可以使用llvm::DIBuilder类的insertValue()方法来实现。
+若局部变量的值发生了变化，必须向IR添加对llvm.dbg.value的调用，以设置局部变量的新值。可以使用llvm::DIBuilder类的insertValue()方法来实现。
 
-当实现函数的IR生成时，我们使用了一种高级算法，主要使用值，避免为局部变量分配存储。在添加调试信息方面，所以我们使用llvm.dbg.value的频率比在clang生成的IR中看到的要高得多。
+当实现函数的IR生成时，使用了一种高级算法(主要使用值)，避免为局部变量分配存储。需要添加调试信息，所以使用llvm.dbg.value的频率比在clang生成的IR中看到的要高得多。
 
-若变量没有专用存储空间，而是更大的聚合类型的一部分，该怎么办?可能出现这种情况的一种情况是使用嵌套函数。要实现对调用者堆栈帧的访问，必须收集结构中所有使用的变量，并将指向该记录的指针传递给调用函数。在调用的函数内部，可以引用调用方的变量，就好像是函数的局部变量一样。不同的是，这些变量现在是总量的一部分。
+若变量没有专用存储空间，而是更大的聚合类型的一部分，该怎么办?可能出现这种情况的一种情况是使用嵌套函数。要实现对调用者堆栈帧的访问，必须收集结构中所有使用的变量，并将指向该记录的指针传递给调用函数。调用的函数内部，可以引用调用方的变量，就好像是函数的局部变量一样。不同的是，这些变量现在是总量的一部分。
 
 对llvm.dbg.declare的调用中，若调试元数据描述了第一个参数所指向的整个内存，则使用空表达式。但若只描述内存的一部分，则需要添加一个表达式，指示元数据应用于内存的哪一部分。
 
-嵌套帧的情况下，需要计算帧中的偏移量。需要访问DataLayout实例，可以从创建IR代码的LLVM模块获得该实例。若llvm::Module实例命名为Mod，保存嵌套框架结构的变量命名为frame，并且是llvm::StructType类型，可以通过以下方式访问框架的第三个成员。这个访问会提供成员的偏移量:
+嵌套帧的情况下，需要计算帧中的偏移量。需要访问DataLayout实例，可以从创建IR代码的LLVM模块获得该实例。若llvm::Module实例命名为Mod，保存嵌套帧结构的变量命名为frame，并且是llvm::StructType类型，可以通过以下方式访问帧的第三个成员。这个访问会提供成员的偏移量:
 
 \begin{cpp}
 const llvm::DataLayout &DL = Mod->getDataLayout();
@@ -194,7 +194,7 @@ AddrOps.push_back(Offset);
 llvm::DIExpression *Expr = DBuilder.createExpression(AddrOps);
 \end{cpp}
 
-需要注意的是，用户并不限于使用这种偏移操作。DWARF知道许多不同的运算符，可以创建相当复杂的表达式。可以在LLVM包含文件(llvm/include/llvm/BinaryFormat/Dwarf.def)中找到完整的操作符列表。
+用户并不限于使用这种偏移操作。DWARF知道许多不同的运算符，从而可以创建相当复杂的表达式。可以在LLVM包含文件(llvm/include/llvm/BinaryFormat/Dwarf.def)中找到完整的操作符列表。
 
 此时，可以为变量创建调试信息。为了使调试器能够遵循源代码中的控制流，还需要提供行号信息。这是下一节的主题。
 
@@ -202,19 +202,19 @@ llvm::DIExpression *Expr = DBuilder.createExpression(AddrOps);
 
 调试器允许程序员逐行调试应用程序，所以调试器需要知道哪些机器指令属于源代码中的哪一行，LLVM允许为每条指令添加一个源位置。在前一节中，创建了llvm::DILocation类型的位置信息，调试位置提供的信息不仅仅是行、列和范围。若需要，可以指定该行内联到的作用域。还可以指出此调试位置属于隐式代码——即前端生成，但不在源码中的代码。
 
-在此信息可以附加到指令之前，必须将调试位置包装在llvm::DebugLoc对象中。为此，必须简单地将从llvm::DILocation类获得的位置信息传递给llvm::DebugLoc构造函数。通过这种包装，LLVM可以跟踪位置信息。虽然源代码中的位置不会改变，但可以在优化期间删除为源码级语句或表达式生成的机器码，这种封装有助于处理这些变化。
+此信息可以添加到指令之前，必须将调试位置包装在llvm::DebugLoc对象中。为此，必须简单地将从llvm::DILocation类获得的位置信息传递给llvm::DebugLoc构造函数。通过这种包装，LLVM可以跟踪位置信息。虽然源代码中的位置不会改变，但可以在优化期间删除为源码级语句或表达式生成的机器码，这种封装有助于处理这些变化。
 
-添加行号信息主要归结为从AST检索行号信息并将其添加到生成的指令中。指令类具有setDebugLoc()方法，该方法将位置信息添加到指令上。
+添加行号信息主要归结为从AST检索行号信息，并将其添加到生成的指令中。指令类具有setDebugLoc()方法，该方法将位置信息添加到指令上。
 
 在下一节中，将学习如何生成调试信息，并将其添加到tinylang编译器中。
 
 \mySubsubsection{6.3.4.}{使tinylang支持调试}
 
-我们将调试元数据的生成封装在新的CGDebugInfo类中。此外，我们将声明放在tinylang/CodeGen/CGDebugInfo.h头文件中，并将定义放在tinylang/CodeGen/CGDebugInfo.cpp文件中。
+我们将调试元数据的生成封装在新的CGDebugInfo类中。此外，将声明放在tinylang/CodeGen/CGDebugInfo.h头文件中，并将定义放在tinylang/CodeGen/CGDebugInfo.cpp文件中。
 
-CGDebugInfo类有五个重要的成员，需要一个对模块代码生成器CGM的引用，因为需要将类型从AST表示转换为LLVM类型。当然，还需要一个名为Dbuilder的llvm::DIBuilder类的实例。还需要一个指向编译单元实例的指针，将其存储在成员CU中。
+CGDebugInfo类有五个重要的成员，需要一个对模块代码生成器CGM的引用，所以需要将类型从AST表示转换为LLVM类型。当然，需要一个名为Dbuilder的llvm::DIBuilder类的实例，还需要一个指向编译单元实例的指针，将其存储在成员CU中。
 
-为了避免再次为类型创建调试元数据，必须添加一个映射来缓存此信息。这个成员叫做TypeCache。最后，需要一种方法来管理范围信息，为此必须基于llvm::SmallVector<>类ScopeStack创建一个堆栈:
+为了避免再次为类型创建调试元数据，必须添加一个映射来缓存此信息，这个成员叫做TypeCache。最后，需要一种方法来管理范围信息，为此必须基于llvm::SmallVector<>类ScopeStack创建一个堆栈:
 
 \begin{cpp}
 CGModule &CGM;
@@ -307,7 +307,7 @@ CGDebugInfo::getPervasiveType(TypeDeclaration *Ty) {
 \end{cpp}
 
 \item
-若只是重命名类型名，必须将其映射到类型定义。这里，需要利用作用域和行号信息:
+若只是重命名类型名，必须将其映射到类型定义，需要利用作用域和行号信息:
 
 \begin{cpp}
 llvm::DIType *
@@ -347,7 +347,7 @@ CGDebugInfo::getArrayType(ArrayTypeDeclaration *Ty) {
 \end{cpp}
 
 \item
-使用所有这些单一方法，可以创建一个中心方法来为类型创建元数据。当然，这些元数据还负责缓存数据:
+使用所有这些单一方法，创建一个中心方法来为类型创建元数据，这些元数据还负责缓存数据:
 
 \begin{cpp}
 llvm::DIType *
@@ -419,7 +419,7 @@ CGDebugInfo::getType(ProcedureDeclaration *P) {
 \end{cpp}
 
 \item
-对于过程本身，现在可以使用在前一步中创建的过程类型创建调试信息。过程也会打开一个新的作用域，所以必须将过程压入作用域堆栈。这里，还必须将LLVM函数对象与新的调试信息关联起来:
+对于过程本身，现在可以使用在前一步中创建的过程类型创建调试信息。过程也会打开一个新的作用域，所以必须将过程压入作用域堆栈，还要将LLVM函数对象与新的调试信息关联起来:
 
 \begin{cpp}
 void CGDebugInfo::emitProcedure(
@@ -437,7 +437,7 @@ void CGDebugInfo::emitProcedure(
 \end{cpp}
 
 \item
-当到达过程的末尾时，必须通知构建器完成该过程的调试信息的构造。我们还需要从作用域堆栈中删除这个过程:
+当到达过程的末尾时，必须通知构建器完成该过程的调试信息的构造，还需要从作用域堆栈中删除这个过程:
 
 \begin{cpp}
 void CGDebugInfo::emitProcedureEnd(
@@ -449,7 +449,7 @@ ProcedureDeclaration *Decl, llvm::Function *Fn) {
 \end{cpp}
 
 \item
-最后，当我们添加完调试信息后，需要在构建器上实现finalize()方法。然后，验证生成的调试信息。这是开发过程中的一个重要步骤，可以帮助找到错生成的元数据:
+最后，当添加完调试信息后，需要在构建器上实现finalize()方法，再验证生成的调试信息。这是开发过程中的一个重要步骤，可以帮助找到错生成的元数据:
 
 \begin{cpp}
 void CGDebugInfo::finalize() { DBuilder.finalize(); }
