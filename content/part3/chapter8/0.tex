@@ -1,6 +1,6 @@
-LLVM中的大部分后端都是用TableGen语言编写的，TableGen是一种特殊的语言，用于生成C++源代码的片段，以避免每个后端都实现类似的代码，并缩短源代码的数量。所以了解TableGen很重要。
+LLVM中的大部分后端都用TableGen语言编写，TableGen是一种特殊的语言，用于生成C++源代码的片段，以避免每个后端都实现类似的代码，并减少源码量，所以了解TableGen很重要。
 
-在本章中，将了解以下内容:
+本章中，将了解以下内容:
 
 \begin{itemize}
 \item
@@ -10,13 +10,13 @@ LLVM中的大部分后端都是用TableGen语言编写的，TableGen是一种特
 TableGen语言的实验中，将定义自己的TableGen类和记录，并学习TableGen语言的语法
 
 \item
-从TableGen文件生成C++代码中，可以开发自己的TableGen后端
+使用TableGen文件生成C++代码中，可以开发自己的TableGen后端
 
 \item
 TableGen的缺点
 \end{itemize}
 
-本章结束时，将能够使用现有的TableGen类来定义自己的记录。还将了解如何从头创建TableGen类和记录，以及如何开发TableGen后端以生成源码。
+本章结束时，能够使用现有的TableGen类来定义自己的记录，了解如何从头创建TableGen类和记录，以及如何开发TableGen后端以生成源码。
 
 
 
