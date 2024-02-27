@@ -1,4 +1,4 @@
-若应用程序似乎运行缓慢，可能想知道代码中的时间花在了哪里。这里，用XRay检测代码可以帮助完成这项任务。基本上，在每个函数进入和退出时，都会向运行时库插入一个特殊的调用。允许计算函数调用的频率，以及在函数中花费的时间。可以在llvm/lib/XRay/目录中找到检测通道的实现，其运行时是compiler-rt的一部分。
+若应用程序似乎运行缓慢，可能想知道代码中的时间花在了哪里，可以用XRay检测代码可以帮助完成这项任务。每个函数进入和退出时，都会向运行时库插入一个特殊的调用。允许计算函数调用的频率，以及在函数中花费的时间。可以在llvm/lib/XRay/目录中找到检测通道的实现，其运行时是compiler-rt的一部分。
 
 下面的示例源代码中，使用ussleep()函数模拟实际工作。func1()函数休眠10µs，func2()函数调用func1()或休眠100µs，取决于n参数是奇数还是偶数。在main()函数中，两个函数都在循环中调用。需要在xraydemo.c文件中保存以下源码:
 
@@ -18,23 +18,23 @@ int main(int argc, char *argv[]) {
 }
 \end{cpp}
 
-要在编译期间启用XRay检测，需要指定-fxrayinstrument选项。值得注意的是，指令少于200条的函数不会检测。这是因为这是开发人员定义的任意阈值，在我们的例子中，函数不会检测。该阈值可以通过-fxrayinstruction-threshold=选项指定。
+要在编译期间启用XRay检测，需要指定-fxrayinstrument选项，指令少于200条的函数不会检测。这是因为这是开发人员定义的任意阈值。我们的例子中，函数不会检测。该阈值可以通过-fxrayinstruction-threshold=选项指定。
 
-或者，可以添加一个function属性来控制是否应该检测一个函数。例如，添加以下原型将导致我们总是检测函数:
+或者，可以添加一个function属性来控制是否应该检测一个函数，添加以下原型将总是检测函数:
 
 \begin{cpp}
 void func1() __attribute__((xray_always_instrument));
 \end{cpp}
 
-同样，通过使用xray\_never\_instrument属性，可以关闭函数的检测功能。
+通过使用xray\_never\_instrument属性，可以关闭函数的检测功能。
 
-现在我们将使用命令行选项并编译xraydemo.c文件，如下所示:
+现在将使用命令行选项并编译xraydemo.c文件:
 
 \begin{shell}
 $ clang -fxray-instrument -fxray-instruction-threshold=1 -g xraydemo.c -o xraydemo
 \end{shell}
 
-生成的二进制文件中，检测在默认情况下是关闭的。若运行二进制文件，将注意到与未检测的二进制文件相比没有任何区别。XRAY\_OPTIONS环境变量用于控制运行时数据的记录，要启用数据收集，可以运行应用程序如下:
+生成的二进制文件中，检测在默认情况下关闭。若运行二进制文件，将注意到与未检测的二进制文件相比没有区别。XRAY\_OPTIONS环境变量用于控制运行时数据的记录，要启用数据收集，可以运行如下应用程序:
 
 \begin{shell}
 $ XRAY_OPTIONS="patch_premain=true xray_mode=xray-basic" ./xraydemo
@@ -42,7 +42,7 @@ $ XRAY_OPTIONS="patch_premain=true xray_mode=xray-basic" ./xraydemo
 
 xray\_mode=xray-basic选项告诉运行时我们想要使用基本模式。这种模式下，将收集所有运行时数据，这可能导致生成较大的日志文件。当给出patch\_premain=true选项时，还会检测在main()函数之前运行的函数。
 
-执行该命令后，采集数据所在目录下将创建一个新文件。需要使用llvm-xray工具从该文件中提取任何可读信息。
+执行该命令后，采集数据所在目录下将创建一个新文件。需要使用llvm-xray工具从该文件中提取可读信息。
 
 llvm-xray工具支持各种子命令，可以使用account子命令提取一些基本统计信息。例如，要获得调用次数最多的前10个函数，可以添加-top=10选项来限制输出，并添加-sort=count选项来指定函数调用计数作为排序标准，还可以使用-sortorder=选项影响排序顺序。
 
@@ -58,9 +58,9 @@ funcid   count      sum function
      3       1 0.655643 demo.c:17:0: main
 \end{shell}
 
-如您所见，func1()函数调用的次数最多，还可以看到在此函数中花费的累积时间。这个例子只有三个函数，所以-top=选项在这里没有明显的效果，但是对于实际的应用程序，是非常有用的。
+func1()函数调用的次数最多，还可以看到在此函数中花费的累积时间。这个例子只有三个函数，所以-top=选项在这里没有明显的效果，但是对于实际的应用程序，是非常有用的。
 
-从收集的数据中，可以重建运行时期间发生的所有堆栈帧。使用stack子命令查看top 10的堆叠信息。为了简洁起见，这里简化了显示的输出:
+从收集的数据中，可以重建运行时期间发生的所有堆栈帧，使用stack子命令查看top 10的堆叠信息。为了简洁起见，这里简化了显示的输出:
 
 \begin{shell}
 $ llvm-xray stack xray-log.xraydemo.xVsWiE –instr_map ./xraydemo
@@ -82,9 +82,9 @@ lvl   function   count             sum
 
 堆栈帧是函数如何调用的序列。func2()函数由main()函数调用，这是累积时间最长的堆栈帧。深度取决于调用了多少函数，堆栈帧通常很大。
 
-此子命令还可以用于从堆栈帧创建火焰图。使用火焰图，可以轻松地确定哪些函数具有较大的累积运行时。输出是带有计数和运行时信息的堆栈帧。使用flamegraph.pl脚本，可以将数据转换为可伸缩的矢量图形(SVG)文件，并可以在浏览器中查看该文件。
+此子命令还可以用于从堆栈帧创建火焰图，可以轻松地确定哪些函数具有较大的累积运行时。输出是带有计数和运行时信息的堆栈帧。使用flamegraph.pl脚本，可以将数据转换为可伸缩的矢量图形(SVG)文件，并可以在浏览器中查看该文件。
 
-使用以下命令，指示llvm-xray使用-all-stacks选项输出所有堆栈帧。使用-stack-format =flame选项，输出将是flamegraph.pl脚本所期望的格式。此外，使用-aggregate-type选项，可以选择是按总时间统计堆栈帧，还是按调用次数统计堆栈帧。llvm-xray的输出通过管道输入到flamegraph.pl脚本中，结果输出保存在flame.svg文件中:
+使用以下命令，指示llvm-xray使用-all-stacks选项输出所有堆栈帧。使用-stack-format =flame选项，输出将是flamegraph.pl脚本所期望的格式。使用-aggregate-type选项，可以选择是按总时间统计堆栈帧，还是按调用次数统计堆栈帧。llvm-xray的输出通过管道输入到flamegraph.pl脚本中，结果输出保存在flame.svg文件中:
 
 \begin{shell}
 $ llvm-xray stack xray-log.xraydemo.xVsWiE --all-stacks\
@@ -120,7 +120,7 @@ $ llvm-xray convert --output-format=trace_event\
 llvm-xray工具具有更多适用于性能分析的功能。可以在LLVM网站\url{https://llvm.org/docs/XRay.html}和\url{https://llvm.org/docs/XRayExample.html}上阅读相关内容。
 \end{myTip}
 
-在本节中，我们学习了如何使用XRay检测应用程序，如何收集运行时信息，以及如何可视化该数据。可以利用这些知识，找到应用程序中的性能瓶颈。
+本节中，了解如何使用XRay检测应用程序，如何收集运行时信息，以及如何可视化该数据。可以利用这些知识，找到应用程序中的性能瓶颈。
 
 识别应用程序中错误的另一种方法是分析源代码，可以通过clang静态分析器完成。
 

@@ -1,12 +1,12 @@
 
 
 
-在考虑JIT编译器时，首先想到的是直接运行LLVM IR。这就是lli工具、LLVM解释器和动态编译器所做的工作。我们将在下一节中探讨lli工具。
+考虑JIT编译器时，首先想到的是直接运行LLVM IR。这就是lli工具、LLVM解释器和动态编译器所做的工作。我们将在下一节中探讨lli工具。
 
 
 \mySubsubsection{9.3.1.}{探索lli工具}
 
-让我们用一个非常简单的例子来试试lli工具。下面的LLVM IR可以存储为一个名为hello.ll的文件，相当于C语言中的hello world应用程序。该文件声明了来自C库的printf()函数的原型，hellostr常量包含要打印的消息。在main()函数内部，生成对printf()函数的调用，该函数包含将打印的hellostr消息。应用程序总是返回0。
+让我们用一个非常简单的例子来试试lli工具。下面的LLVM IR可以存储为一个名为hello.ll的文件，相当于C语言中的hello world应用程序。该文件声明了来自C库的printf()函数的原型，hellostr常量包含要打印的消息。在main()函数内部，生成对printf()函数的调用，该函数包含将打印的hellostr消息，应用程序总是返回0。
 
 完整的代码如下所示:
 
@@ -22,16 +22,16 @@ define dso_local i32 @main(i32 %argc, ptr %argv) {
 }
 \end{shell}
 
-这个LLVM IR文件是通用的，对所有平台都有效。我们可以使用cli工具直接执行IR，命令如下:
+这个LLVM IR文件是通用的，对所有平台都有效。可以使用cli工具直接执行IR，命令如下:
 
 \begin{shell}
 $ lli hello.ll
 Hello world
 \end{shell}
 
-这里有趣的一点是如何找到printf()函数。IR代码被编译为机器码，并触发printf符号的查找。这个符号在IR中找不到，所以在当前进程中搜索它。lli工具动态链接到C库，在那里可以找到该符号。
+这里有趣的一点是如何找到printf()函数。IR代码会编译为机器码，并触发printf符号的查找。这个符号在IR中找不到，所以在当前进程中搜索它，lli工具会动态链接到C库，在那里可以找到该符号。
 
-当然，lli工具不会链接到创建的库。为了使用这些函数，lli工具支持加载动态库和对象。下面的C源代码只是打印的友好消息:
+当然，lli工具不会链接到创建的库。为了使用这些函数，lli工具支持加载动态库和对象。下面的C代码只输出消息:
 
 \begin{shell}
 #include <stdio.h>
@@ -53,9 +53,9 @@ $ clang greetings.c -fPIC -shared -o greetings.so
 $ clang greetings.c -c -o greetings.o
 \end{shell}
 
-我们现在有两个文件，greetings.so动态库和greetings.o对象文件，加载到lli工具中。
+现在有两个文件，greetings.so动态库和greetings.o对象文件，加载到lli工具中。
 
-我们还需要一个调用greetings()函数的LLVM IR文件。为此，创建一个main.ll文件，包含单个函数调用:
+还需要一个调用greetings()函数的LLVM IR文件，还要创建一个main.ll文件，包含单个函数调用:
 
 \begin{shell}
 declare void @greetings(...)
@@ -66,7 +66,7 @@ define dso_local i32 @main(i32 %argc, i8** %argv) {
 }
 \end{shell}
 
-注意，在执行时，前面的IR崩溃了，因为lli无法定位greetings符号:
+执行时，因为lli无法定位greetings符号，所以前面的IR崩溃了，:
 
 \begin{shell}
 $ lli main.ll
@@ -83,7 +83,7 @@ Hi!
 
 若包含动态库的目录不在动态加载器的搜索路径中，则指定动态库的路径非常重要。若省略，则将找不到库。
 
-或者，可以用-extra-object命令lli加载目标文件:
+或者，用-extra-object命令lli加载目标文件:
 
 \begin{shell}
 $ lli –extra-object greetings.o main.ll
@@ -92,7 +92,7 @@ Hi!
 
 其他支持的选项有-extra-archive(加载存档文件)和-extramodule(加载另一个位码文件)。这两个选项都需要文件的路径作为参数。
 
-现在，了解了如何使用lli工具直接执行LLVM IR。在下一节中，我们将实现自己的JIT工具。
+现在，了解了如何使用lli工具直接执行LLVM IR。下一节中，我们将实现自己的JIT工具。
 
 
 

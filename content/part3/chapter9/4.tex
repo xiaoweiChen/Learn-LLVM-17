@@ -1,18 +1,18 @@
 
-lli工具只不过是LLVM API的一个包装。第一部分中，我们了解了ORC引擎使用分层方法。ExecutionSession类表示一个正在运行的JIT程序。除了其他项之外，这个类还保存诸如使用过的JITDylib实例之类的信息。JITDylib实例是一个符号表，它将符号名映射到地址。例如，这些符号可以是在LLVM IR文件中定义的符号，也可以是加载的动态库的符号。
+lli工具只不过是LLVM API的一个包装。第一部分中，我们了解了ORC引擎使用分层方法。ExecutionSession类表示一个正在运行的JIT程序。除了其他项之外，这个类还保存诸如使用过的JITDylib实例之类的信息。JITDylib实例是一个符号表，将符号名映射到地址。例如，这些符号可以是在LLVM IR文件中定义的符号，也可以加载动态库的符号。
 
-为了执行LLVM IR，因为LLJIT类提供了这个功能，不需要自己创建JIT堆栈。因为这个类本质上提供了相同的功能，所以从旧的MCJIT实现迁移时也可以使用这个类。
+为了执行LLVM IR，LLJIT类提供了这个功能，不需要自己创建JIT堆栈。这个类提供了相同的功能，所以从旧的MCJIT实现迁移时，也可以使用这个类。
 
 为了说明LLJIT工具的功能，我们将在合并JIT功能的同时创建一个交互式计算器应用程序。我们的JIT计算器源码，将使用第2章中的calc示例进行扩展。
 
-我们交互式JIT计算器的主要思想:
+交互式JIT计算器的主要思想:
 
 \begin{enumerate}
 \item
 允许用户输入函数定义，例如定义 $f(x) = x*2$.
 
 \item
-然后，用户输入的函数由LLJIT实用程序编译成一个函数——在本例中为f。
+然后，用户输入的函数由LLJIT实用程序编译成一个函数——本例中为f。
 
 \item
 允许用户用一个数值来调用定义的函数:$f(3)$.
@@ -21,19 +21,19 @@ lli工具只不过是LLVM API的一个包装。第一部分中，我们了解了
 使用提供的参数计算函数，并将结果输出到控制台: 6
 \end{enumerate}
 
-在讨论将JIT功能整合到计算器源代码之前，与原始计算器示例相比，有几个主要的区别:
+讨论将JIT功能整合到计算器源代码之前，与原始计算器示例相比，其有几个区别:
 
 \begin{itemize}
 \item
-首先，之前只输入和解析了以with关键字开头的函数，而不是前面描述的def关键字。在本章中，只接受以def开头的函数定义，这在抽象语法树(AST)类中表示为一个特定的节点，称为DefDecl。DefDecl类知道定义它的参数及其名称，当然函数名称也存储在这个类中。
+首先，之前只输入和解析了以with关键字开头的函数，而不是前面描述的def关键字。本章中，只接受以def开头的函数定义，这在抽象语法树(AST)类中表示为一个特定的节点，称为DefDecl。DefDecl类知道定义它的参数及其名称，当然函数名称也存储在这个类中。
 
 \item
 其次，还需要AST能够识别函数调用，以表示LLJIT实用程序使用或JIT处理的函数。无论何时用户输入函数名，后面跟着括号内的参数，AST都会将其识别为FuncCallFromDef节点。这个类本质上了解与DefDecl类相同的信息。
 \end{itemize}
 
-由于添加了这两个AST类，语义分析、解析器和代码生成类将相应地进行调整，以处理AST中的更改。另外需要注意的是添加了一个新的数据结构，称为JITtedFunctions，所有这些类都知道它。这个数据结构是一个映射，将定义的函数名作为键，函数定义的参数数量作为值存储在映射中。稍后我们将了解如何在JIT计算器中使用此数据结构。
+由于添加了这两个AST类，语义分析、解析器和代码生成类将相应地进行调整，以处理AST中的更改。另外添加了一个新的数据结构，称为JITtedFunctions。这个数据结构是一个映射，将定义的函数名作为键，函数定义的参数数量作为值存储在映射中，稍后我们将了解如何在JIT计算器中使用此数据结构。
 
-有关我们对calc示例所做更改的更多详细信息，可以在lljit源目录中找到包含calc更改和本节JIT实现的完整源代码。
+有关我们对calc示例所做更改的更多详细信息，可以在lljit源目录中找到包含calc更改和本节JIT实现的完整源码。
 
 \mySubsubsection{9.4.1.}{将LLJIT引擎集成到计算器中}
 
@@ -41,7 +41,7 @@ lli工具只不过是LLVM API的一个包装。第一部分中，我们了解了
 
 \begin{enumerate}
 \item
-除了包含代码生成、语义分析器和解析器实现的头文件外，还必须包含几个头文件。LLJIT.h头文件定义了LLJIT类和ORC API的核心类。接下来，InitLLVM.h头文件用于工具的基本初始化，TargetSelect.h头文件用于本机目标的初始化。最后，还包含了C++头文件<iostream>，允许用户进行输入:
+除了包含代码生成、语义分析器和解析器实现的头文件外，还必须包含几个头文件。LLJIT.h头文件定义了LLJIT类和ORC API的核心类。InitLLVM.h头文件用于工具的基本初始化，TargetSelect.h头文件用于本机目标的初始化，还包含了C++标准头文件<iostream>，允许用户进行输入:
 
 \begin{cpp}
 #include "CodeGen.h"
@@ -62,14 +62,14 @@ using namespace llvm::orc;
 \end{cpp}
 
 \item
-我们将创建的LLJIT实例中的许多调用，都会返回一个错误类型error。ExitOnError类允许我们丢弃在日志记录到stderr，并退出应用程序时由LLJIT实例调用返回的错误值。我们声明一个全局的ExitOnError变量如下:
+将创建的LLJIT实例中的许多调用，都会返回一个错误类型error。ExitOnError类允许丢弃在日志记录的stderr，并退出应用程序时由LLJIT实例调用返回的错误值。我们声明一个全局的ExitOnError变量如下:
 
 \begin{cpp}
 ExitOnError ExitOnErr;
 \end{cpp}
 
 \item
-然后，我们添加main()函数，初始化工具和本机目标:
+然后，添加main()函数，初始化工具和本机目标:
 
 \begin{cpp}
 int main(int argc, const char **argv{
@@ -80,14 +80,14 @@ int main(int argc, const char **argv{
 \end{cpp}
 
 \item
-使用LLJITBuilder类来创建一个LLJIT实例，其封装在前面声明的ExitOnErr变量中，以免发生错误。一个可能的错误来源是，平台还不支持JIT编译:
+使用LLJITBuilder类来创建一个LLJIT实例，其封装在前面声明的ExitOnErr变量中，以免发生错误。一个可能的错误是，平台还不支持JIT编译:
 
 \begin{cpp}
 auto JIT = ExitOnErr(LLJITBuilder().create());
 \end{cpp}
 
 \item
-接下来，声明JITtedFunctions映射，该映射跟踪函数定义，如前所述:
+接下来，声明JITtedFunctions映射，该映射跟踪函数定义:
 
 \begin{cpp}
 StringMap<size_t> JITtedFunctions;
@@ -104,7 +104,7 @@ StringMap<size_t> JITtedFunctions;
 \end{cpp}
 
 \item
-然后，初始化LLVM上下文类，以及一个新的LLVM模块。模块的数据布局也相应地设置，我们还声明了一个代码生成器，将用于为用户在命令行上定义的函数生成IR:
+初始化LLVM上下文类，以及一个新的LLVM模块。模块的数据布局也相应地设置，还声明了一个代码生成器，将用于为用户在命令行上定义的函数生成IR:
 
 \begin{cpp}
     std::unique_ptr<LLVMContext> Ctx = std::make_unique<LLVMContext>();
@@ -114,7 +114,7 @@ StringMap<size_t> JITtedFunctions;
 \end{cpp}
 
 \item
-必须解释用户输入的代码行，以确定用户是在定义一个新函数，还是在调用之前用参数定义的函数。Lexer类是在接收用户输入行时定义的，将看到词法分析器主要关心两种情况:
+必须解释用户输入的代码行，以确定用户是在定义一个新函数，还是在调用之前用参数定义的函数。Lexer类在接收用户输入行时定义，可了解词法分析器主要关心的两种情况:
 
 \begin{cpp}
     Lexer Lex(calcExp);
@@ -122,7 +122,7 @@ StringMap<size_t> JITtedFunctions;
 \end{cpp}
 
 \item
-词法分析器可以检查用户输入的第一个标记，若用户正在定义一个新函数(由def关键字或Token::KW\_def表示)，则解析它并检查它的语义。若解析器或语义分析器检测到用户定义函数的任何问题，将相应地发出错误，计算器程序将停止运行。若解析器或语义分析器都没有检测到错误，就有一个有效的AST数据结构：DefDecl:
+词法分析器可以检查用户输入的第一个标记，若用户正在定义一个新函数(由def关键字或Token::KW\_def表示)，则解析它并检查其语义。若解析器或语义分析器检测到用户定义函数的问题，将相应地发出错误，计算器程序将停止运行。若解析器或语义分析器都没有检测到错误，就有一个有效的AST数据结构——DefDecl:
 
 \begin{cpp}
     if (CalcTok == Token::KW_def) {
@@ -140,14 +140,14 @@ StringMap<size_t> JITtedFunctions;
 \end{cpp}
 
 \item
-然后，可以将新构造的AST传递到代码生成器中，为用户定义的函数编译IR。IR生成的细节将在后面讨论，但这个编译成IR的函数需要知道模块和我们的JITtedFunctions映射。在生成IR之后，可以通过调用addIRModule()将这些信息添加到我们的LLJIT实例中，并将我们的模块和上下文包装在ThreadSafeModule类中，以防止其他并发线程访问它们:
+然后，可以将新构造的AST传递到代码生成器中，为用户定义的函数编译IR。IR生成的细节将在后面讨论，但这个编译成IR的函数需要知道模块和JITtedFunctions的映射关系。生成IR之后，可以调用addIRModule()将这些信息添加到我们的LLJIT实例中，并将我们的模块和上下文包装在ThreadSafeModule类中，以防止其他线程并发访问:
 
 \begin{cpp}
         CodeGenerator.compileToIR(Tree, M.get(), JITtedFunctions); ExitOnErr( JIT->addIRModule(ThreadSafeModule(std::move(M), std::move(Ctx))));
 \end{cpp}
 
 \item
-相反，若用户调用一个带参数的函数，由Token::ident表示，还需要在将用户输入转换为有效AST之前解析和语义检查用户输入是否有效。这里的解析和检查与之前略有不同，因为其可以包括检查，例如：确保用户提供给函数调用的参数数量与函数最初定义的参数数量匹配:
+相反，若用户调用一个带参数的函数，由Token::ident表示，还需要在将用户输入转换为有效AST之前解析和语义检查用户输入是否有效。这里，解析和检查与之前略有不同，因为其可以包括检查，例如：确保用户提供给函数调用的参数数量与函数最初定义的参数数量匹配:
 
 \begin{cpp}
     } else if (CalcTok == Token::ident) {
@@ -166,7 +166,7 @@ StringMap<size_t> JITtedFunctions;
 \end{cpp}
 
 \item
-当为函数调用构造了一个有效的AST, FuncCallFromDef，可以从AST中获取函数的名称，然后代码生成器准备生成对先前添加到LLJIT实例的函数的调用。在背后发生的是，用户定义的函数重新生成为一个单独的函数中的LLVM调用，将创建该函数，用于实际评估原始函数。这一步需要AST、模块、函数调用名和函数定义的映射:
+为函数调用构造了一个有效的AST, FuncCallFromDef，可以从AST中获取函数的名称，然后代码生成器准备生成对先前添加到LLJIT实例的函数的调用。背后的过程是，用户定义的函数重新生成为一个单独的函数中的LLVM调用，将创建该函数，用于实际评估原始函数。这一步需要AST、模块、函数调用名和函数定义的映射:
 
 \begin{cpp}
         llvm::StringRef FuncCallName = Tree->getFnName();
@@ -174,7 +174,7 @@ StringMap<size_t> JITtedFunctions;
 \end{cpp}
 
 \item
-代码生成器完成了重新生成原始函数和创建单独的求值函数的工作之后，必须将这些信息添加到LLJIT实例中。我们创建ResourceTracker实例来跟踪分配给已添加到LLJIT的函数的内存，以及模块和上下文的另一个ThreadSafeModule实例。然后将这两个实例作为IR模块添加到JIT中:
+代码生成器完成了重新生成原始函数和创建单独的求值函数的工作之后，必须将这些信息添加到LLJIT实例中。创建ResourceTracker实例来跟踪分配给已添加到LLJIT的函数的内存，以及模块和上下文的另一个ThreadSafeModule实例，再将这两个实例作为IR模块添加到JIT中:
 
 \begin{cpp}
         auto RT = JIT->getMainJITDylib().createResourceTracker();
@@ -183,7 +183,7 @@ StringMap<size_t> JITtedFunctions;
 \end{cpp}
 
 \item
-然后，通过lookup()方法在LLJIT实例中查询单独的求值函数，方法是将求值函数的名称calc\_expr\_func提供给该函数。若查询成功，则将calc\_expr\_func函数的地址强制转换为适当的类型，该函数不接受参数并返回单个整数。获取函数的地址后，调用该函数以使用用户定义函数提供的参数生成结果，然后将结果输出到控制台:
+然后，通过lookup()方法在LLJIT实例中查询单独的求值函数，方法是将求值函数的名称calc\_expr\_func提供给该函数。若查询成功，则将calc\_expr\_func函数的地址强制转换为适当的类型，该函数不接受参数并返回单个整数。获取函数的地址后，调用该函数以使用用户定义函数提供的参数生成结果，在将结果输出到控制台:
 
 \begin{cpp}
         auto CalcExprCall = ExitOnErr(JIT->lookup("calc_expr_func"));
@@ -202,11 +202,11 @@ ExitOnErr(RT->remove());
 
 \mySubsubsection{9.4.2.}{修改代码生成——支持通过LLJIT进行JIT编译}
 
-现在，简要地看一下我们在CodeGen.cpp中所做的一些更改，以支持我们基于jit的计算器:
+现在，简要地看一下我们在CodeGen.cpp中所做的一些更改，以支持JIT版计算器:
 
 \begin{itemize}
 \item
-如前所述，代码生成类有两个重要的方法:一个用于将用户定义函数编译成LLVM IR并将IR输出到控制台，另一个用于准备计算求值函数calc\_expr\_func，该函数包含对原始用户定义函数的调用以进行求值。第二个函数也将结果IR输出给用户:
+代码生成类有两个重要的方法:一个用于将用户定义函数编译成LLVM IR并将IR输出到控制台，另一个用于准备计算求值函数calc\_expr\_func，该函数包含对原始用户定义函数的调用以进行求值。第二个函数也将IR输出给用户:
 
 \begin{cpp}
 void CodeGen::compileToIR(AST *Tree, Module *M,
@@ -243,7 +243,7 @@ public:
 \end{cpp}
 
 \item
-最终，该信息用于生成IR或计算先前生成IR的函数。在生成IR时，代码生成器希望看到DefDecl节点，其表示定义一个新函数。函数名及其定义的参数数量，存储在函数定义映射中:
+最终，该信息用于生成IR或计算先前生成IR的函数。生成IR时，代码生成器希望看到DefDecl节点，其表示定义一个新函数。函数名及其定义的参数数量，存储在函数定义映射中:
 
 \begin{cpp}
 virtual void visit(DefDecl &Node) override {
@@ -261,7 +261,7 @@ virtual void visit(DefDecl &Node) override {
 \end{cpp}
 
 \item
-在genUserDefinedFunction()中，第一步是检查函数是否存在于模块中。若没有，则确保函数原型存在于map数据结构中。然后，使用名称和实参数来构造一个函数，该函数具有用户定义的实参数，并使该函数返回单个整数值:
+genUserDefinedFunction()中，第一步是检查函数是否存在于模块中。若没有，则确保函数原型存在于map数据结构中，再使用名称和实参数来构造一个函数，该函数具有用户定义的实参数，并使该函数返回单个整数值:
 
 \begin{cpp}
 Function *genUserDefinedFunction(llvm::StringRef Name) {
@@ -313,7 +313,7 @@ virtual void visit(FuncCallFromDef &Node) override {
 \end{cpp}
 
 \item
-接下来，我们创建一个新的基本块，将calc\_expr\_func插入其中:
+接下来，创建一个新的基本块，将calc\_expr\_func插入其中:
 
 \begin{cpp}
     BasicBlock *BB = BasicBlock::Create(M->getContext(),
@@ -322,7 +322,7 @@ virtual void visit(FuncCallFromDef &Node) override {
 \end{cpp}
 
 \item
-与前面类似，用户定义函数由genUserDefinedFunction()检索，我们将函数调用的数值参数传递给刚刚重新生成的函数:
+与前面类似，用户定义函数由genUserDefinedFunction()检索，将函数调用的数值参数传递给重新生成的函数:
 
 \begin{cpp}
     llvm::StringRef CalleeFnName = Node.getFnName();
@@ -330,7 +330,7 @@ virtual void visit(FuncCallFromDef &Node) override {
 \end{cpp}
 
 \item
-当有了实际的llvm::Function实例，就可以利用IRBuilder创建一个对定义函数的调用，并返回结果，这样当结果最终打印给用户时，是可访问的:
+当有了实际的llvm::Function实例，就可以利用IRBuilder创建一个对定义函数的调用，并返回结果，这样的输出结果，用户可以访问:
 
 \begin{cpp}
     auto CalleeFnVars = Node.getArgs();
@@ -363,7 +363,7 @@ project ("jit")
 \end{cmake}
 
 \item
-需要加载LLVM包，可将LLVM提供的CMake模块目录添加到搜索路径中。然后，包括DetermineGCCCompatible和ChooseMSVCCRT模块，其分别检查编译器是否具有gcc兼容的命令行语法，并确保使用与LLVM相同的C运行时:
+需要加载LLVM包，可将LLVM提供的CMake模块目录添加到搜索路径中，再包括DetermineGCCCompatible和ChooseMSVCCRT模块，其分别检查编译器是否具有gcc兼容的命令行语法，并确保使用与LLVM相同的C运行时:
 
 \begin{cmake}
 find_package(LLVM REQUIRED CONFIG)
@@ -373,7 +373,7 @@ include(ChooseMSVCCRT)
 \end{cmake}
 
 \item
-我们还需要从LLVM添加定义和包含路径，使用的LLVM组件通过函数调用映射到库名:
+还需要从LLVM添加定义和包含路径，使用的LLVM组件通过函数调用映射到库名:
 
 \begin{cmake}
 add_definitions(${LLVM_DEFINITIONS})
@@ -383,7 +383,7 @@ llvm_map_components_to_libnames(llvm_libs Core OrcJIT
 \end{cmake}
 
 \item
-之后，若确定编译器具有gcc兼容的命令行语法，还要检查是否启用了运行时类型信息和异常处理。若未启用，则在编译中相应地添加用于关闭这些特性的C++标志:
+之后，若确定编译器具有gcc兼容的命令行语法，检查是否启用了运行时类型信息和异常处理。若未启用，则在编译中相应地添加用于关闭这些特性的C++标志:
 
 \begin{cmake}
 if(LLVM_COMPILER_IS_GCC_COMPATIBLE)
@@ -397,7 +397,7 @@ endif()
 \end{cmake}
 
 \item
-最后，我们定义可执行文件的名称、要编译的源文件和要链接的库:
+最后，定义可执行文件的名称、要编译的源文件和要链接的库:
 
 \begin{cmake}
 add_executable (calc
@@ -406,7 +406,7 @@ target_link_libraries(calc PRIVATE ${llvm_libs})
 \end{cmake}
 \end{enumerate}
 
-前面的步骤是基于jit的交互式计算器工具所需要的全部内容。接下来，创建并更改为构建目录，然后运行以下命令来创建和编译应用程序:
+前面的步骤是基于JIT的交互式计算器工具所需要的全部内容。接下来，创建并更改为构建目录，然后运行以下命令来创建和编译应用程序:
 
 \begin{shell}
 $ cmake –G Ninja <path to source directory>
@@ -457,19 +457,19 @@ declare i32 @g(i32, i32)
 User defined function evaluated to: 172
 \end{shell}
 
-就是这样!我们刚刚创建了一个基于jit的计算器应用程序!
+就是这样!我们刚刚创建了一个基于JIT的计算器应用程序!
 
-由于JIT计算器是一个简单的例子，描述了如何将LLJIT合并到我们的项目中，值得注意的是，它有一些限制:
+由于JIT计算器是一个简单的例子，描述了如何将LLJIT合并到我们的项目中，但它有一些限制:
 
 \begin{itemize}
 \item
-这个计算器不支持十进制的负数
+计算器不支持十进制的负数
 
 \item
-我们不能多次重新定义同名函数
+不能多次重新定义同名函数
 \end{itemize}
 
-对于第二个限制是设计上的，因此是ORC API本身所期望和强制的:
+第二个限制是设计上的，因此是ORC API本身所期望和强制的:
 
 \begin{shell}
 $ ./calc
@@ -488,11 +488,11 @@ define i32 @f(i32 %x, i32 %y) {
 Duplicate definition of symbol '_f'
 \end{shell}
 
-请记住，除了为当前进程或动态库公开符号外，还有许多其他可能公开名称的方法。例如，StaticLibraryDefinitionGenerator类公开在静态存档中找到的符号，并且可以在DynamicLibrarySearchGenerator类中使用。
+记住，除了为当前进程或动态库公开符号外，还有许多其他可能公开名称的方法。例如，StaticLibraryDefinitionGenerator类公开在静态存档中找到的符号，并且可以在DynamicLibrarySearchGenerator类中使用。
 
-此外，LLJIT类还有一个addObjectFile()方法来公开对象文件的符号。若现有的实现不能满足您的需求，还可以提供自己的DefinitionGenerator实现。
+此外，LLJIT类还有一个addObjectFile()方法来公开对象文件的符号。若现有的实现不能满足需求，还可以提供自己的DefinitionGenerator实现。
 
-正如我们所看到的，使用预定义的LLJIT类很方便，但其会限制我们的灵活性。在下一节中，我们将研究如何使用ORC API提供的层来实现JIT编译器。
+使用预定义的LLJIT类很方便，但其会限制我们的灵活性。下一节中，我们将研究如何使用ORC API提供的层来实现JIT编译器。
 
 
 

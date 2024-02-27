@@ -1,7 +1,7 @@
 
 clang静态分析器是一个对C、C++和Objective C源代码执行额外检查的工具。静态分析器执行的检查比编译器执行的检查更彻底。在时间和所需资源方面，成本也更高。静态分析器有一组检查器，用于检查某些错误。
 
-该工具执行源代码的符号解释，通过应用程序查看所有代码路径，并从中派生出应用程序中使用的值的约束。符号解释是编译器中常用的一种技术，例如：用于识别常数值。在静态分析器的上下文中，检查器应用于派生值。
+该工具执行源代码的符号解释，通过应用程序查看所有代码路径，并从中派生出应用程序中使用的值的约束。符号解释是编译器中常用的一种技术，例如：用于识别常数值。静态分析器的上下文中，检查器应用于派生值。
 
 例如，若除法的除数为零，则静态分析器就会发出警告。可以在div.c文件中存储下面的例子来进行检查:
 
@@ -11,7 +11,7 @@ int divbyzero(int a, int b) { return a / b; }
 int bug() { return divbyzero(5, 0); }
 \end{cpp}
 
-在本例中，静态分析器将对除0发出警告。但在编译时，当使用clang -Wall -c div.c命令编译该文件时，将不会显示任何警告。
+本例中，静态分析器将对除0发出警告。但编译时，使用clang -Wall -c div.c命令编译该文件时，将不会显示任何警告。
 
 有两种方法可以从命令行调用静态分析器。旧的工具是scan-build，包含在LLVM中，可以用于简单的场景。新的工具是CodeChecker，可在\url{https://github.com/Ericsson/codechecker/}上获得。要检查单个文件，扫描构建工具是最简单的解决方案。只需将编译命令传递给工具，其他的工作都是会自动完成:
 
@@ -29,33 +29,33 @@ scan-build: Run 'scan-view /tmp/scan-build-2021-03-01-023401-8721-1'
 to examine bug reports.
 \end{shell}
 
-屏幕上的输出已经说明发现了一个问题，触发DivideZero检查器。然而，在/tmp目录的上述子目录中，可以找到HTML格式的完整报告。然后，可以使用scan-view命令查看报告，或者打开在浏览器的子目录中找到的index.html文件。
+屏幕上的输出已经说明发现了一个问题，触发DivideZero检查器。在/tmp目录的上述子目录中，可以找到HTML格式的完整报告。可以使用scan-view命令查看报告，或者打开在浏览器的子目录中找到的index.html文件。
 
 报告的第一页展示了发现的漏洞摘要:
 
 \myGraphic{0.7}{content/part3/chapter10/images/3.png}{图10.3 - 摘要页面}
 
-对于发现的每个错误，摘要页面显示了错误的类型、源中的位置，以及分析器发现错误之后的路径长度。还提供了指向该错误的详细报告的链接。
+对于发现的每个错误，摘要页面显示了错误的类型、源码中的位置，以及分析器发现错误之后的路径长度。还提供了指向该错误的详细报告的链接。
 
 下面的截图显示了错误的详细报告:
 
 \myGraphic{0.7}{content/part3/chapter10/images/4.png}{图10.4 -详细报告}
 
-有了这个详细的报告，就可以通过跟踪编号的气泡来验证错误。我们的简单示例展示了传递0作为参数值，是如何导致除零错误的。
+有了这个详细的报告，就可以通过跟踪编号的气泡来验证错误。我们的简单示例展示了传递0作为参数值，如何导致除零错误。
 
-因此，需要人工验证。若派生的约束对于某个检查器来说不够精确，则可能出现误报——也就是说，对于完美的代码报告错误，可以使用它来识别误报。
+因此，需要人工验证。若派生的约束对于某个检查器来说不够精确，则可能出现误报。
 
-不仅限于该工具提供的检查程序——还可以添加新的检查程序。下一节将演示如何做到这一点。
+不仅限于该工具提供的检查程序——还可以添加新的检查程序。
 
-\mySubsubsection{10.5.1.}{向clang静态分析器添加一个新的检查器}
+\mySubsubsection{10.5.1.}{向clang静态分析器添加新的检查器}
 
 许多C库提供了必须成对使用的函数。例如，C标准库提供了malloc()和free()函数。由malloc()函数分配的内存必须由free()函数释放一次。不调用free()函数，或者多次调用是一个编程错误。这种编码模式还有很多实例，静态分析器为其中一些实例提供了检查器。
 
-iconv库提供了将文本从一种编码转换为另一种编码的函数——例如，从Latin-1编码转换为UTF-16编码。要执行转换，实现需要分配内存。为了透明地管理内部资源，iconv库提供了iconv\_open()和iconv\_close()函数，它们必须成对使用，类似于内存管理函数。没有为这些函数实现检查器，让我们实现一个。
+iconv库提供了将文本从一种编码转换为另一种编码的函数——例如，从Latin-1编码转换为UTF-16编码。要执行转换，实现需要分配内存。为了透明地管理内部资源，iconv库提供了iconv\_open()和iconv\_close()函数，必须成对使用，类似于内存管理函数。没有为这些函数实现检查器，让我们实现一个。
 
-要向clang静态分析器添加一个新的检查器，必须创建一个新的checker类的子类。静态分析器通过代码尝试所有可能的路径。分析器引擎在某些点生成事件——例如，在函数调用之前或之后。此外，若需要处理这些事件，对应的类必须提供回调。Checker类和事件的注册在clang/include/clang/StaticAnalyzer/Core/Checker.h头文件中提供。
+要向clang静态分析器添加一个新的检查器，必须创建一个新的checker类的子类。静态分析器通过代码尝试所有可能的路径。分析器引擎在某些点生成事件——例如，在函数调用之前或之后。若需要处理这些事件，对应的类必须提供回调，Checker类和事件的注册在clang/include/clang/StaticAnalyzer/Core/Checker.h头文件中提供。
 
-通常，检查器需要跟踪一些符号。因为它不知道分析器引擎当前尝试的代码路径，所以检查器无法管理状态。因此，跟踪的状态必须向引擎注册，并且只能使用ProgramStateRef实例进行更改。
+通常，检查器需要跟踪一些符号。不知道分析器引擎当前尝试的代码路径，所以检查器无法管理状态。因此，跟踪的状态必须向引擎注册，并且只能使用ProgramStateRef实例进行更改。
 
 为了检测错误，检查器需要跟踪从iconv\_open()函数返回的描述符。分析器引擎为iconv\_open()函数的返回值返回一个SymbolRef实例。我们将这个符号与一个状态关联起来，以反映iconv\_close()是否调用。对于状态，我们创建了IconvState类，其封装了一个bool值。
 
@@ -63,23 +63,23 @@ iconv库提供了将文本从一种编码转换为另一种编码的函数——
 
 \begin{itemize}
 \item
-PostCall，发生在函数调用之后。在调用iconv\_open()函数之后，检索返回值的符号，并记住其处于“打开”状态。
+PostCall，发生在函数调用之后。调用iconv\_open()函数之后，检索返回值的符号，并记住其处于“打开”状态。
 
 \item
-PreCall，发生在函数调用之前。在调用iconv\_close()函数之前，检查描述符的符号是否处于“打开”状态。若没有，则已经为描述符调用了iconv\_close()函数，并且我们已经检测到对该函数的两次调用。
+PreCall，发生在函数调用之前。调用iconv\_close()函数之前，检查描述符的符号是否处于“打开”状态。若没有，则已经为描述符调用了iconv\_close()函数，并且已经检测到对该函数的两次调用。
 
 \item
 DeadSymbols，在清理未使用的符号时发生。我们检查描述符中未使用的符号是否仍处于“打开”状态。是的话，则检测到缺少对iconv\_close()的调用，这是一个资源泄漏。
 
 \item
-PointerEscape，当分析器无法再跟踪符号时调用该函数。这种情况下，因为我们不能再推断描述符是否已关闭，所以需要从状态中删除符号。
+PointerEscape，当分析器无法再跟踪符号时调用该函数。这种情况下，因为不能再推断描述符是否已关闭，所以需要从状态中删除符号。
 \end{itemize}
 
 可以创建一个新目录来实现新的检查器作为clang插件，并在IconvChecker.cpp文件中添加实现:
 
 \begin{enumerate}
 \item
-对于实现，需要包含几个头文件。发布报告需要包含文件BugType.h，头文件Checker.h提供了Checker类的声明和事件的回调，它们在CallEvent文件中声明。此外，CallDescription.h文件有助于匹配函数和方法。最后，需要使用CheckerContext.h文件来声明CheckerContext类，该类是提供对分析器状态访问的中心类:
+对于实现，需要包含几个头文件。发布报告需要包含文件BugType.h，头文件Checker.h提供了Checker类的声明和事件的回调，它们在CallEvent.h中声明。此外，CallDescription.h文件有助于匹配函数和方法。最后，需要使用CheckerContext.h文件来声明CheckerContext类，该类是提供对分析器状态访问的中心类:
 
 \begin{cpp}
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -132,7 +132,7 @@ public:
 \end{cpp}
 
 \item
-IconvState结构体表示iconv描述符的状态，其由SymbolRef类的符号表示。这最好使用映射来完成，符号作为键，将状态作为值。如前所述，检查器不能保持状态。相反，必须用全局程序状态注册状态，通过REGISTER\_MAP\_WITH\_PROGRAMSTATE宏完成。这个宏引入了IconvStateMap名称，稍后将使用它来访问映射:
+IconvState结构体表示iconv描述符的状态，其由SymbolRef类的符号表示。这最好使用映射来完成，符号作为键，将状态作为值。检查器不能保持状态，儿必须用全局程序状态注册状态，通过REGISTER\_MAP\_WITH\_PROGRAMSTATE宏完成。这个宏引入了IconvStateMap名称，稍后将使用它来访问映射:
 
 \begin{cpp}
 REGISTER_MAP_WITH_PROGRAMSTATE(IconvStateMap, SymbolRef,
@@ -208,7 +208,7 @@ IconvChecker::IconvChecker()
 \end{cpp}
 
 \item
-现在，可以实现第一个调用事件方法checkPostCall()。此方法在分析器执行函数调用后调用。若执行的函数不是一个全局C函数，也没有命名为iconv\_open，就没什么可做的了:
+现在，可以实现第一个调用事件方法checkPostCall()，此方法在分析器执行函数调用后调用。若执行的函数不是一个全局C函数，也没有命名为iconv\_open:
 
 \begin{cpp}
 void IconvChecker::checkPostCall(
@@ -220,7 +220,7 @@ void IconvChecker::checkPostCall(
 \end{cpp}
 
 \item
-否则，可以尝试以符号的形式获取函数的返回值。为了在全局程序状态中存储具有打开状态的符号，需要从CheckerContext实例中获取一个ProgramStateRef实例。状态是不可变的，因此将符号添加到状态会产生一个新状态。最后，分析器引擎通过调用addTransition()方法获知新状态:
+否则，可以尝试以符号的形式获取函数的返回值。为了在全局程序状态中存储具有打开状态的符号，需要从CheckerContext实例中获取一个ProgramStateRef实例。状态是不可变的，将符号添加到状态会产生一个新状态。最后，分析器引擎通过调用addTransition()方法获知新状态:
 
 \begin{cpp}
     if (SymbolRef Handle =
@@ -248,7 +248,7 @@ void IconvChecker::checkPreCall(
 \end{cpp}
 
 \item
-若函数的第一个参数的符号(即iconv描述符)是已知的，则可以从程序状态中检索该符号的状态:
+若函数的第一个参数的符号(即iconv描述符)已知，则可以从程序状态中检索该符号的状态:
 
 \begin{cpp}
     if (SymbolRef Handle =
@@ -328,7 +328,7 @@ void IconvChecker::checkDeadSymbols(
 \end{cpp}
 
 \item
-当分析器检测到无法跟踪参数的函数调用时，调用checkPointerEscape()函数，必须假设我们不知道iconv描述符是否会在函数内部关闭。异常是对iconv()的调用，执行转换并且已知不调用iconv\_close()函数，以及iconv\_close()函数本身，会在checkPreCall()方法中处理。若调用是在系统头文件中，并且知道在调用的函数中参数不会转义，则不会改变状态。在所有其他情况下，都会从状态中删除符号:
+当分析器检测到无法跟踪参数的函数调用时，调用checkPointerEscape()函数，必须假设我们不知道iconv描述符是否会在函数内部关闭。异常是对iconv()的调用，执行转换并且已知不调用iconv\_close()函数，以及iconv\_close()函数本身，会在checkPreCall()方法中处理。若调用是在系统头文件中，并且知道在调用的函数中参数不会转义，则不会改变状态。其他情况下，都会从状态中删除符号:
 
 \begin{cpp}
 ProgramStateRef IconvChecker::checkPointerEscape(
@@ -351,7 +351,7 @@ ProgramStateRef IconvChecker::checkPointerEscape(
 \end{cpp}
 
 \item
-report()方法生成一个错误报告。该方法的重要参数是符号数组、错误类型和错误描述。在该方法内部，为每个符号创建一个错误报告，并将该符号标记为对该错误感兴趣的符号。若源范围作为参数提供，则会添加到报告中。最后，生成报告:
+report()方法生成一个错误报告。该方法的重要参数是符号数组、错误类型和错误描述。该方法内部，为每个符号创建一个错误报告，并将该符号标记为对该错误感兴趣的符号。若源范围作为参数提供，则会添加到报告中，并生成报告:
 
 \begin{cpp}
 void IconvChecker::report(
@@ -371,7 +371,7 @@ void IconvChecker::report(
 \end{cpp}
 
 \item
-现在，需要在CheckerRegistry实例中注册新的检查器。当插件加载时，使用clang\_registerCheckers()，我们在其中执行注册。每个检查器都有一个名称，并且属于一个包。将IconvChecker称为检查器并将其放入unix打包程序中，因为iconv库是一个标准的POSIX接口。这是addChecker()方法的第一个参数。第二个参数是功能的简要文档，第三个参数可以是一个文档的URI，该文档提供有关检查器的更多信息:
+现在，需要在CheckerRegistry实例中注册新的检查器。当插件加载时，使用clang\_registerCheckers()，我们在其中执行注册。每个检查器都有一个名称，并且属于一个包。因为iconv库是一个标准的POSIX接口，所以可以将IconvChecker称为检查器并将其放入unix打包程序中。这是addChecker()方法的第一个参数，第二个参数是功能的简要文档，第三个参数可以是一个文档的URI，该文档提供有关检查器的更多信息:
 
 \begin{cpp}
 extern "C" void
@@ -383,7 +383,7 @@ clang_registerCheckers(CheckerRegistry &registry) {
 \end{cpp}
 
 \item
-最后，需要声明我们正在使用的静态分析器API的版本，它使系统能够确定插件是否兼容:
+最后，需要声明我们正在使用的静态分析器API的版本，使系统能够确定插件是否兼容:
 
 \begin{cpp}
 extern "C" const char clang_analyzerAPIVersionString[] =
@@ -401,7 +401,7 @@ project(iconvchecker)
 \end{cmake}
 
 \item
-接下来，包括LLVM文件。若CMake不能自动找到文件，则必须设置LLVM\_DIR变量，使它指向包含CMake文件的LLVM目录:
+接下来，包括LLVM文件。若CMake不能自动找到文件，则必须设置LLVM\_DIR变量，指向包含CMake文件的LLVM目录:
 
 \begin{cmake}
 find_package(LLVM REQUIRED CONFIG)
@@ -417,7 +417,7 @@ include(HandleLLVMOptions)
 \end{cmake}
 
 \item
-然后，为clang加载CMake定义。若CMake不能自动找到文件，必须指定Clang\_DIR变量，使其指向包含CMake文件的Clang目录:
+为clang加载CMake定义。若CMake不能自动找到文件，必须指定Clang\_DIR变量，使其指向包含CMake文件的Clang目录:
 
 \begin{cmake}
 find_package(Clang REQUIRED)
@@ -432,7 +432,7 @@ include(AddClang)
 \end{cmake}
 
 \item
-然后，定义头文件和库文件的位置，以及使用哪些定义:
+定义头文件和库文件的位置，以及使用哪些定义:
 
 \begin{cmake}
 include_directories("${LLVM_INCLUDE_DIR}"
@@ -442,7 +442,7 @@ link_directories("${LLVM_LIBRARY_DIR}")
 \end{cmake}
 
 \item
-前面的定义设置了构建环境。插入以下命令，定义了你的插件的名称，插件的源文件，并且它是一个clang插件:
+前面的定义设置了构建环境。插入以下命令，定义了插件名称和源文件，并且它是一个clang插件:
 
 \begin{cmake}
 add_llvm_library(IconvChecker MODULE IconvChecker.cpp

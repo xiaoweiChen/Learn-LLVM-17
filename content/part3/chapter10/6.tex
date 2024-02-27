@@ -1,11 +1,11 @@
 
 静态分析器是一个令人印象深刻的例子，说明了可以使用clang基础设施做些什么。也可以使用插件扩展clang，这样就可以将自己的功能添加到clang中。该技术非常类似于在LLVM中添加一个通道插件。
 
-让我们用一个简单的插件来探索这个功能，LLVM编码标准要求函数名以小写字母开头。然而，编码标准已经发生了变化，在许多情况下，函数以大写字母开头。一个警告违反命名规则的插件可以帮助解决这个问题，所以来试一试。
+我们用一个简单的插件来探索这个功能，LLVM编码标准要求函数名以小写字母开头。然而，编码标准已经发生了变化，在许多情况下，函数以大写字母开头。一个警告违反命名规则的插件可以帮助解决这个问题，所以来试一试。
 
 因为要在AST上运行用户定义的操作，所以需要定义PluginASTAction类的子类。若使用clang库编写自己的工具，则可以为操作定义ASTFrontendAction类的子类。PluginASTAction类是ASTFrontendAction类的子类，具有解析命令行选项的能力。
 
-需要的另一个类是ASTConsumer类的子类。AST消费者是一个类，可以使用它在AST上运行一个动作，而不管AST的来源是什么。可以在NamingPlugin.cpp文件中创建实现:
+需要的另一个类是ASTConsumer类的子类。ASTConsumer是一个类，可以使用它在AST上运行一个动作，而不管AST的来源是什么。可以在NamingPlugin.cpp文件中创建实现:
 
 \begin{enumerate}
 \item
@@ -26,7 +26,7 @@ namespace {
 \end{cpp}
 
 \item
-接下来，定义ASTConsumer类的子类。稍后，将希望在检测到违反命名规则的情况下发出警告。为此，需要一个对DiagnosticsEngine实例的引用。
+接下来，定义ASTConsumer类的子类。稍后，将希望在检测到违反命名规则的情况下发出警告，所以需要一个对DiagnosticsEngine实例的引用。
 
 \item
 需要在类中存储一个CompilerInstance实例，之后可以请求一个DiagnosticsEngine实例:
@@ -40,7 +40,7 @@ public:
 \end{cpp}
 
 \item
-ASTConsumer实例有几个入口方法，HandleTopLevelDecl()方法符合我们的目的。在顶层为每个声明调用该方法。这不仅包括函数，还包括变量。因此，必须使用LLVM RTTI dyn\_cast<>()函数来确定该声明是否为函数声明。HandleTopLevelDecl()方法有一个声明组作为参数，可以包含多个声明。这需要对声明进行循环。下面的代码显示了HandleTopLevelDecl()方法:
+ASTConsumer实例有几个入口方法，HandleTopLevelDecl()方法符合我们的目的，顶层为每个声明调用该方法。这不仅包括函数，还包括变量，所以必须使用LLVM RTTI dyn\_cast<>()函数来确定该声明是否为函数声明。HandleTopLevelDecl()方法有一个声明组作为参数，可以包含多个声明。这需要对声明进行循环。下面的代码显示了HandleTopLevelDecl()方法:
 
 \begin{cpp}
     bool HandleTopLevelDecl(DeclGroupRef DG) override {
@@ -70,7 +70,7 @@ ASTConsumer实例有几个入口方法，HandleTopLevelDecl()方法符合我们�
 \end{cpp}
 
 \item
-要发出警告，需要一个DiagnosticsEngine实例。此外，还需要一个消息ID。在clang内部，消息ID定义为枚举。因为插件不是clang的一部分，所以需要创建一个自定义ID，然后可以用它来发出警告:
+要发出警告，需要一个DiagnosticsEngine实例，所以还需要一个消息ID。在clang内部，消息ID定义为枚举。因为插件不是clang的一部分，所以需要创建一个自定义ID，然后可以用它来发出警告:
 
 \begin{cpp}
                     DiagnosticsEngine &Diag = CI.getDiagnostics();
@@ -123,7 +123,7 @@ public:
 \end{cpp}
 
 \item
-插件的操作类型描述了何时调用该操作。默认值是Cmdline，则必须在要调用的命令行上命名插件。你要重写该方法并将其值更改为AddAfterMainAction，它会自动运行该操作:
+插件的操作类型描述了何时调用该操作。默认值是Cmdline，则必须在要调用的命令行上命名插件。要重写该方法并将其值更改为AddAfterMainAction，它会自动运行该操作:
 
 \begin{cpp}
     PluginASTAction::ActionType getActionType() override {
@@ -147,7 +147,7 @@ static FrontendPluginRegistry::Add<PluginNamingAction> X("naming-plugin",       
 \end{cpp}
 \end{enumerate}
 
-这就完成了插件的实现。要编译这个插件，在CMakeLists.txt文件中创建一个构建描述。该插件位于clang源代码树之外，因此需要设置一个完整的项目，可以按照以下步骤来做:
+这就完成了插件的实现。要编译这个插件，在CMakeLists.txt文件中创建一个构建描述。该插件位于clang源代码树之外，需要设置一个完整的项目，可以按照以下步骤来做:
 
 \begin{enumerate}
 \item
@@ -192,14 +192,14 @@ link_directories("${LLVM_LIBRARY_DIR}")
 \end{cmake}
 
 \item
-前面的定义设置了构建环境。插入以下命令，定义了插件的名称，插件的源文件，并且它是一个clang插件:
+前面的定义设置了构建环境。插入以下命令，定义了插件的名称，插件的源文件，并且是一个clang插件:
 
 \begin{cmake}
 add_llvm_library(NamingPlugin MODULE NamingPlugin.cpp
                  PLUGIN_TOOL clang)
 \end{cmake}
 
-在Windows上，插件支持与Unix不同，必需的LLVM和clang库必须链接进来。下面的代码确保了这一点:
+Windows上，插件支持与Unix不同，必需的LLVM和clang库必须链接进来:
 
 \begin{cmake}
 if(WIN32 OR CYGWIN)
@@ -248,7 +248,7 @@ int Func1() { return 0; }
 $ clang -cc1 -load ./NamingPlugin.so -plugin naming-plugin naming.c
 \end{shell}
 
-恭喜你——已经构建了你的第一个clang插件!这种方法的缺点是它有一定的局限性。ASTConsumer类有不同的入口方法，都是粗粒度的。这可以通过使用RecursiveASTVisitor类来解决。该类遍历所有AST节点，可以覆盖感兴趣的VisitXXX()方法。可以按照以下步骤重写这个插件，让它使用访问者:
+恭喜你——已经构建了你的第一个clang插件!这种方法的缺点是它有一定的局限性。ASTConsumer类有不同的入口方法，都是粗粒度的。这可以通过使用RecursiveASTVisitor类来解决。该类遍历所有AST节点，可以覆盖感兴趣的VisitXXX()方法。使用Visitor，可以按照以下步骤重写这个插件:
 
 \begin{enumerate}
 \item
@@ -272,7 +272,7 @@ public:
 \end{cpp}
 
 \item
-在遍历期间，只要发现函数声明，就调用VisitFunctionDecl()方法。将内部循环的主体复制到HandleTopLevelDecl()函数中:
+遍历期间，只要发现函数声明，就调用VisitFunctionDecl()方法。将内部循环的主体复制到HandleTopLevelDecl()函数中:
 
 \begin{cpp}
     virtual bool VisitFunctionDecl(FunctionDecl *FD) {
@@ -295,7 +295,7 @@ public:
 \end{cpp}
 
 \item
-这就完成了访问者的实现。在NamingASTConsumer类中，现在只存储一个访问者实例:
+这就完成了访问者的实现。NamingASTConsumer类中，只存储一个Visitor实例:
 
 \begin{cpp}
     std::unique_ptr<NamingVisitor> Visitor;
@@ -318,7 +318,7 @@ public:
 
 \end{enumerate}
 
-这个新实现具有相同的功能，其优点是更容易扩展。例如，若想检查变量声明，必须实现VisitVarDecl()方法。或者，若希望使用语句，则必须实现VisitStmt()方法。使用这种方法，可以为C、C++和Objective C语言的每个实体提供一个visitor方法。
+这个新实现具有相同的功能，其优点是更容易扩展。例如，若想检查变量声明，必须实现VisitVarDecl()方法。若希望使用语句，则必须实现VisitStmt()方法。使用这种方法，可以为C、C++和Objective C语言的每个实体提供一个visitor方法。
 
 通过访问AST，可以构建执行复杂任务的插件。如本节所述，强制命名约定是对clang的一个有用的补充。可以作为插件实现的另一个有用的附加功能是计算软件度量，例如圈复杂度。
 
