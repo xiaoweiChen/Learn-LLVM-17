@@ -82,7 +82,7 @@ BitVector M88kRegisterInfo::getReservedRegs(
 \end{cpp}
 
 \item
-若果需要帧寄存器，则使用r30。请注意，代码还不支持创建框架。若函数需要一个帧，那么r30也必须在getReservedRegs()方法中标记为保留。因为它在超类中声明为纯虚，所以必须实现这个方法:
+若果需要帧寄存器，则使用r30。注意，代码还不支持创建帧。若函数需要一个帧，那么r30也必须在getReservedRegs()方法中标记为保留。因为它在超类中声明为纯虚，所以必须实现这个方法:
 
 \begin{cpp}
 Register M88kRegisterInfo::getFrameRegister(
@@ -92,7 +92,7 @@ Register M88kRegisterInfo::getFrameRegister(
 \end{cpp}
 
 \item
-类似地，因为其为纯虚拟，所以需要实现eliminateFrameIndex()方法。调用它是为了将操作数中的帧索引替换为正确的值，以便对堆栈上的值进行寻址:
+类似地，因为其为纯虚函数，所以需要实现eliminateFrameIndex()方法。调用它是为了将操作数中的帧索引替换为正确的值，以便对堆栈上的值进行寻址:
 
 \begin{cpp}
 bool M88kRegisterInfo::eliminateFrameIndex(
@@ -104,7 +104,7 @@ bool M88kRegisterInfo::eliminateFrameIndex(
 
 \end{enumerate}
 
-M88kInstrInfo类有许多钩子方法，可以覆盖它们来完成特殊任务。例如，用于分支分析和重新具体化。现在，只重写expandPostRAPseudo()方法，在这个方法中扩展了伪指令RET。
+M88kInstrInfo类有许多钩子方法，可以覆盖它们来完成特殊任务。例如，用于分支分析和重新具体化。现在，只重写expandPostRAPseudo()方法，这个方法中扩展了伪指令RET。
 
 \begin{enumerate}
 \item
@@ -159,7 +159,7 @@ void M88kInstrInfo::anchor() {}
 \end{cpp}
 
 \item
-最后，在expandPostRAPseudo()方法中展开RET。顾名思义，这个方法是在寄存器分配器运行后调用的，目的是扩展伪指令，伪指令可能仍然与机器码混合在一起。若机器指令MI的操作码是伪指令RET，则必须插入jmp \%r1跳转指令，该指令是退出函数的指令。然后，复制所有表示要返回值的隐式操作数，并删除伪指令。若在代码生成过程中需要其他伪指令，则可以扩展这个函数来扩展它们:
+最后，在expandPostRAPseudo()方法中展开RET。这个方法是在寄存器分配器运行后调用的，目的是扩展伪指令，伪指令可能仍然与机器码混合在一起。若机器指令MI的操作码是伪指令RET，则必须插入jmp \%r1跳转指令，该指令是退出函数的指令。复制所有表示要返回值的隐式操作数，并删除伪指令。若在代码生成过程中需要其他伪指令，则可以扩展这个函数来扩展:
 
 \begin{cpp}
 bool M88kInstrInfo::expandPostRAPseudo(

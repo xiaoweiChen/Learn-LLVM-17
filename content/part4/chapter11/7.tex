@@ -2,7 +2,7 @@
 
 \begin{enumerate}
 \item
-通过定义调试类型和DecodeStatus类型开始实现。这两个都是生成代码所必需的:
+通过定义调试类型和DecodeStatus类型开始实现，两个都是生成代码所必需的:
 
 \begin{cpp}
 using namespace llvm;
@@ -50,7 +50,7 @@ LLVMInitializeM88kDisassembler() {
 \end{cpp}
 
 \item
-decodeGPRRegisterClass()函数将寄存器号转换为TableGen生成的寄存器枚举成员。这是M88kInstPrinter::getMachineOpValue()方法的逆操作。注意，我们在M88kRegisterOperand类的DecoderMethod字段中指定了这个函数的名称:
+decodeGPRRegisterClass()函数将寄存器号转换为TableGen生成的寄存器枚举成员。这是M88kInstPrinter::getMachineOpValue()方法的逆操作。注意，M88kRegisterOperand类的DecoderMethod字段中指定了这个函数的名称:
 
 \begin{cpp}
 static const uint16_t GPRDecoderTable[] = {
@@ -79,7 +79,7 @@ decodeGPRRegisterClass(MCInst &Inst, uint64_t RegNo,
 \end{cpp}
 
 \item
-最后，解码指令。为此，需要获取bytes数组中接下来的四个字节，从中创建指令编码，并调用decodeInstruction()生成的函数:
+最后，解码指令，需要获取bytes数组中接下来的四个字节，从中创建指令编码，并调用decodeInstruction()生成的函数:
 
 \begin{cpp}
 DecodeStatus M88kDisassembler::getInstruction(
@@ -106,7 +106,7 @@ DecodeStatus M88kDisassembler::getInstruction(
 
 \end{enumerate}
 
-这就是反汇编程序需要做的全部工作。编译LLVM后，可以使用LLVM -mc工具再次测试功能:
+这就是反汇编程序需要做的全部工作。编译LLVM后，可以使用llvm-mc工具再次测试功能:
 
 \begin{shell}
 $ echo "0xf4,0x22,0x40,0x03" | \

@@ -4,7 +4,7 @@
 
 \begin{enumerate}
 \item
-M88kAsmPrinter类的声明位于匿名名称空间中。除了构造函数，只重写getPassName()函数和emitInstruction()函数，getPassName()函数以人类可读的字符串形式返回通道的名称:
+M88kAsmPrinter类的声明位于匿名命名空间中。除了构造函数，只重写getPassName()函数和emitInstruction()函数，getPassName()函数以人类可读的字符串形式返回通道的名称:
 
 \begin{cpp}
 namespace {
@@ -36,7 +36,7 @@ LLVMInitializeM88kAsmPrinter() {
 \end{cpp}
 
 \item
-emitInstruction()方法负责将机器指令(MI)发送到输出流。实现中，将指令的向下转译委托给M88kMCInstLower类:
+emitInstruction()方法负责将机器指令(MI)发送到输出流，将指令的向下转译委托给M88kMCInstLower类:
 
 \begin{cpp}
 void M88kAsmPrinter::emitInstruction(
@@ -49,7 +49,7 @@ void M88kAsmPrinter::emitInstruction(
 \end{cpp}
 \end{enumerate}
 
-这已经是完整的实现了，基类AsmPrinter提供了许多可以覆盖的有用钩子。例如，emitStartOfAsmFile()方法在事件触发之前调用，而emitEndOfAsmFile()在所有事件触发之后调用。这些方法可以生成有针对性的数据或代码文件的开始和结束。类似地，emitFunctionBodyStart()和emitFunctionBodyEnd()方法也会在函数体发出前后调用。请阅读llvm/include/llvm/CodeGen/ AsmPrinter.h文件中的注释，了解可以自定义哪些内容。
+基类AsmPrinter提供了许多可以覆盖的有用钩子，emitStartOfAsmFile()方法在事件触发之前调用，而emitEndOfAsmFile()在所有事件触发之后调用，这些方法可以生成有针对性的数据或代码文件的开始和结束。类似地，emitFunctionBodyStart()和emitFunctionBodyEnd()方法也会在函数体发出前后调用。请阅读llvm/include/llvm/CodeGen/AsmPrinter.h文件中的注释，了解可以自定义哪些内容。
 
 M88kMCInstLower类向下转译操作数和指令，实现包含两个用于此目的的方法。声明在M88kMCInstLower.h文件中:
 
@@ -61,7 +61,7 @@ public:
 };
 \end{cpp}
 
-The definition goes into the M88kMCInstLower.cpp file:
+该定义在M88kMCInstLower.cpp文件中:
 
 \begin{enumerate}
 \item
@@ -84,7 +84,7 @@ MCOperand M88kMCInstLower::lowerOperand(
 \end{cpp}
 
 \item
-指令的向下转译也是类似的。首先，复制操作码，然后处理操作数。MachineInstr的实例可以添加隐式操作数，这些操作数不会向下转译，需要对它们进行过滤:
+指令的向下转译也是类似的。首先，复制操作码，然后处理操作数。MachineInstr的实例可以添加隐式操作数，这些操作数不会向下转译，需要过滤:
 
 \begin{cpp}
 void M88kMCInstLower::lower(const MachineInstr *MI,

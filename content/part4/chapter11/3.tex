@@ -1,4 +1,4 @@
-ELF文件格式是LLVM支持的二进制对象文件格式之一。ELF本身为许多CPU架构定义，M88k架构也有定义。我们所需要做的就是，添加重定位的定义和一些标志。重新定位在System V ABI M88k处理器补充书的第4章，IR代码生成基础(见本章开头设置新后端部分中的链接)中给出:
+ELF文件格式是LLVM支持的二进制对象文件格式之一。ELF本身为许多CPU架构定义，M88k架构也有定义。我们所需要做的就是，添加重定位的定义和一些标志。重新定位在《System V ABI M88k处理器补充》的第4章，IR代码生成基础(见本章开头设置新后端部分中的链接)中给出:
 
 \begin{enumerate}
 \item
@@ -14,7 +14,7 @@ ELF_RELOC(R_88K_COPY, 1)
 \end{cpp}
 
 \item
-还在llvm/include/llvm/BinaryFormat/ELF.h文件中添加了以下标志，以及重定位的定义:
+llvm/include/llvm/BinaryFormat/ELF.h文件中添加了以下标志，以及重定位的定义:
 
 \begin{cpp}
 // M88k Specific e_flags
@@ -33,7 +33,7 @@ enum {
 代码可以添加到文件中的任何位置，但最好保持文件的结构，并在MIPS架构代码之前插入。
 
 \item
-我们还需要扩展一些其他的方法。在llvm/include/llvm/Object/ELFObjectFile.h文件中有一些在枚举成员和字符串之间进行转换的方法。例如，必须在getFileFormatName()方法中添加新的case语句:
+还需要扩展一些其他的方法。在llvm/include/llvm/Object/ELFObjectFile.h文件中，有一些在枚举成员和字符串之间进行转换的方法，必须在getFileFormatName()方法中添加新的case语句:
 
 \begin{cpp}
 switch (EF.getHeader()->e_ident[ELF::EI_CLASS]) {
@@ -70,14 +70,14 @@ switch (Machine) {
 \end{cpp}
 
 \item
-为了完成支持，还可以扩展llvm/lib/ObjectYAML/ELFYAML.cpp文件。该文件由yaml2obj和obj2yaml工具使用，根据YAML描述创建一个ELF文件，反之亦然。第一个添加需要在ScalarEnumerationTraits<ELFYAML::ELF\_EM>::enumeration()方法中完成，该方法列出了ELF支持架构的所有值:
+为了完成支持，还可以扩展llvm/lib/ObjectYAML/ELFYAML.cpp文件。该文件由yaml2obj和obj2yaml工具使用，根据YAML描述创建一个ELF文件。第一个添加需要在ScalarEnumerationTraits<ELFYAML::ELF\_EM>::enumeration()方法中完成，该方法列出了所有ELF支持的架构:
 
 \begin{cpp}
 ECase(EM_88K);
 \end{cpp}
 
 \item
-同样，在ScalarEnumerationTraits<ELFYAML::ELF\_REL>::enumeration()方法中，需要再次包含重定位的定义:
+ScalarEnumerationTraits<ELFYAML::ELF\_REL>::enumeration()方法中，需要再次包含重定位的定义:
 
 \begin{cpp}
     case ELF::EM_88K:
@@ -86,13 +86,13 @@ ECase(EM_88K);
 \end{cpp}
 \end{enumerate}
 
-至此，我们已经完成了对ELF文件格式的m88k体系结构的支持。可以使用llvm-readobj工具检查ELF对象文件，例如，由OpenBSD上的交叉编译器创建的对象文件。同样，可以使用yaml2obj工具为m88k架构创建一个ELF对象文件。
+至此，已经完成了对ELF文件格式的m88k架构的支持。可以使用llvm-readobj工具检查ELF对象文件，由OpenBSD上的交叉编译器创建的对象文件，可以使用yaml2obj工具为m88k架构创建一个ELF对象文件。
 
 \begin{myNotic}{必须添加对目标文件格式的支持?}
-对架构的支持集成到ELF文件格式实现中只需要几行代码，若要为其创建LLVM后端的脚骨使用ELF格式，则该采用这种方式。另一方面，添加对全新二进制文件格式的支持是一项复杂的任务。若需要这样做，那常用的方法是只输出汇编程序文件，并使用外部汇编程序来创建目标文件。
+对架构的支持集成到ELF文件格式实现中只需要几行代码，若要为其创建的LLVM后端使用ELF格式，则该采用这种方式。另一方面，添加对全新二进制文件格式的支持是一项复杂的任务。若需要这样做，常用的方法是只输出汇编程序文件，并使用外部汇编程序来创建目标文件。
 \end{myNotic}
 
-有了这些补充，ELF文件格式的LLVM实现现在支持M88k架构。在下一节中，将创建M88k架构的目标描述，其中描述了该架构的指令、寄存器和更多细节。
+有了这些补充，ELF文件格式的LLVM实现现在支持M88k架构。下一节中，将创建M88k架构的目标描述，其中描述了该架构的指令、寄存器和更多细节。
 
 
 

@@ -1,5 +1,5 @@
 
-通过选择DAG进行指令选择可以生成快速的代码，但是这样做需要时间。对于开发人员来说，编译器的速度至关重要，他们想要快速地尝试他们所做的更改。通常，编译器在优化级别0时应该非常快，但是随着优化级别的增加，可能会花费更多的时间。但构造选择DAG需要花费大量时间，因此这种方法无法按需要进行扩展。第一个解决方案是创建另一个名为FastISel的指令选择算法，该算法速度很快。但不能生成好的代码，也不与选择DAG实现共享代码，这是一个明显的问题，所以并非所有目标都支持FastISel。
+通过选择DAG进行指令选择可以生成快速的代码，但是这样做需要时间。对于开发人员来说，编译器的速度至关重要，他们想要快速地尝试他们所做的更改。通常，编译器在优化级别0时应该非常快，但是随着优化级别的增加，可能会花费更多的时间。但构造选择DAG需要花费大量时间，这种方法无法按需要进行扩展。第一个解决方案是创建另一个名为FastISel的指令选择算法，该算法速度很快。但不能生成好的代码，也不与选择DAG实现共享代码，这是一个明显的问题，所以并非所有目标都支持FastISel。
 
 选择DAG方法不能扩展，它是一个大型的单片算法。若可以避免创建新的数据结构，如选择DAG，则应该能够使用小组件执行指令选择。后端已经有了一个通道流水线，所以使用通道是很自然的选择。基于这些想法，GlobalISel执行以下步骤:
 
@@ -24,7 +24,7 @@
 
 \mySubsubsection{12.7.1.}{向下转译参数和返回值}
 
-为了将LLVM IR转换为通用机器指令，只需要实现如何处理参数和返回值。同样，可以通过使用从目标描述生成的代码来向下转译实现。我们要创建的类名为m88kcalllowervm，声明在GISel/M88kcalllowervm .h头文件中:
+为了将LLVM IR转换为通用机器指令，只需要实现如何处理参数和返回值。同样，可以通过使用从目标描述生成的代码来向下转译实现。我们要创建的类名为m88kcalllowervm，声明在GISel/M88kcalllowervm.h头文件中:
 
 \begin{cpp}
 class M88kCallLowering : public CallLowering {
@@ -46,7 +46,7 @@ public:
 };
 \end{cpp}
 
-GlobalISel框架在转换函数时会调用lowerReturn()和lowerFormalArguments()方法。要转换函数调用，还需要覆盖并实现lowerCall()方法。还需要覆写enableBigEndian()，没有它，就会生成错误的机器码。
+GlobalISel框架在转换函数时会调用lowerReturn()和lowerFormalArguments()方法。要转换函数调用，还需要覆盖并实现lowerCall()方法。还需要覆写enableBigEndian()，否则就会生成错误的机器码。
 
 对于GISel/M88kCallLowering.cpp文件中的实现，需要定义支持类。从目标描述生成的代码告诉我们参数是如何传递的——例如，在寄存器中。需要创建ValueHandler的一个子类来生成机器指令。对于传入参数，需要从IncomingValueHandler派生类，以及从OutgoingValueHandler派生返回值。两者非常相似，所以只查看传入参数的处理程序:
 
@@ -78,7 +78,7 @@ struct FormalArgHandler
 } // namespace
 \end{cpp}
 
-目前，我们只能处理在寄存器中传递的参数，因此必须为其他方法提供一个虚拟实现。assignValueToReg()方法将传入的物理寄存器的值复制到虚拟寄存器，必要时进行截断。我们在这里所要做的，就是将物理寄存器标记为函数的live-in，并调用超类实现:
+目前，只能处理在寄存器中传递的参数，因此必须为其他方法提供一个虚拟实现。assignValueToReg()方法将传入的物理寄存器的值复制到虚拟寄存器，必要时进行截断。这里所要做的，就是将物理寄存器标记为函数的“常驻”(live-in)，并调用超类实现:
 
 \begin{cpp}
 void FormalArgHandler::assignValueToReg(
@@ -95,7 +95,7 @@ void FormalArgHandler::assignValueToReg(
 
 \begin{enumerate}
 \item
-首先，将IR函数的参数转换为ArgInfo类的实例。setArgFlags()和splitToValueTypes()框架方法有助于，在传入参数需要多个虚拟寄存器的情况下，复制参数属性和分割值类型:
+首先，将IR函数的参数转换为ArgInfo类的实例。setArgFlags()和splitToValueTypes()有助于在传入参数需要多个虚拟寄存器的情况下，复制参数属性和分割值类型:
 
 \begin{cpp}
 bool M88kCallLowering::lowerFormalArguments(
@@ -120,7 +120,7 @@ bool M88kCallLowering::lowerFormalArguments(
 \end{cpp}
 
 \item
-有了SplitArgs变量中准备的参数，就可以生成机器代码了。在生成的调用约定CC\_M88k和辅助类FormalArghandler帮助下，这一切都由框架代码自行完成:
+有了SplitArgs变量中准备的参数，就可以生成机器代码了。生成的调用约定CC\_M88k和辅助类FormalArghandler帮助下，这一切都由框架代码自行完成:
 
 \begin{cpp}
     IncomingValueAssigner ArgAssigner(CC_M88k);
@@ -136,7 +136,7 @@ bool M88kCallLowering::lowerFormalArguments(
 
 \mySubsubsection{12.7.2.}{通用机器指令合法化}
 
-从LLVM IR到通用机器码的转换大部分是固定的，所以会生成使用不受支持的数据类型的指令，以及其他挑战，合法化通道的任务是定义哪些操作和指令是合法的。有了这些信息，GlobalISel框架试图将指令转化为法律形式。例如，m88k架构只有32位寄存器，因此使用64位值的按位和操作则不合法。但若将64位值拆分为两个32位值，并使用两个按位和操作，就有了合法的代码。这可以转化为一个合法化规则:
+从LLVM IR到通用机器码的转换大部分是固定的，所以会生成使用不受支持的数据类型的指令，以及其他挑战，合法化通道任务，从而定义哪些操作和指令合法。有了这些信息，GlobalISel框架试图将指令转化为合法形式。例如，m88k架构只有32位寄存器，因此使用64位值的按位和操作则不合法。但若将64位值拆分为两个32位值，并使用两个按位和操作，就有了合法的代码。这可以转化为一个合法化规则:
 
 \begin{cpp}
 getActionDefinitionsBuilder({G_AND, G_OR, G_XOR})
@@ -156,7 +156,7 @@ getActionDefinitionsBuilder({G_AND, G_OR, G_XOR})
 
 \mySubsubsection{12.7.3.}{为操作数选择一个寄存器库}
 
-许多架构定义了多个寄存器库，寄存器库是一组寄存器。典型的寄存器库有通用寄存器库和浮点寄存器库。为什么这些信息很重要?在寄存器库中，将值从一个寄存器移动到另一个寄存器通常很便宜，但将值复制到另一个寄存器库可能代价高昂，甚至不可能，所以必须为每个操作数选择一个合适的寄存器库。
+许多架构定义了多个寄存器库，寄存器库是一组寄存器，典型的寄存器库有通用寄存器库和浮点寄存器库。为什么这些信息很重要?寄存器库中，将值从一个寄存器移动到另一个寄存器通常很简单，但将值复制到另一个寄存器库可能代价高昂，甚至不可能，所以必须为每个操作数选择一个合适的寄存器库。
 
 该类的实现涉及到对目标描述的添加。在GISel/M88lRegisterbanks.td文件中，定义了一个寄存器库，引用了我们定义的寄存器类:
 
@@ -164,7 +164,7 @@ getActionDefinitionsBuilder({G_AND, G_OR, G_XOR})
 def GRRegBank : RegisterBank<"GRRB", [GPR, GPR64]>;
 \end{cpp}
 
-这一行，生成了一些支持代码，但仍然需要添加一些可能生成的代码。首先，需要定义部分映射。这告诉框架一个值从哪个位索引开始，它有多宽，以及它映射到哪个寄存器库。我们有两个条目，每个寄存器类一个:
+这一行，生成了一些支持代码，但仍然需要添加一些可能生成的代码。需要定义部分映射，这告诉框架一个值从哪个位索引开始，它有多宽，以及它映射到哪个寄存器库。我们有两个条目，每个寄存器类一个:
 
 \begin{cpp}
 RegisterBankInfo::PartialMapping
@@ -205,9 +205,9 @@ M88kGenRegisterBankInfo::getValueMapping(
 }
 \end{cpp}
 
-创建这些表时，很容易出错。所有这些信息都可以从目标描述中获得，并且源代码中的注释指出该代码应该由TableGen!然而，这还没有实现，所以必须手动创建代码。
+创建这些表时，很容易出错。所有这些信息都可以从目标描述中获得，并且源代码中的注释指出该代码应该由TableGen!然而，这还没有实现，所以必须手动书写代码。
 
-必须在M88kRegisterBankInfo类中实现的最重要的函数是getInstrMapping()，为指令的每个操作数返回映射的寄存器库。现在这变得很简单，可以查找部分映射数组，然后可以将其传递给getInstructionMapping()方法，该方法构造完整的指令映射:
+必须在M88kRegisterBankInfo类中实现的最重要的函数是getInstrMapping()，为指令的每个操作数返回映射的寄存器库。现在这变得很简单，可以查找部分映射数组，然后可以将其传递给getInstructionMapping()，该方法构造完整的指令映射:
 
 \begin{cpp}
 const RegisterBankInfo::InstructionMapping &
@@ -233,15 +233,15 @@ M88kRegisterBankInfo::getInstrMapping(
 }
 \end{cpp}
 
-在开发过程中，通常会忘记通用指令的寄存器库映射。
+开发过程中，通常会忘记通用指令的寄存器库映射。
 
-不幸的是，在运行时生成的错误消息没有提及映射失败的指令。简单的修复方法是在返回无效映射之前转储指令。但这里需要小心，dump()方法并非在所有构建类型中都可用。
+不幸的是，运行时生成的错误消息没有提及映射失败的指令。简单的修复方法是在返回无效映射之前转储指令。但这里需要小心，dump()方法并非在所有构建类型中都可用。
 
-在映射寄存器库之后，必须将通用机器指令转换成真正的机器指令。
+映射寄存器库之后，必须将通用机器指令转换成真正的机器指令。
 
 \mySubsubsection{12.7.4.}{翻译通用机器指令}
 
-对于通过选择DAG进行指令选择，目标描述中添加了使用DAG操作和操作数的模式。为了重用这些模式，引入了从DAG节点类型到通用机器指令的映射。例如，DAG和操作映射到通用的G\_AND机器指令。并非所有DAG操作都具有等效的通用机器指令，但涵盖了最常见的情况。因此，有利于在目标描述中定义所有的代码选择模式。
+对于通过选择DAG进行指令选择，目标描述中添加了使用DAG操作和操作数的模式。为了重用这些模式，引入了从DAG节点类型到通用机器指令的映射。例如，DAG和操作映射到通用的G\_AND机器指令，并非所有DAG操作都具有等效的通用机器指令，但涵盖了最常见的情况，所以有利于在目标描述中定义所有的代码选择模式。
 
 M88kInstructionSelector类的大部分实现(可以在GISel/M88kInstructionSelector.cpp文件中找到)是从目标描述生成的。然而，需要重写select()方法，可以翻译目标描述中模式未涵盖的通用机器指令。由于只支持非常小的通用指令子集，所以可以简单地调用生成的模式匹配器:
 
@@ -257,7 +257,7 @@ bool M88kInstructionSelector::select(MachineInstr &I) {
 
 \mySubsubsection{12.7.5.}{运行一个示例}
 
-要使用GlobalISel翻译LLVM IR，需要在llc的命令行中添加-global-isel选项。例如，可以使用前面定义的IR文件，and.ll:
+要使用GlobalISel翻译LLVM IR，需要在llc的命令行中添加-global-isel选项。例如，可以使用前面定义的IR文件——and.ll:
 
 \begin{shell}
 $ llc -mtriple m88k-openbsd -global-isel < and.ll

@@ -1,12 +1,12 @@
-无论是商业上需要支持一个新的CPU，还是仅仅是一个爱好项目来增加对一些旧架构的支持，向LLVM添加新的后端都是一项主要任务。本章和接下来的两章概述了为新后端开发所需的内容。我们将为摩托罗拉M88k架构添加一个后端，其为20世纪80年代的RISC架构。
+无论是商业上需要支持一个新的CPU，还是一个爱好项目来增加对一些旧架构的支持，向LLVM添加新的后端都是一项主要任务。本章和接下来的两章概述了为新后端开发所需的内容，我们将为摩托罗拉M88k架构添加一个后端，其为20世纪80年代的RISC架构。
 
 \begin{myTip}{参考}
-可以在维基百科(\url{https://en.wikipedia.org/wiki/Motorola_88000})上阅读有关摩托罗拉架构的更多信息，关于这种架构的信息仍然可以在互联网上获得。可以在\url{http://www.bitsavers.org/components/motorola/88000/}上找到包含指令集和计时信息的CPU手册，在\url{https://archive.org/details/bitsavers_attunixSysa0138776555SystemVRelease488000ABI1990_8011463}上找到包含ELF格式定义和调用约定的System V ABI M88k处理器补充。
+可以在维基百科(\url{https://en.wikipedia.org/wiki/Motorola_88000})上阅读有关摩托罗拉架构的信息，关于这种架构的信息仍然可以在互联网上获得。可以在\url{http://www.bitsavers.org/components/motorola/88000/}上找到包含指令集和计时信息的CPU手册，在\url{https://archive.org/details/bitsavers_attunixSysa0138776555SystemVRelease488000ABI1990_8011463}上找到包含ELF格式定义和调用约定的System V ABI M88k处理器补充。
 
-OpenBSD(可从\url{https://www.openbsd.org/}获得)仍然支持LUNA-88k系统。在OpenBSD系统上，很容易为M88k创建一个GCC交叉编译器。通过GXemul(可在\url{http://gavare.se/gxemul/}上获得)，可获得了一个能够运行M88k架构的某些OpenBSD版本的模拟器。
+OpenBSD(可从\url{https://www.openbsd.org/}获得)仍然支持LUNA-88k系统。OpenBSD系统上，很容易为M88k创建一个GCC交叉编译器。通过GXemul(可在\url{http://gavare.se/gxemul/}上获得)，可获得了一个能够运行M88k架构的某些OpenBSD版本的模拟器。
 \end{myTip}
 
-M88k架构已经停产很久了，但我们找到了足够的信息和工具，为它添加LLVM后端是一个有趣的目标。我们将从扩展Triple类开始。
+M88k架构已经停产很久了，但我们找到了足够的信息和工具，为它添加LLVM后端。我们将从扩展Triple类开始。
 
 
 

@@ -1,4 +1,4 @@
-Triple类的一个实例表示LLVM为之生成代码的目标平台。为了支持新的架构，第一个任务是扩展Triple类。在llvm/include/llvm/TargetParser/Triple.h文件中，添加一个成员到ArchType枚举和一个新谓词:
+Triple类的一个实例表示LLVM为之生成代码的目标平台。为了支持新架构，第一个任务是扩展Triple类。llvm/include/llvm/TargetParser/Triple.h文件中，添加一个成员到ArchType枚举和一个新谓词:
 
 \begin{cpp}
 class Triple {
@@ -16,7 +16,7 @@ public:
 };
 \end{cpp}
 
-在llvm/lib/TargetParser/Triple.cpp文件中，有许多方法使用ArchType枚举。需要扩展它们;例如，在getArchTypeName()方法中，需要添加一个新的case语句:
+llvm/lib/TargetParser/Triple.cpp文件中，有许多方法使用ArchType枚举。需要扩展它们;例如，getArchTypeName()方法中，需要添加一个新case:
 
 \begin{cpp}
 switch (Kind) {
@@ -25,7 +25,7 @@ switch (Kind) {
 }
 \end{cpp}
 
-大多数情况下，若忘记在其中一个函数中处理新的m88k枚举成员，编译器会发出警告。接下来，我们将展开可执行和可链接格式(ELF)。
+若忘记在其中一个函数中处理新的m88k枚举成员，编译器会发出警告。接下来，我们将展开可执行和可链接格式(ELF)。
 
 
 

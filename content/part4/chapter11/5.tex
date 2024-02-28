@@ -1,4 +1,4 @@
-我们还没有讨论在哪里放置目标描述文件。LLVM中的每个后端在llvm/lib/Target中都有一个子目录。在这里创建M88k目录，并将目标描述文件复制到其中。
+我们还没有讨论在哪里放置目标描述文件，LLVM中的每个后端在llvm/lib/Target中都有一个子目录。这里创建M88k目录，并将目标描述文件复制到其中。
 
 当然，仅添加TableGen文件是不够的。LLVM使用注册表查找目标实现的实例，并期望某些全局函数注册这些实例。由于已经生成了一些部分，所以已经可以提供一个实现。
 
@@ -17,7 +17,7 @@ Target &llvm::getTheM88kTarget() {
 \end{cpp}
 
 \item
-LLVM要求每个目标提供一个LLVMInitialize<Target Name> TargetInfo()函数来注册目标实例。这个函数必须有一个C链接，所以可以在LLVM的C API中使用:
+LLVM要求每个目标提供一个LLVMInitialize<Target Name> TargetInfo()函数来注册目标实例。这个函数必须有一个C链接，可以在LLVM的C API中使用:
 
 \begin{cpp}
 extern "C" LLVM_EXTERNAL_VISIBILITY void
@@ -53,7 +53,7 @@ add_llvm_component_library(LLVMM88kInfo
 
 \begin{enumerate}
 \item
-实现在MCTargetDesc子目录下的M88kMCTargetDesc.cpp文件中。TableGen将前一节中创建的目标描述转换为C++源码段。在这里，我们包括寄存器信息、指令信息和子目标信息的部分:
+实现在MCTargetDesc子目录下的M88kMCTargetDesc.cpp文件中，TableGen将前一节中创建的目标描述转换为C++源码段。这里，我们包括寄存器信息、指令信息和子目标信息的部分:
 
 \begin{cpp}
 using namespace llvm;
@@ -69,7 +69,7 @@ using namespace llvm;
 \end{cpp}
 
 \item
-目标注册中心期望这里的每个类都有一个工厂方法。我们从指令信息开始，分配一个MCInstrInfo类的实例，并调用InitM88kMCInstrInfo()生成的函数来填充对象:
+目标注册中心期望这里的每个类都有一个工厂方法。从指令信息开始，分配一个MCInstrInfo类的实例，并调用InitM88kMCInstrInfo()生成的函数来填充对象:
 
 \begin{cpp}
 static MCInstrInfo *createM88kMCInstrInfo() {
@@ -105,7 +105,7 @@ StringRef CPU, StringRef FS) {
 \end{cpp}
 
 \item
-定义了工厂方法之后，我们现在可以注册它们了。与目标注册类似，LLVM期望一个名为LLVMInitialize<Target Name> TargetMC()的全局函数:
+定义了工厂方法之后，现在可以注册它们了。与目标注册类似，LLVM期望一个名为LLVMInitialize<Target Name> TargetMC()的全局函数:
 
 \begin{cpp}
 extern "C" LLVM_EXTERNAL_VISIBILITY void
@@ -134,7 +134,7 @@ M88kMCTargetDesc.h头文件只是使一些生成的代码可用:
 \end{cpp}
 \end{enumerate}
 
-实现差不多完成了。为了避免链接器错误，需要提供另一个函数，该函数为TargetMachine类的对象注册一个工厂方法。这个类是代码生成所必需的，将在下面的第12章中实现。这里，只是在M88kTargetMachine.cpp文件中定义了一个空函数:
+实现差不多完成了。为了避免链接器错误，需要提供另一个函数，该函数为TargetMachine类的对象注册一个工厂方法。这个类是代码生成所必需的，将在第12章中实现。这里，只是在M88kTargetMachine.cpp文件中定义了一个空函数:
 
 \begin{cpp}
 #include "TargetInfo/M88kTargetInfo.h"
@@ -146,7 +146,7 @@ LLVMInitializeM88kTarget() {
 }
 \end{cpp}
 
-这就是我们的第一个实现，但LLVM还不知道我们的新后端。为了集成它，打开llvm/CMakeLists.txt文件，找到定义所有实验目标的部分，将M88k目标添加到列表中:
+这就是我们的第一个实现，但LLVM还不知道添加了新后端。为了集成它，打开llvm/CMakeLists.txt文件，找到定义所有实验目标的部分，将M88k目标添加到列表中:
 
 \begin{cmake}
 set(LLVM_ALL_EXPERIMENTAL_TARGETS ARC … M88k …)
@@ -164,7 +164,7 @@ $ cmake -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=M88k \
 …
 \end{shell}
 
-在构建LLVM之后，可以验证工具已经知道我们的新目标:
+构建LLVM之后，可以验证工具已经知道我们的新目标:
 
 \begin{shell}
 $ bin/llc –version
@@ -180,7 +180,7 @@ LLVM (http://llvm.org/):
 LLVM 17.0.2中有一个问题，会导致编译错误。在代码中的一个地方，子目标信息的TableGen发射器使用已删除的值llvm::None，而非std::nullopt，从而在编译M88kMCTargetDesc.cpp时导致错误。修复此问题的最简单方法是从LLVM 18开发分支中挑选修复该问题的提交:git cherry-pick -x a587f429。
 \end{myTip}
 
-在下一节中，将实现汇编解析器，这将为我们提供第一个工作的LLVM工具。
+下一节中，将实现汇编解析器，这将是我们第一个实现的LLVM工具。
 
 
 

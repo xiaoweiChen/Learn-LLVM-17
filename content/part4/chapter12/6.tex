@@ -1,5 +1,5 @@
 
-到目前为止，我们已经实现了指令选择类和一些其他类。现在，需要设置后端如何工作。与优化管道一样，后端也分为几个通道。配置这些通道是M88kTargetMachine类的主要任务，所以需要指定哪些特性可用于指令选择。通常，平台是一系列CPU，它们都有一组通用的指令，但因特定的扩展而有所不同。例如，一些CPU有矢量指令，而另一些没有。在LLVM IR中，函数可以附加属性，这些属性指定应该为哪个CPU编译该函数，或者可以使用哪些特性。换句话说，每个函数可以有不同的配置，这是在M88kSubTarget类中捕获的。
+我们已经实现了指令选择类和一些其他类。现在，需要设置后端如何工作。与优化流水线一样，后端也分为几个通道。配置这些通道是M88kTargetMachine类的主要任务，所以需要指定哪些特性可用于指令选择。通常，平台是一系列CPU，它们都有一组通用的指令，但因特定的扩展而有所不同。例如，一些CPU有向量指令，而另一些没有。在LLVM IR中，函数可以附加属性，这些属性指定应该为哪个CPU编译该函数，或者可以使用哪些特性。换句话说，每个函数可以有不同的配置，这是在M88kSubTarget类中捕获的。
 
 \mySubsubsection{12.6.1.}{实现M88kSubtarget}
 
@@ -111,7 +111,7 @@ void M88kSubtarget::anchor() {}
 \end{cpp}
 
 \item
-最后，定义构造函数。注意，生成的类需要两个CPU参数:第一个用于指令集，第二个用于调度。这里的用例是，希望针对最新的CPU优化代码，但仍然能够在较旧的CPU上运行代码。我们不支持这个特性，两个参数使用相同的CPU名称:
+最后，定义构造函数，生成的类需要两个CPU参数:第一个用于指令集，第二个用于调度。这里的用例是，希望针对最新的CPU优化代码，但仍然能够在较旧的CPU上运行代码。我们不支持这个特性，两个参数使用相同的CPU名称:
 
 \begin{cpp}
 M88kSubtarget::M88kSubtarget(const Triple &TT,
@@ -126,13 +126,13 @@ M88kSubtarget::M88kSubtarget(const Triple &TT,
 
 \mySubsubsection{12.6.2.}{实现M88kTargetMachine——定义}
 
-最后，可以实现M88kTargetMachine类。该类保存所有使用的子目标实例，还拥有TargetLoweringObjectFile的子类，该子类为向下转译过程提供了诸如节名之类的详细信息。最后，创建在此后端中运行的传递的配置。
+最后，可以实现M88kTargetMachine类。该类保存所有使用的子目标实例，还拥有TargetLoweringObjectFile的子类，该子类为向下转译过程提供了诸如节名之类的详细信息。最后，创建在此后端中运行通道的配置。
 
 M88kTargetMachine.h文件中的声明如下:
 
 \begin{enumerate}
 \item
-M88kTargetMachine类派生自LLVMTargetMachine类。唯一的成员是TargetLoweringObjectFile的一个实例和子目标映射:
+M88kTargetMachine类派生自LLVMTargetMachine类，唯一的成员是TargetLoweringObjectFile的一个实例和子目标映射:
 
 \begin{cpp}
 namespace llvm {
@@ -143,7 +143,7 @@ class M88kTargetMachine : public LLVMTargetMachine {
 \end{cpp}
 
 \item
-构造函数的参数完全描述了，将为其生成代码的目标配置。使用TargetOptions类，可以控制代码生成的许多细节——例如，是否可以使用浮点乘法和加法指令。此外，重定位模型、代码模型和优化级别可传递给构造函数。值得注意的是，若目标机器用于实时编译，则JIT参数设置为true。
+构造函数的参数完全描述了，将为其生成代码的目标配置。使用TargetOptions类，可以控制代码生成的许多细节——例如，是否可以使用浮点乘法和加法指令。此外，重定位模型、代码模型和优化级别可传递给构造函数。若目标机器用于实时编译，则JIT参数设置为true。
 
 \begin{cpp}
 public:
@@ -179,11 +179,11 @@ public:
 
 \mySubsubsection{12.6.3.}{实现M88kTargetMachine——添加实现}
 
-该类的实现存储在M88kTargetMachine.cpp文件中。请注意，会在第11章中创建了这个文件。现在，我们将用一个完整的实现来替换这个文件:
+该类的实现存储在M88kTargetMachine.cpp文件中。注意，在第11章中创建了这个文件。现在，我们将用一个完整的实现来替换这个文件:
 
 \begin{enumerate}
 \item
-首先，必须注册目标机器。此外，必须通过前面定义的初始化函数初始化dag到dag的传递:
+首先，必须注册目标机器，必须通过前面定义的初始化函数初始化DAG到DAG的通道:
 
 \begin{cpp}
 extern "C" LLVM_EXTERNAL_VISIBILITY void
@@ -196,9 +196,9 @@ LLVMInitializeM88kTarget() {
 \end{cpp}
 
 \item
-接下来，必须定义支持函数computeDataLayout()，我们在第4章中讨论了数据布局字符串。在这个函数中，数据布局作为后端，期望定义它。由于数据布局取决于硬件特性，因此三元组、CPU名称和特性集字符串将传递给该函数，使用以下组件创建数据布局字符串。目标是大端(E)，并使用ELF符号识别。
+接下来，必须定义支持函数computeDataLayout()。这个函数中，数据布局作为后端，期望定义。由于数据布局取决于硬件特性，因此三元组、CPU名称和特性集字符串将传递给该函数，使用以下组件创建数据布局字符串。目标是大端(E)，并使用ELF符号识别。
 
-指针是32位宽且32位对齐的，所有标量类型都是自然对齐的。MC88110 CPU具有扩展寄存器集，并支持80位宽的浮点数。若要支持这个特殊的特性，则需要在这里添加对CPU名称的检查，并用相应的浮点值扩展字符串。接下来，必须声明所有全局变量都有16位的首选对齐方式，并且硬件只有32位寄存器:
+指针是32位宽且32位对齐的，所有标量类型都是自然对齐的。MC88110 CPU具有扩展寄存器集，并支持80位宽的浮点数。若要支持这个特殊的特性，则需要添加对CPU名称的检查，并用相应的浮点值扩展字符串。接下来，必须声明所有全局变量都有16位的首选对齐方式，并且硬件只有32位寄存器:
 
 \begin{cpp}
 namespace {
@@ -219,7 +219,7 @@ std::string computeDataLayout(const Triple &TT,
 \end{cpp}
 
 \item
-现在，可以定义构造函数和析构函数，许多参数只是传递给超类构造函数。注意，这里调用了computeDataLayout()函数。此外，TLOF成员是用TargetLoweringObjectFileELF实例初始化的，所以使用的是ELF文件格式。在构造函数体中，必须调用initAsmInfo()方法，该方法初始化超类的许多数据成员:
+现在，可以定义构造函数和析构函数，许多参数只是传递给超类构造函数。注意，这里调用了computeDataLayout()函数。此外，TLOF成员使用TargetLoweringObjectFileELF实例初始化，所以使用的是ELF文件格式。在构造函数体中，必须调用initAsmInfo()方法，该方法初始化超类的许多数据成员:
 
 \begin{cpp}
 M88kTargetMachine::M88kTargetMachine(
@@ -242,7 +242,7 @@ M88kTargetMachine::~M88kTargetMachine() {}
 \end{cpp}
 
 \item
-之后，定义getSubtargetImpl()方法。要使用的子目标实例取决于target-cpu和target-features函数属性。例如，可以将target-cpu属性设置为MC88110，从而针对第二代CPU。然而，属性目标特性可以描述，不应该使用该CPU的图形指令。但还没有在目标描述中定义CPU和它们的特性，所以在这里做了一些不必要的事情，但实现非常简单:查询函数属性并使用返回的字符串或默认值。有了这些信息，可以查询SubtargetMap成员，若没有找到，则创建子目标:
+之后，定义getSubtargetImpl()方法。要使用的子目标实例取决于target-cpu和target-features函数属性。例如，可以将target-cpu属性设置为MC88110，从而针对第二代CPU。属性目标特性可以描述，不应该使用该CPU的图形指令。但还没有在目标描述中定义CPU和它们的特性，所以在这里做了一些不必要的事情，但实现非常简单:查询函数属性并使用返回的字符串或默认值。有了这些信息，可以查询SubtargetMap成员，若没有找到，则创建子目标:
 
 \begin{cpp}
 const M88kSubtarget *
@@ -271,7 +271,7 @@ M88kTargetMachine::getSubtargetImpl(
 \end{cpp}
 
 \item
-最后，创建通道配置。为此，需要自己的类M88kPassConfig，其派生自TargetPassConfig类，只需要重写addInstSelector方法即可:
+最后，创建通道配置，需要自己的类M88kPassConfig，其派生自TargetPassConfig类，只需要重写addInstSelector方法即可:
 
 \begin{cpp}
 namespace {
@@ -307,7 +307,7 @@ bool M88kPassConfig::addInstSelector() {
 \end{cpp}
 \end{enumerate}
 
-完成实现是一段漫长的旅程!现在我们已经构建了llc工具，可以运行一个示例，将下面的简单IR保存在and.ll文件中:
+完成实现是一段漫长的旅程!现在，我们可以构建llc工具了，可以运行一个示例，将下面的简单IR保存在and.ll文件中:
 
 \begin{shell}
 define i32 @f1(i32 %a, i32 %b) {

@@ -3,7 +3,7 @@
 
 当框架检测到需要解析指令时，就会调用类中的ParseInstruction()方法，通过提供的词法分析器解析输入，并构造一个所谓的操作数向量。操作数可以是标记，如指令助记符、寄存器名或直接对象，也可以是特定于目标的类别。例如，从jmp \%r2输入构造两个操作数:一个用于助记符的标记操作数和一个寄存器操作数。
 
-然后，生成的匹配器尝试将操作数向量与指令进行匹配。若找到匹配项，则创建MCInst类的实例，其中保存解析后的指令；否则，会发出错误消息。这种方法的优点是，可自动地从目标描述中派生出匹配器，而不需要处理所有的语法问题。
+然后，生成的匹配器尝试将操作数向量与指令进行匹配。若找到匹配项，则创建MCInst类的实例，其中保存解析后的指令；否则，会发出错误消息。这种方法的优点是，可自动地从目标描述中派生出匹配器，不需要处理所有的语法问题。
 
 但我们需要添加更多的支持类，来使汇编解析器工作，这些类都放在MCTargetDesc目录中。
 
@@ -14,7 +14,7 @@
 
 \begin{enumerate}
 \item
-需要为汇编解析器设置一些自定义参数，MCAsmInfo基类(\url{https://github.com/llvm/llvm-project/blob/main/llvm/ include/llvm/MC/MCAsmInfo.h})包含常用参数。此外，为每种支持的对象文件格式创建一个子类：例如，MCAsmInfoELF类(\url{https://github.com/llvm/llvm-project/blob/main/llvm/include/ llvm/MC/MCAsmInfoELF.h})。其背后的原因是，因为它们必须支持相似的特性，所以使用相同对象文件格式的系统上的系统汇编程序共享相同的特征。我们的目标操作系统是OpenBSD，它使用ELF文件格式，因此从MCAsmInfoELF类派生出我们的m88kmccasminfo类。M88kMCAsmInfo.h文件中的声明如下:
+需要为汇编解析器设置一些自定义参数，MCAsmInfo基类(\url{https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/MC/MCAsmInfo.h})包含常用参数。此外，为每种支持的对象文件格式创建一个子类：例如，MCAsmInfoELF类(\url{https://github.com/llvm/llvm-project/blob/main/llvm/include/ llvm/MC/MCAsmInfoELF.h})。原因是，因为它们必须支持相似的特性，所以使用相同对象文件格式的系统上的系统汇编程序共享相同的特征。我们的目标操作系统是OpenBSD，使用ELF文件格式，因此从MCAsmInfoELF类派生出我们的m88kmccasminfo类。M88kMCAsmInfo.h文件中的声明如下:
 
 \begin{cpp}
 namespace llvm {
@@ -48,17 +48,17 @@ M88kMCAsmInfo::M88kMCAsmInfo(const Triple &TT) {
 
 \end{enumerate}
 
-现在我们已经完成了MCAsmInfo类的实现。我们将学习实现的下一个类，可在LLVM中创建指令的二进制表示。
+现在已经完成了MCAsmInfo类的实现。我们将学习实现的下一个类，可在LLVM中创建指令的二进制表示。
 
 \mySamllsection{为M88k目标实现MCCodeEmitter支持类}
 
-在LLVM内部，一条指令由MCInst类的实例表示，指令可以作为汇编文本或以二进制形式发送到目标文件中。M88kMCCodeEmitter类创建指令的二进制表示，而M88kInstPrinter类可生成其文本表示。
+LLVM内部，一条指令由MCInst类的实例表示，指令可以作为汇编文本或以二进制形式发送到目标文件中。M88kMCCodeEmitter类创建指令的二进制表示，而M88kInstPrinter类可生成其文本表示。
 
-首先，我们将实现M88kMCCodeEmitter类，存储在M88kMCCodeEmitter.cpp文件中:
+首先，将实现M88kMCCodeEmitter类，存储在M88kMCCodeEmitter.cpp文件中:
 
 \begin{enumerate}
 \item
-类的大部分是由TableGen生成的，所以只需要添加一些样板代码。注意，没有相应的头文件;工厂函数的原型将添加到M88kMCTargetDesc.h文件中。首先，为发出的指令数量设置一个统计计数器:
+类的大部分由TableGen生成，所以只需要添加一些样板代码。注意，没有相应的头文件;工厂函数的原型将添加到M88kMCTargetDesc.h文件中。首先，为生成的指令数量设置一个统计计数器:
 
 \begin{cpp}
 using namespace llvm;
@@ -68,7 +68,7 @@ STATISTIC(MCNumEmitted,
 \end{cpp}
 
 \item
-M88kMCCodeEmitter类位于匿名命名空间中，只需要实现在基类中声明的encodeInstruction()方法和getMachineOpValue()辅助方法。另一个getBinaryCodeForInstr()方法是由TableGen根据目标描述生成的:
+M88kMCCodeEmitter类位于匿名命名空间中，只需要实现在基类中声明的encodeInstruction()方法和getMachineOpValue()辅助方法。另一个getBinaryCodeForInstr()方法由TableGen根据目标描述生成:
 
 \begin{cpp}
 namespace {
@@ -103,7 +103,7 @@ public:
 \end{cpp}
 
 \item
-encodeInstruction()方法只是查找指令的二进制表示，将统计计数器加1，然后以大端格式写出字节。指令有一个固定的4字节大小，所以在端端流上使用uint32\_t类型:
+encodeInstruction()方法只是查找指令的二进制表示，将统计计数器加1，然后以大端格式写出字节。指令有一个固定的4字节大小，所以在端流上使用uint32\_t类型:
 
 \begin{cpp}
 void M88kMCCodeEmitter::encodeInstruction(
@@ -119,7 +119,7 @@ void M88kMCCodeEmitter::encodeInstruction(
 \end{cpp}
 
 \item
-getMachineOpValue()方法的任务是返回操作数的二进制表示形式，我们定义了用于存储在指令中的寄存器的位范围，计算存储在这些地方的值。从生成的代码调用该方法，只支持两种情况。对于寄存器，将返回目标描述中定义的寄存器编码。对于immediate，返回的是immediate值:
+getMachineOpValue()方法的任务是返回操作数的二进制表示形式，我们定义了用于存储在指令中的寄存器的位范围，计算存储在这些地方的值。从生成的代码调用该方法，只支持两种情况。对于寄存器，将返回目标描述中定义的寄存器编码。对于immediate，返回的是立即数:
 
 \begin{cpp}
 unsigned M88kMCCodeEmitter::getMachineOpValue(
@@ -151,7 +151,7 @@ llvm::createM88kMCCodeEmitter(const MCInstrInfo &MCII,
 
 \mySamllsection{实现了M88k目标的指令输出器支持类}
 
-M88kInstPrinter类具有与M88kMCCodeEmitter类相似的结构，InstPrinter类负责生成LLVM指令的文本表示。类的大部分是由TableGen生成的，但是必须添加对输出操作数的支持。该类在M88kInstPrinter.h头文件中声明，实现在M88kInstPrinter.cpp文件中:
+M88kInstPrinter类具有与M88kMCCodeEmitter类相似的结构，InstPrinter类负责生成LLVM指令的文本表示。类的大部分是由TableGen生成的，但必须添加对输出操作数的支持。该类在M88kInstPrinter.h头文件中声明，实现在M88kInstPrinter.cpp文件中:
 
 \begin{enumerate}
 \item
@@ -196,7 +196,7 @@ public:
 \end{cpp}
 
 \item
-该实现位于M88kInstPrint.cpp文件中。在包含所需的头文件并使用llvm命名空间之后，包含生成的C++的文件应包含在内:
+该实现位于M88kInstPrint.cpp文件中。包含所需的头文件并使用llvm命名空间之后，生成的C++的文件应包含在内:
 
 \begin{cpp}
 using namespace llvm;
@@ -207,7 +207,7 @@ using namespace llvm;
 \end{cpp}
 
 \item
-printOperand()方法会检查操作数的类型，并生成一个寄存器名或一个立即数。通过生成的getRegisterName()方法查找寄存器名:
+printOperand()方法会检查操作数的类型，并生成一个寄存器名或立即数。通过生成的getRegisterName()方法查找寄存器名:
 
 \begin{cpp}
 void M88kInstPrinter::printOperand(
@@ -227,7 +227,7 @@ void M88kInstPrinter::printOperand(
 \end{cpp}
 
 \item
-printInst()方法只调用printInstruction()生成的方法来输出指令，然后使用printAnnotation()方法来输出可能的注释:
+printInst()方法只调用printInstruction()生成的方法来输出指令，然后使用printAnnotation()方法来输出可能需要的注释:
 
 \begin{cpp}
 void M88kInstPrinter::printInst(
@@ -264,7 +264,7 @@ static MCAsmInfo *
 \end{cpp}
 
 \item
-最后，在LLVMInitializeM88kTargetMC()函数中，需要添加工厂方法的注册:
+最后，LLVMInitializeM88kTargetMC()函数中，需要添加工厂方法的注册:
 
 \begin{cpp}
 extern "C" LLVM_EXTERNAL_VISIBILITY void
@@ -280,7 +280,7 @@ LLVMInitializeM88kTargetMC() {
 \end{cpp}
 \end{enumerate}
 
-现在已经实现了所有必需的支持类，最后可以添加汇编解析器了。
+已经实现了所有必需的支持类，最后可以添加汇编解析器了。
 
 \mySamllsection{创建M88k汇编解析器类}
 
@@ -347,7 +347,7 @@ void addRegOperands(MCInst &Inst, unsigned N) const {
 \end{cpp}
 
 \item
-最后，超类定义了一个需要实现的抽象print()虚方法。这只用于调试目的:
+最后，超类定义了一个需要实现的print()虚函数。这只用于调试目的:
 
 \begin{cpp}
 void print(raw_ostream &OS) const override {
@@ -371,7 +371,7 @@ void print(raw_ostream &OS) const override {
 
 \begin{enumerate}
 \item
-在类的开始，将包含生成的代码段:
+类的开始，将包含生成的代码段:
 
 \begin{cpp}
 class M88kAsmParser : public MCTargetAsmParser {
@@ -380,7 +380,7 @@ class M88kAsmParser : public MCTargetAsmParser {
 \end{cpp}
 
 \item
-接下来，定义必需的字段。我们需要一个对实际解析器的引用，其属于MCAsmParser类，以及对子目标信息的引用:
+接下来，定义必需的字段。需要一个对实际解析器的引用，其属于MCAsmParser类，以及对子目标信息的引用:
 
 \begin{cpp}
     MCAsmParser &Parser;
@@ -388,7 +388,7 @@ class M88kAsmParser : public MCTargetAsmParser {
 \end{cpp}
 
 \item
-为了实现汇编器，我们覆写了MCTargetAsmParser超类中定义的两个方法。MatchAndEmitInstruction()方法尝试匹配一条指令，并发出由MCInst类的实例表示的指令。解析指令是在ParseInstruction()方法中完成的，而parseRegister()和tryParseRegister()方法负责解析寄存器。其他方法是内部需要的:
+为了实现汇编器，我们覆写了MCTargetAsmParser超类中定义的两个方法。MatchAndEmitInstruction()尝试匹配一条指令，并发出由MCInst类的实例表示的指令。解析指令是在ParseInstruction()方法中完成的，而parseRegister()和tryParseRegister()方法负责解析寄存器:
 
 \begin{cpp}
     bool
@@ -430,7 +430,7 @@ public:
 \end{cpp}
 
 \item
-现在包含汇编程序的生成部分:
+包含汇编程序的生成部分:
 
 \begin{cpp}
 #define GET_REGISTER_MATCHER
@@ -439,7 +439,7 @@ public:
 \end{cpp}
 
 \item
-每当需要一条指令时，就调用ParseInstruction()方法，必须能够解析指令的所有语法形式。目前，只有接受三个操作数的指令，它们之间用逗号分隔，解析起来很简单。注意，若出现错误，返回值为true !
+每当需要一条指令时，就调用ParseInstruction()方法，必须能够解析指令的所有语法形式。目前，只有接受三个操作数的指令，用逗号分隔，解析起来很简单。注意，若出现错误，返回值为true !
 
 \begin{cpp}
 bool M88kAsmParser::ParseInstruction(
@@ -500,7 +500,7 @@ bool M88kAsmParser::parseOperand(
 \end{cpp}
 
 \item
-parseRegister()方法尝试解析一个寄存器。首先，检查百分号\%。若后面跟着一个与寄存器名匹配的标识符，就成功地解析了一个寄存器，并在RegNo参数中返回寄存器号。然而，若不能识别一个寄存器，若RestoreOnFailure参数为true，就可能要撤销词法分析:
+parseRegister()方法尝试解析一个寄存器。首先，检查百分号\%。若后面跟着一个与寄存器名匹配的标识符，就成功地解析了一个寄存器，并在RegNo参数中返回寄存器号。若不能识别一个寄存器，若RestoreOnFailure参数为true，就可能要撤销词法分析:
 
 \begin{cpp}
 bool M88kAsmParser::parseRegister(
@@ -609,7 +609,7 @@ LLVMInitializeM88kAsmParser() {
 \end{cpp}
 \end{enumerate}
 
-这就完成了汇编解析器的实现。在构建LLVM之后，可以使用LLVM -mc机器码游工作台来组装一条指令:
+这就完成了汇编解析器的实现。构建LLVM之后，可以使用llvm-mc机器码工具组装一条汇编指令:
 
 \begin{shell}
 $ echo 'and %r1,%r2,%r3' | \

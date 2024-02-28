@@ -1,13 +1,13 @@
 
 
-在后端，从IR创建机器指令是一项非常重要的任务。实现它的一种常见方法是利用DAG:
+后端从IR创建机器指令是一项非常重要的任务。实现它的一种常见方法是利用DAG:
 
 \begin{enumerate}
 \item
 首先，必须从IR创建DAG。DAG的一个节点表示一个操作，边缘表示控制和数据流依赖关系。
 
 \item
-接下来，必须遍历DAG并使类型和操作合法化，合法化意味着我们只使用硬件支持的类型和操作。这要求我们创建一个配置，告诉框架如何处理非合法类型和操作。例如，一个64位值可以拆分为两个32位值，两个64位值的乘法可以更改为库调用，计数填充等复杂操作可以扩展为计算该值的一系列更简单的操作。
+接下来，必须遍历DAG并使类型和操作合法化，只使用硬件支持的类型和操作。这要求我们创建一个配置，告诉框架如何处理非合法类型和操作。例如，一个64位值可以拆分为两个32位值，两个64位值的乘法可以更改为库调用，计数填充等复杂操作可以扩展为计算该值的一系列更简单的操作。
 
 \item
 然后，利用模式匹配对DAG中的节点进行匹配，并用机器指令替换节点。我们在前一章中看到了这种模式。
@@ -16,11 +16,11 @@
 最后，指令调度程序将机器指令重新排序为更高效的顺序。
 \end{enumerate}
 
-这只是通过选择DAG对指令选择过程的高级描述若对更多细节感兴趣，可以在\url{https://llvm.org/docs/CodeGenerator.html#selectiondaginstruction-selection-process}的LLVM目标无关代码生成器用户指南中找到。
+通过选择DAG对指令选择过程的高级描述若对更多细节感兴趣，可以在\url{https://llvm.org/docs/CodeGenerator.html#selectiondaginstruction-selection-process}的LLVM目标无关代码生成器用户指南中找到。
 
-此外，LLVM中的所有后端都实现了选择DAG，其主要优点是可以生成高性能的代码。然而，这是有代价的:创建DAG很昂贵，并且减慢了编译速度此，所以这促使LLVM开发人员寻找其他更理想的方法。一些目标通过FastISel实现指令选择，这只用于未优化的代码。可以快速生成代码，但生成的代码不如选择DAG方法生成的代码。此外，还增加了一种全新的指令选择方法，使测试工作量增加了一倍。指令选择还使用另一种方法，称为全局指令选择，我们将在稍后的全局指令选择一节中对其进行研究。
+此外，LLVM中的所有后端都实现了选择DAG，其主要优点是可以生成高性能的代码，但这是有代价的:创建DAG很昂贵，并且减慢了编译速度此，所以这促使LLVM开发人员寻找其他更理想的方法。一些目标通过FastISel实现指令选择，这只用于未优化的代码。可以快速生成代码，但生成的代码不如选择DAG方法生成的代码。还增加了一种全新的指令选择方法，使测试工作量增加了一倍。指令选择还使用另一种方法，称为全局指令选择，我们将在稍后的全局指令选择一节中对其进行研究。
 
-本章中，我们的目标是实现足够的后端，来实现一个简单的IR功能:
+本章中，目标是实现足够的后端，来实现一个简单的IR功能:
 
 \begin{cpp}
 define i32 @f1(i32 %a, i32 %b) {
@@ -31,7 +31,7 @@ define i32 @f1(i32 %a, i32 %b) {
 
 此外，对于一个真正的后端，需要更多的代码，必须添加什么来实现更大的功能。
 
-为了通过选择DAG实现指令选择，需要创建两个新类:M88kISelLowering和M88kDAGToDAGISel。前一个类用于定制DAG，例如：通过定义哪些类型是合法的，它还包含支持降低函数和函数调用的代码。后一个类执行DAG转换，实现主要是从目标描述生成的。
+为了通过选择DAG实现指令选择，需要创建两个新类:M88kISelLowering和M88kDAGToDAGISel。前一个类用于定制DAG，例如：通过定义哪些类型是合法的，包含支持降低函数和函数调用的代码。后一个类执行DAG转换，实现主要是从目标描述生成的。
 
 我们将在后端添加几个类的实现，图12.1描述了将进一步开发的主类之间的高层关系:
 
@@ -39,11 +39,11 @@ define i32 @f1(i32 %a, i32 %b) {
 
 \mySubsubsection{12.2.1.}{简化DAG——处理合法类型和设置操作}
 
-首先，让我们实现M88kISelLowering，该类存储在M88kISelLowering.cpp文件中。构造函数配置合法的类型和操作:
+首先，实现M88kISelLowering，该类存储在M88kISelLowering.cpp文件中。构造函数配置合法的类型和操作:
 
 \begin{enumerate}
 \item
-构造函数将对TargetMachine和M88kSubtarget类的引用作为参数。TargetMachine类负责目标的一般配置，它需要运行。LLVM后端通常针对一个CPU系列，M88kSubtarget类描述所选CPU的特性。我们将在本章后面讨论这两个类:
+构造函数将对TargetMachine和M88kSubtarget类的引用作为参数。TargetMachine类负责目标的一般配置，需要运行。LLVM后端通常针对一个CPU系列，M88kSubtarget类描述所选CPU的特性。我们将在本章后面讨论这两个类:
 
 \begin{cpp}
 M88kTargetLowering::M88kTargetLowering(
@@ -52,14 +52,14 @@ M88kTargetLowering::M88kTargetLowering(
 \end{cpp}
 
 \item
-第一个动作是声明哪个机器值类型使用哪个寄存器类。记住，寄存器类是从目标描述生成的。这里，我们只处理32位的值:
+第一个动作是声明哪个机器值类型使用哪个寄存器类，寄存器类从目标描述中生成。这里，只处理32位的值:
 
 \begin{cpp}
     addRegisterClass(MVT::i32, &M88k::GPRRegClass);
 \end{cpp}
 
 \item
-添加了所有的寄存器类之后，必须计算这些寄存器类的派生属性。需要查询子目标以获取寄存器信息，这些信息大多是由目标描述生成的:
+添加了所有的寄存器类之后，必须计算这些寄存器类的派生属性。需要查询子目标以获取寄存器信息，这些信息大多由目标描述生成:
 
 \begin{cpp}
 computeRegisterProperties(Subtarget.getRegisterInfo());
@@ -80,7 +80,7 @@ setBooleanContents(ZeroOrOneBooleanContent);
 \end{cpp}
 
 \item
-之后，设置函数的对齐方式。最小函数对齐是正确执行所需的对齐，我们给出了首选的对齐方式:
+之后，设置函数的对齐方式。最小函数对齐是正确执行所需的对齐，给出了首选的对齐方式:
 
 \begin{cpp}
 setMinFunctionAlignment(Align(4));
@@ -88,7 +88,7 @@ setPrefFunctionAlignment(Align(4));
 \end{cpp}
 
 \item
-最后，声明哪些操作是合法的。在前一章中，只定义了三个逻辑指令，对32位值是合法的:
+最后，声明哪些操作是合法的。前一章中，只定义了三个逻辑指令，对32位值是合法的:
 
 \begin{cpp}
 setOperationAction(ISD::AND, MVT::i32, Legal);
@@ -105,7 +105,7 @@ setOperationAction(ISD::XOR, MVT::i32, Legal);
 \end{cpp}
 \end{enumerate}
 
-现在，让我们回顾一些要点，以强调到目前为止所做的定义之间的联系。在M88kInstrInfo.td文件中提到的目标描述中，我们用and助记符定义了一条机器指令，并为其附加了一个模式。人若扩展AND多类记录，并且只查看使用三个寄存器的指令，可以得到TableGen的定义:
+现在，在M88kInstrInfo.td文件中提到的目标描述中，我们用and助记符定义了一条机器指令，并为其添加了一个模式。人若扩展AND多类记录，并且只查看使用三个寄存器的指令，可以得到TableGen的定义:
 
 \begin{cpp}
 let isCommutable = 1 in
@@ -114,22 +114,22 @@ let isCommutable = 1 in
                         (and GPROpnd:$rs1, GPROpnd:$rs2))]>;
 \end{cpp}
 
-“and”字符串是指令的助记符。C++源代码中，使用M88k::ANDrr来引用这个指令。模式内部，使用DAG和节点类型。C++中，会命名为ISD::AND，在setOperationAction()方法中使用。在指令选择期间，若模式匹配，则和类型的DAG节点可使用M88k::ANDrr指令替换，其中包括输入操作数。因此，在进行指令选择时，最重要的任务是定义正确的合法化行为，并将模式附加到指令定义中。
+“and”字符串是指令的助记符。C++源代码中，使用M88k::ANDrr来引用这个指令。模式内部，使用DAG和节点类型。C++中，会命名为ISD::AND，在setOperationAction()方法中使用。指令选择期间，若模式匹配，则和类型的DAG节点可使用M88k::ANDrr指令替换，其中包括输入操作数。进行指令选择时，最重要的任务是定义正确的合法化行为，并将模式附加到指令定义中。
 
-\mySubsubsection{12.2.2.}{向下转译DAG——降低形参}
+\mySubsubsection{12.2.2.}{向下转译DAG——处理形参}
 
 转到M88kISelLowering类执行的另一个重要任务。我们在前一节中定义了调用约定的规则，但是还需要将物理寄存器和内存位置映射到DAG中使用的虚拟寄存器。对于参数，这在LowerFormalArguments()方法中完成，返回值在LowerReturn()方法中处理。首先，我们必须处理实参:
 
-\begin{itemize}
+\begin{enumerate}
 \item
-我们将从包含生成的源代码开始:
+将从包含生成的源代码开始:
 
 \begin{cpp}
 #include "M88kGenCallingConv.inc"
 \end{cpp}
 
 \item
-LowerFormalArguments()方法接受几个参数。SDValue类表示与DAG节点关联的值，处理DAG时经常使用。第一个参数Chain表示控制流，可能更新的Chain也是该方法的返回值。CallConv参数标识所使用的调用约定，若变量参数列表是参数的一部分，则IsVarArg设置为true。需要处理的参数在Ins参数中传递，以及在DL参数中的位置。DAG参数使我们能够访问SelectionDAG类。最后，映射的结果将存储在InVals vector参数中:
+LowerFormalArguments()方法接受几个参数。SDValue类表示与DAG节点关联的值，处理DAG时经常使用。第一个参数Chain表示控制流，可能更新的Chain也是该方法的返回值。CallConv参数标识所使用的调用约定，若变量参数列表是参数的一部分，则IsVarArg设置为true。需要处理的参数在Ins参数中传递，以及在DL参数中的位置，DAG参数能够访问SelectionDAG类。最后，映射的结果将存储在InVals vector参数中:
 
 \begin{cpp}
 SDValue M88kTargetLowering::LowerFormalArguments(
@@ -149,7 +149,7 @@ SDValue M88kTargetLowering::LowerFormalArguments(
 \end{cpp}
 
 \item
-接下来，必须调用生成的代码。我们需要实例化CCState类的对象，对AnalyzeFormalArguments()方法的调用中，使用的CC\_M88k参数值是在目标描述中使用的约定名称。结果存储在arglos vector中:
+接下来，必须调用生成的代码。需要实例化CCState类的对象，对AnalyzeFormalArguments()方法的调用中，使用的CC\_M88k参数值是在目标描述中使用的约定名称。结果存储在arglos vector中:
 
 \begin{cpp}
     SmallVector<CCValAssign, 16> ArgLocs;
@@ -159,7 +159,7 @@ SDValue M88kTargetLowering::LowerFormalArguments(
 \end{cpp}
 
 \item
-当确定了参数的位置，需要将它们映射到DAG。因此，必须遍历所有位置:
+当确定了参数的位置，需要将它们映射到DAG，必须遍历所有位置:
 
 \begin{cpp}
     for (unsigned I = 0, E = ArgLocs.size(); I != E; ++I) {
@@ -184,7 +184,7 @@ SDValue M88kTargetLowering::LowerFormalArguments(
 \end{cpp}
 
 \item
-使用存储在RC变量中的寄存器类，可以创建虚拟寄存器并复制值。还需要将物理寄存器声明为住客:
+使用存储在RC变量中的寄存器类，可以创建虚拟寄存器并复制值。还需要将物理寄存器声明为“常驻”(live-in):
 
 \begin{cpp}
             Register VReg = MRI.createVirtualRegister(RC);
@@ -194,7 +194,7 @@ SDValue M88kTargetLowering::LowerFormalArguments(
 \end{cpp}
 
 \item
-在调用约定的定义中，增加了8位和16位值提升为32位的规则，需要确保这里的提升。为此，必须插入DAG节点，以确保提升该值。之后，该值会截断为正确的大小。注意，将ArgValue的值作为操作数传递给DAG节点，并将结果存储在同一个变量中:
+调用约定的定义中，增加了8位和16位值提升为32位的规则，需要确保这里的提升。必须插入DAG节点，以确保提升该值，该值会截断为正确的大小。注意，将ArgValue的值作为操作数传递给DAG节点，并将结果存储在同一个变量中:
 
 \begin{cpp}
             if (VA.getLocInfo() == CCValAssign::SExt)
@@ -211,7 +211,7 @@ SDValue M88kTargetLowering::LowerFormalArguments(
 \end{cpp}
 
 \item
-最后，我们通过将DAG节点添加到结果vector来完成对寄存器参数的处理:
+最后，通过将DAG节点添加到结果vector来完成对寄存器参数的处理:
 
 \begin{cpp}
             InVals.push_back(ArgValue);
@@ -219,7 +219,7 @@ SDValue M88kTargetLowering::LowerFormalArguments(
 \end{cpp}
 
 \item
-参数的另一个可能位置是在堆栈上，但没有定义任何加载和存储指令，还不能处理这种情况。这将结束所有参数位置的循环:
+参数的另一个可能位置是在堆栈上，但没有定义加载和存储指令，还不能处理这种情况。这将结束所有参数位置的循环:
 
 \begin{cpp}
         } else {
@@ -229,7 +229,7 @@ SDValue M88kTargetLowering::LowerFormalArguments(
 \end{cpp}
 
 \item
-之后，可能需要添加代码来处理变量参数列表。再一次，我们添加了一些代码，来提醒我们没有实现它:
+之后，可能需要添加代码来处理变量参数列表。再一次，添加了一些代码，来提醒我们没有实现它:
 
 \begin{cpp}
     assert(!IsVarArg && "Not implemented");
@@ -242,11 +242,11 @@ SDValue M88kTargetLowering::LowerFormalArguments(
     return Chain;
 }
 \end{cpp}
-\end{itemize}
+\end{enumerate}
 
-\mySubsubsection{12.2.3.}{向下转译DAG——向下转译返回值}
+\mySubsubsection{12.2.3.}{向下转译DAG——处理返回值}
 
-返回值的处理方式类似，但必须为它们扩展目标描述。首先，需要定义一个名为RET\_GLUE的新DAG节点类型。这种DAG节点类型用于将返回值粘合在一起，从而防止重新排列，例如由指令调度程序重新排列。M88kInstrInfo.td中的定义如下所示:
+返回值的处理方式类似，但必须扩展目标描述。首先，需要定义一个名为RET\_GLUE的新DAG节点类型。这种DAG节点类型用于将返回值粘合在一起，从而防止重新排列，例如由指令调度程序重新排列。M88kInstrInfo.td中的定义如下所示:
 
 \begin{cpp}
 def retglue : SDNode<"M88kISD::RET_GLUE", SDTNone,
@@ -279,7 +279,7 @@ SDValue M88kTargetLowering::LowerReturn(
 \end{cpp}
 
 \item
-首先，我们调用生成的代码，这次使用RetCC\_M88k的调用约定:
+首先，调用生成的代码，这次使用RetCC\_M88k的调用约定:
 
 \begin{cpp}
     SmallVector<CCValAssign, 16> RetLocs;
@@ -290,7 +290,7 @@ SDValue M88kTargetLowering::LowerReturn(
 \end{cpp}
 
 \item
-然后，再次遍历这些位置。根据当前调用约定的简单定义，该循环最多执行一次。然而，若增加对返回64位值的支持，这将会改变，这需要在两个寄存器中返回:
+然后，再次遍历这些位置。根据当前调用约定的简单定义，该循环最多执行一次。若增加对返回64位值的支持，这将会改变，这需要在两个寄存器中返回:
 
 \begin{cpp}
     SDValue Glue;
@@ -312,7 +312,7 @@ SDValue M88kTargetLowering::LowerReturn(
 \end{cpp}
 
 \item
-返回值是链和胶合寄存器的复制操作。后者只有在有值返回时才会返回:
+返回值是链和胶合寄存器的复制操作，后者只有在有值返回时才会返回:
 
 \begin{cpp}
     RetOps[0] = Chain;
@@ -332,13 +332,13 @@ SDValue M88kTargetLowering::LowerReturn(
 
 恭喜!有了这些定义，就为指令选择奠定了基础。
 
-\mySubsubsection{12.2.4.}{指令选择中实现dag到dag转换}
+\mySubsubsection{12.2.4.}{指令选择中实现DAG到DAG的转换}
 
 目前，仍然缺少一个关键部分:需要定义执行目标描述中定义的DAG转换的传递。该类名为M88kDAGToDAGISel，存储在M88kISelDAGToDAG.cpp文件中。类的大部分都生成了，但仍然需要添加一些代码:
 
 \begin{enumerate}
 \item
-我们将首先定义调试类型并为该传递提供一个描述性名称:
+我们将首先定义调试类型并为该传递提供描述性名称:
 
 \begin{cpp}
 #define DEBUG_TYPE "m88k-isel"
@@ -347,7 +347,7 @@ SDValue M88kTargetLowering::LowerReturn(
 \end{cpp}
 
 \item
-然后，必须在匿名命名空间中声明该类。我们将只重写Select()方法，其他代码会生成并包含在类的主体中:
+然后，必须在匿名命名空间中声明该类。只重写Select()方法，其他代码会生成并包含在类的主体中:
 
 \begin{cpp}
 class M88kDAGToDAGISel : public SelectionDAGISel {
@@ -366,7 +366,7 @@ public:
 \end{cpp}
 
 \item
-之后，必须添加初始化传递的代码。LLVM后端仍然使用遗留的道管管理器，其设置与用于IR转换的通道管理器不同，静态成员ID值用于标识通行证。初始化传递可以使用INITIALIZE\_PASS宏来实现，该宏扩展为C++代码。还必须添加一个工厂方法来创建一个实例:
+之后，必须添加初始化传递的代码。LLVM后端仍然使用遗留的通道管理器，其设置与用于IR转换的通道管理器不同，静态成员ID值用于标识通道。初始化通道可以使用INITIALIZE\_PASS宏来实现，该宏扩展为C++代码。还必须添加一个工厂方法来创建实例:
 
 \begin{cpp}
 char M88kDAGToDAGISel::ID = 0;
@@ -382,7 +382,7 @@ llvm::createM88kISelDag(M88kTargetMachine &TM,
 \end{cpp}
 
 \item
-最后，必须实现Select()方法。现在，只调用生成的代码，但遇到了一个复杂的转换，就不能用DAG模式来表达，则可以在调用生成的代码之前添加自己的代码来执行转换:
+最后，必须实现Select()方法。只调用生成的代码，但遇到了一个复杂的转换，就不能用DAG模式来表达，则可以在调用生成的代码之前，添加自己的代码来执行转换:
 
 \begin{cpp}
 void M88kDAGToDAGISel::Select(SDNode *Node) {
@@ -391,7 +391,7 @@ void M88kDAGToDAGISel::Select(SDNode *Node) {
 \end{cpp}
 \end{enumerate}
 
-这样，就实现了指令选择。在进行第一次测试之前，仍然需要添加一些支持类。我们将在接下来的几节中研究这些类。
+这样，就实现了指令选择。进行第一次测试之前，仍然需要添加一些支持类。我们将在接下来的几节中研究这些类。
 
 
 
