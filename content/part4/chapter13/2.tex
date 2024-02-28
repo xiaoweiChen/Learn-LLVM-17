@@ -1,7 +1,7 @@
 
-在前面的章节中，我们在LLVM中开发了M88k目标的后端实现。为了完成M88k目标的编译器实现，通过为M88k目标添加clang实现来研究将新目标连接到前端。
+前面的章节中，我们在LLVM中开发了M88k目标的后端实现。为了完成M88k目标的编译器实现，通过为M88k目标添加clang实现来研究将新目标连接到前端。
 
-\mySubsubsection{13.2.1.}{在clang中实现驱动程序的集成}
+\mySubsubsection{13.2.1.}{clang中实现驱动程序的集成}
 
 让我们从添加驱动程序集成到M88k的clang开始:
 
@@ -43,7 +43,7 @@ namespace targets {
 \end{cpp}
 
 \item
-现在，声明实际的M88kTargetInfo类，并让它扩展原来的TargetInfo类。因为若这个类链接到动态库，这个类标记为LLVM\_LIBRARY\_VISIBILITY，这个属性允许M88kTargetInfo类只在库中可见，而在外部不可访问:
+现在，声明实际的M88kTargetInfo类，并让它扩展原来的TargetInfo类。若这个类链接到动态库，这个类标记为LLVM\_LIBRARY\_VISIBILITY，这个属性允许M88kTargetInfo类只在库中可见，而在外部不可访问:
 
 \begin{cpp}
 class LLVM_LIBRARY_VISIBILITY M88kTargetInfo: public TargetInfo
@@ -75,7 +75,7 @@ public:
 \end{cpp}
 
 \item
-在getter方法之后，还必须定义对M88k目标执行各种检查的方法。第一个检查M88k目标是否具有特定的目标特性，以字符串的形式提供。其次，当使用内联汇编时，添加一个函数来验证约束。最后，们有一个函数来检查一个特定的CPU是否对M88k目标有效，也以字符串的形式提供:
+getter方法之后，还必须定义对M88k目标执行各种检查的方法。第一个检查M88k目标是否具有特定的目标特性，以字符串的形式提供。当使用内联汇编时，添加一个函数来验证约束。最后，们有一个函数来检查一个特定的CPU是否对M88k目标有效，也以字符串的形式提供:
 
 \begin{cpp}
     bool hasFeature(StringRef Feature) const override;
@@ -95,7 +95,7 @@ public:
 \end{cpp}
 
 \item
-为了完成驱动程序实现的头文件，让我们总结我们在开头添加的名称空间和宏定义:
+为了完成驱动程序实现的头文件，结束开头添加的名称空间和宏定义:
 
 \begin{cpp}
 } // namespace targets
@@ -104,7 +104,7 @@ public:
 \end{cpp}
 
 \item
-现在，已经在clang/lib/Basic/Targets中完成了M88k头文件，我们必须在clang/lib/Basic/Targets/M88k.cpp中添加相应的TargetInfo C++实现。我们将从包含所需的头文件开始，特别是刚刚创建的新M88k.h头文件:
+现在，已经在clang/lib/Basic/Targets中完成了M88k头文件，必须在clang/lib/Basic/Targets/M88k.cpp中添加相应的TargetInfo C++实现。我们将从包含所需的头文件开始，特别是刚刚创建的新M88k.h头文件:
 
 \begin{cpp}
 #include "M88k.h"
@@ -119,7 +119,7 @@ public:
 \end{cpp}
 
 \item
-正如之前在头文件中所做的那样，从clang和目标命名空间开始，然后也开始实现M88kTargetInfo类的构造函数:
+正如之前在头文件中所做的那样，从clang和目标命名空间开始，然后实现M88kTargetInfo类的构造函数:
 
 \begin{cpp}
 namespace clang {
@@ -130,7 +130,7 @@ M88kTargetInfo::M88kTargetInfo(const llvm::Triple &Triple,
 \end{cpp}
 
 \item
-构造函数中，为M88k目标设置了数据布局字符串。正如之前看到的，这个数据布局字符串位于发出的LLVM IR文件的顶部。数据布局字符串的每个部分的解释如下:
+构造函数中，为M88k目标设置了数据布局字符串。这个数据布局字符串位于发出的LLVM IR文件的顶部，数据布局字符串的每个部分的解释如下:
 
 \begin{cpp}
     std::string Layout = "";
@@ -162,7 +162,7 @@ M88kTargetInfo类的构造函数通过将各种变量类型设置为signed long 
 \end{cpp}
 
 \item
-完成目标器的CPU设置功能。这个函数接受一个字符串，并将CPU设置为用户在llvm::StringSwitch中提供的特定CPU字符串，其本质上只是一个常规的开关，但专门用于使用llvm的字符串。可以看到M88k目标上有三种支持的CPU类型，弱提供的字符串不匹配任何预期的类型，则有CK\_Unknown类型:
+完成目标器的CPU设置功能。这个函数接受一个字符串，并将CPU设置为用户在llvm::StringSwitch中提供的特定CPU字符串，其本质上只是一个常规的开关，但专用于使用llvm的字符串。可以看到M88k目标上有三种支持的CPU类型，提供的字符串不匹配任何预期的类型，则有CK\_Unknown类型:
 
 \begin{cpp}
 bool M88kTargetInfo::setCPU(const std::string &Name) {
@@ -221,7 +221,7 @@ const {
 \end{cpp}
 
 \item
-接下来的几个函数是存根函数，但是对于前端的基本支持是必需的。这包括从目标获取内置函数的函数，以及在支持目标的特定特性时查询目标的函数。现在，保留它们未实现，并为这些函数设置默认返回值，以便稍后实现:
+接下来的几个函数是存根函数，但对于前端的基本支持是必需的。这包括从目标获取内置函数的函数，以及在支持目标的特定特性时查询目标的函数。现在，保留它们，并为这些函数设置默认返回值，以便稍后实现:
 
 \begin{cpp}
 ArrayRef<Builtin::Info> M88kTargetInfo::getTargetBuiltins()
@@ -234,7 +234,7 @@ bool M88kTargetInfo::hasFeature(StringRef Feature) const {
 \end{cpp}
 
 \item
-在这些函数之后，将在M88k上添加寄存器名的实现。通常，支持的寄存器名列表及其用途可以在感兴趣的特定平台的ABI上找到。在这个实现中，将实现从0到31的主要通用寄存器，并创建一个数组来存储这些信息。在寄存器别名方面，目前实现的寄存器没有别名:
+这些函数之后，将在M88k上添加寄存器名的实现。通常，支持的寄存器名列表及其用途可以在感兴趣的特定平台的ABI上找到。这个实现中，将实现从0到31的主要通用寄存器，并创建一个数组来存储这些信息。寄存器别名方面，目前实现的寄存器没有别名:
 
 \begin{cpp}
 const char *const M88kTargetInfo::GCCRegNames[] = {
@@ -253,7 +253,7 @@ M88kTargetInfo::getGCCRegAliases() const {
 \end{cpp}
 
 \item
-我们要实现的最后一个函数是，验证目标上的内联汇编约束的函数。此函数仅接受一个字符(表示内联程序集约束)，并相应地处理该约束。实现了一些内联汇编寄存器约束，例如：地址寄存器、数据寄存器和浮点寄存器，并且还考虑了一些常量约束:
+我们要实现的最后一个函数是，验证目标上的内联汇编约束的函数。此函数仅接受一个字符(表示内联程序集约束)，并相应地处理该约束。实现了一些内联汇编寄存器约束，例如：地址寄存器、数据寄存器和浮点寄存器，并且还考虑了一些常量:
 
 \begin{cpp}
 bool M88kTargetInfo::validateAsmConstraint(
@@ -283,11 +283,11 @@ const char *&Name, TargetInfo::ConstraintInfo &info) const {
 
 \end{enumerate}
 
-在完成clang/lib/Basic/Targets/M88k.cpp的实现后，必需在clang/include/clang/Driver/Options.td中添加M88k特性组和有效CPU类型的实现。
+完成clang/lib/Basic/Targets/M88k.cpp的实现后，必需在clang/include/clang/Driver/Options.td中添加M88k特性组和有效CPU类型的实现。
 
 回想一下，之前为M88k目标定义了三种有效的CPU类型:mc88000、mc88100和mc88110。这些CPU类型也需要在Options中定义。因为这个文件是中心位置，定义了clang将接受的所有选项和标志:
 
-\mySubsubsection{13.2.2.}{在clang中实现对M88k的ABI支持}
+\mySubsubsection{13.2.2.}{clang中实现对M88k的ABI支持}
 
 现在，需要在clang的前端中添加ABI支持，可以从前端生成特定于M88k目标的代码:
 
@@ -301,7 +301,7 @@ createM88kTargetCodeGenInfo(CodeGenModule &CGM);
 \end{cpp}
 
 \item
-还需要将以下代码添加到clang/lib/Basic/Targets.cpp中，这将帮助clang了解M88k可接受的目标三元组。对于M88k目标，可接受的操作系统是OpenBSD。所以clang接受m88k-openbsd作为目标三元组:
+还需要将以下代码添加到clang/lib/Basic/Targets.cpp中，这将帮助clang了解M88k可接受的目标三元组。对于M88k目标，可接受的操作系统是OpenBSD，所以clang接受m88k-openbsd作为目标三元组:
 
 \begin{cpp}
 #include "Targets/M88k.h"
@@ -321,7 +321,7 @@ createM88kTargetCodeGenInfo(CodeGenModule &CGM);
 现在，需要创建一个名为clang/lib/CodeGen/Targets/M88k.cpp的文件，以便可以继续M88k的代码生成信息和ABI实现。
 
 \item
-在clang/lib/CodeGen/Targets/M88k.cpp中，必须添加以下必要的头文件，其中之一就是我们刚刚修改的TargetInfo.h头文件。然后，必须指定使用clang和clang::codegen命名空间:
+clang/lib/CodeGen/Targets/M88k.cpp中，必须添加以下必要的头文件，其中之一就是刚刚修改的TargetInfo.h头文件，必须指定使用clang和clang::codegen命名空间:
 
 \begin{cpp}
 #include "ABIInfoImpl.h"
@@ -331,7 +331,7 @@ using namespace clang::CodeGen;
 \end{cpp}
 
 \item
-接下来，必须声明一个新的匿名名称空间，并将M88kABIInfo放入其中。M88kABIInfo继承自clang中现有的ABIInfo，并在其中包含DefaultABIInfo。对于我们的目标，很大程度上依赖于现有的ABIInfo和DefaultABIInfo，这大大简化了M88kABIInfo类:
+接下来，必须声明一个新的匿名空间，并将M88kABIInfo放入其中。M88kABIInfo继承自clang中现有的ABIInfo，并在其中包含DefaultABIInfo。对于我们的目标，很大程度上依赖于现有的ABIInfo和DefaultABIInfo，这大大简化了M88kABIInfo类:
 
 \begin{cpp}
 namespace {
@@ -357,7 +357,7 @@ public:
 \end{cpp}
 
 \item
-接下来添加M88kTargetCodeGenInfo类的类构造函数，从原始的TargetCodeGenInfo扩展而来。之后，必须关闭最初创建的匿名命名空间:
+接下来添加M88kTargetCodeGenInfo类的类构造函数，从原始的TargetCodeGenInfo扩展而来。之后，必须关闭新创建的匿名命名空间:
 
 \begin{cpp}
 class M88kTargetCodeGenInfo final : public TargetCodeGenInfo {
@@ -382,13 +382,13 @@ CodeGen::createM88kTargetCodeGenInfo(CodeGenModule &CGM) {
 
 以上就是ABI对前端M88k的支持。
 
-\mySubsubsection{13.2.3.}{在clang中实现对M88k工具链的支持}
+\mySubsubsection{13.2.3.}{clang中实现对M88k工具链的支持}
 
 clang中M88k目标集成的最后一部分将是，为我们的目标实现工具链支持。和前面一样，需要为工具链支持创建一个头文件，称这个头文件为clang/lib/Driver/ToolChains/Arch/M88k.h:
 
 \begin{enumerate}
 \item
-首先，必须定义LLVM\_CLANG\_LIB\_DRIVER\_TOOLCHAINS\_ARCH\_M88K\_H，以防止以后的多次包含，并添加任何必要的头文件供以后使用。接下来，必须声明clang、driver、tools和m88k命名空间，每个命名空间都嵌套在另一个命名空间内:
+首先，必须定义LLVM\_CLANG\_LIB\_DRIVER\_TOOLCHAINS\_ARCH\_M88K\_H，以防止以后的多次包含，并添加任何必要的头文件供以后使用。必须声明clang、driver、tools和m88k命名空间，每个命名空间都嵌套在另一个命名空间内:
 
 \begin{cpp}
 #ifndef LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_ARCH_M88K_H
@@ -405,7 +405,7 @@ namespace m88k {
 \end{cpp}
 
 \item
-接下来，必须声明一个描述浮点ABI的枚举值，用于软浮点和硬浮点。所以，浮点计算既可以由浮点硬件本身完成，这很快，也可以通过软件模拟完成，但很慢:
+接下来，必须声明一个描述浮点ABI的枚举值，用于软浮点和硬浮点。浮点计算既可以由浮点硬件本身完成，很快；也可以通过软件模拟完成，很慢:
 
 \begin{cpp}
 enum class FloatABI { Invalid, Soft, Hard, };
@@ -479,7 +479,7 @@ static StringRef normalizeCPU(StringRef CPUName) {
 \end{cpp}
 
 \item
-接下来，必须实现getM88kTargetCPU()函数，在该函数中，给定我们之前在clang/include/clang/Driver/Options.td文件中实现的clang CPU名称。可以得到相应的LLVM名称的M88k CPU，就是我们的目标:
+接下来，必须实现getM88kTargetCPU()函数。该函数中，给定之前在clang/include/clang/Driver/Options.td文件中实现的clang CPU名称。可以得到相应的LLVM名称的M88k CPU，就是我们的目标:
 
 \begin{cpp}
 StringRef m88k::getM88kTargetCPU(const ArgList &Args) {
@@ -514,7 +514,7 @@ StringRef m88k::getM88kTuneCPU(const ArgList &Args) {
 \end{cpp}
 
 \item
-还将实现getM88kFloatABI()方法，该方法获取浮点ABI。最初，将ABI设置为m88k::FloatABI::Invalid作为默认值。接下来，必须检查是否有-msoft-float或-mhard-float选项在命令行中设置。果指定了-msoft-float，则ABI设置为m88k::FloatABI::Soft。同样，当-mhard-float指定为clang时，设置m88k::FloatABI::Hard。最后，若没有指定这些选项，则选择当前平台上的默认值，即M88k的硬浮点值:
+还将实现getM88kFloatABI()方法，该方法获取浮点ABI。最初，将ABI设置为m88k::FloatABI::Invalid作为默认值。接下来，必须检查是否有-msoft-float或-mhard-float选项在命令行中设置。若指定了-msoft-float，则ABI设置为m88k::FloatABI::Soft。同样，当-mhard-float指定为clang时，设置m88k::FloatABI::Hard。最后，若没有指定这些选项，则选择当前平台上的默认值，即M88k的硬浮点值:
 
 \begin{cpp}
 m88k::FloatABI m88k::getM88kFloatABI(const Driver &D, const
@@ -536,7 +536,7 @@ ArgList &Args) {
 \end{cpp}
 
 \item
-接下来将添加getM88kTargetFeatures()的实现，这个函数的重要部分是作为参数传递的特征向量，所处理的唯一目标特性是浮点ABI。从驱动程序和传递给它的参数中，将获得在前一步中实现的适当的浮点ABI。注意，在软浮点ABI的特征向量中也添加了-hard-float目标特征，这意味着目前，M88k只支持硬浮动:
+接下来将添加getM88kTargetFeatures()的实现，这个函数的重要部分是作为参数传递的特征向量，所处理的唯一目标特性是浮点ABI。从驱动程序和传递给它的参数中，将获得在前一步中实现的适当的浮点ABI。注意，在软浮点ABI的特征向量中也添加了-hard-float目标特征，多以M88k目前只支持硬浮点:
 
 \begin{cpp}
 void m88k::getM88kTargetFeatures(const Driver &D,
@@ -566,9 +566,9 @@ void m88k::getM88kTargetFeatures(const Driver &D,
 最后，将ToolChains/Arch/M88k.cpp添加到clang/lib/Driver/CMakeLists.txt中。
 \end{enumerate}
 
-好了!这就是我们对M88k目标的工具链支持的工具链实现，我们已经完成了对M88k的clang的集成!
+好了!这就是对M88k目标的工具链支持的工具链实现，我们已经完成了对M88k的clang的集成!
 
-我们需要做的最后一步是用M88k目标构建clang。下面的命令将构建clang和LLVM项目。对于clang，要注意M88k目标。必须添加-DLLVM\_EXPERIMENTAL\_TARGETS\_TO\_BUILD=M88k CMake选项，如前一节所示:
+需要做的最后一步是用M88k目标构建clang。下面的命令将构建clang和LLVM项目。对于clang，要注意M88k目标。必须设置CMake选项-DLLVM\_EXPERIMENTAL\_TARGETS\_TO\_BUILD=M88k:
 
 \begin{shell}
 $ cmake -G Ninja ../llvm-project/llvm -DLLVM_EXPERIMENTAL_
@@ -584,7 +584,7 @@ $ clang --print-targets | grep M88k
     m88k        - M88k
 \end{shell}
 
-本节中，深入研究了将新后端目标集成到clang中并使其被识别的技术细节。下一节中，我们将探讨交叉编译的概念，详细介绍针对不同于当前主机的CPU架构的过程。
+本节中，深入研究了将新后端目标集成到clang中并使其被识别的技术细节。下一节中，我们将探讨交叉编译的概念，详细介绍针对不同于当前主机CPU架构的过程。
 
 
 
