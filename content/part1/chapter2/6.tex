@@ -26,7 +26,7 @@ declare void @calc_write(i32)
 \end{shell}
 
 \item
-calc\_read()函数将变量名作为参数。下面的构造定义了一个常量，保存a和空字节作为C中的字符串结束符:
+calc\_read()函数将变量名作为参数。下面的构造定义了一个常量保存a，以及使用空字节作为C字符串的结束符:
 
 \begin{shell}
 @a.str = private constant [2 x i8] c"a\00"
@@ -185,10 +185,10 @@ public:
 \end{cpp}
 
 \item
-遍历树之后，通过调用calc\_write()函数打印计算值，必须创建函数原型(FunctionType的实例)。唯一的参数是当前值V:
+遍历树之后，通过调用calc\_write()函数输出计算值，必须创建函数原型(FunctionType的实例)。唯一的参数是当前值V:
 
 \begin{cpp}
-            Tree->accept(*this);FunctionType *CalcWriteFnTy =
+            FunctionType *CalcWriteFnTy =
                 FunctionType::get(VoidTy, {Int32Ty}, false);
             Function *CalcWriteFn = Function::Create(
                 CalcWriteFnTy, GlobalValue::ExternalLinkage,
