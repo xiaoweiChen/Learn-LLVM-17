@@ -27,8 +27,8 @@ END Gcd.
 \begin{shell}
 compilationUnit
     : "MODULE" identifier ";" ( import )* block identifier "." ;
-Import : ( "FROM" identifier )? "IMPORT" identList ";" ;
-Block
+import : ( "FROM" identifier )? "IMPORT" identList ";" ;
+block
     : ( declaration )* ( "BEGIN" statementSequence )? "END" ;
 \end{shell}
 
@@ -125,28 +125,3 @@ factor
 此外，还使用了标识符和integer\_literal标记。标识符是以字母或下划线开头，后面跟着字母、数字和下划线的名称。整数字面值是一个十进制数字序列或后跟字母H的十六进制数字序列。
 
 这些规则已经有很多了，我们只介绍Modula-2的一部分!不过，也可以在这个子集中编写小型应用程序。来实现一个tinylang编译器吧!
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

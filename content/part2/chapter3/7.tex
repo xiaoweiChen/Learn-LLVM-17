@@ -37,7 +37,7 @@ BEGIN
 END Proc;
 \end{shell}
 
-注释所在的位置，使用B指向B局部变量，而使用X指向X全局变量。局部变量B的作用域是Proc。若在当前作用域中找不到名称，则在封闭作用域中继续搜索，所以X变量可以在过程中使用。在tinylang中，只有模块和过程打开一个新的作用域。其他语言结构，如结构和类，通常也会打开作用域。预定义实体，如INTEGER类型和TRUE在全局作用域中声明，包含模块的作用域。
+注释所在的位置，使用B指向B局部变量，而使用X指向X全局变量。局部变量B的作用域是Proc。若在当前作用域中找不到名称，则在外层封闭作用域中继续搜索，所以X变量可以在过程中使用。在tinylang中，只有模块和过程打开一个新的作用域。其他语言结构，如结构和类，通常也会打开作用域。预定义实体，如INTEGER类型和TRUE在全局作用域中声明，包含模块的作用域。
 
 在tinylang中，只有名字才是关键。可以将作用域实现为从名称到其声明的映射，只有在新名称不存在的情况下才能插入该名称。对于查找，还必须知道封闭或父作用域，接口(在include/tinylang/Sema/Scope.h文件中)如下所示:
 
@@ -94,9 +94,9 @@ Decl *Scope::lookup(StringRef Name) {
     Scope *S = this;
     while (S) {
         StringMap<Decl *>::const_iterator I =
-        S->Symbols.find(Name);
+            S->Symbols.find(Name);
         if (I != S->Symbols.end())
-        return I->second;
+            return I->second;
         S = S->getParent();
     }
     return nullptr;
@@ -124,15 +124,15 @@ Decl *Scope::lookup(StringRef Name) {
 
 这里执行两个任务。与calc示例一样，构造AST节点。同时，计算节点的属性，如类型。为什么这是可能的呢?
 
-语义分析器可以依赖于两组不同的属性。作用域继承自调用者，可以通过计算类型声明的名称来计算(或合成)类型声明。该语言的设计方式，使得这两组属性足以计算AST节点的所有属性。
+语义分析器可以依赖于两组不同的属性：作用域继承自调用者，类型声明可以通过评估类型声明中的名称来计算(或者说合成)。该语言的设计方式，使得这两组属性足以计算AST节点的所有属性。
 
 这里，需要先声明再使用模型。若一种语言允许在声明之前使用名称，例如C++中类中的成员，不可能一次计算一个AST节点的所有属性，AST节点必须仅使用部分计算的属性或仅使用普通信息(例如在calc示例中)来构造。
 
-然后必须访问AST一次或多次以确定丢失的信息。在tinylang(和Modula-2)的情况下，可以省去AST构造——AST是通过parseXXX()方法的调用层次结构间接表示。使用AST生成代码更为常见，所以我们在这里也构造一个AST。
+然后必须访问AST一次或多次以确定缺失的信息。在tinylang(和Modula-2)的情况下，可以省去AST构造——AST是通过parseXXX()方法的调用层次结构间接表示。使用AST生成代码更为常见，所以我们在这里也构造一个AST。
 
-在把这些部分放在一起之前，我们需要了解LLVM使用运行时类型信息(RTTI)的风格。
+在把这些部分放在一起之前，我们需要了解LLVM使用运行时类型信息(runtime type information, RTTI)的风格。
 
-\mySubsubsection{3.7.2.}{AST使用LLVM风格的RTTI}
+\mySubsubsection{3.7.2.}{使用LLVM风格RTTI的AST}
 
 当然，AST节点是类层次结构的一部分。声明总是有一个名称，其他属性取决于所声明的内容。若声明了变量，则需要指定类型。声明常量需要类型、值等。在运行时，需要找出使用的是哪种类型的声明，dynamic\_cast<>的C++操作符可用于此。问题是，只有当C++类附加了虚函数表时，所需的RTTI才可用——使用了虚函数。另一个缺点是C++ RTTI过于臃肿。为了避免这些缺点，LLVM开发人员引入了一种自制的RTTI风格，这种风格在整个LLVM库中使用。
 
@@ -233,7 +233,7 @@ bool Parser::parseVariableDeclaration(DeclList &Decls) {
 }
 \end{cpp}
 
-DeclList是声明列表，std::vector<Decl*>， IdentList是位置和标识符列表，std::vector<std::pair<SMLoc, StringRef>{}>。
+DeclList是声明列表，std::vector<Decl*>和IdentList是位置和标识符列表，std::vector<std::pair<SMLoc, StringRef>{}>。
 
 parseQualident()方法返回一个声明，在本例中应该是一个类型声明。
 
@@ -263,7 +263,7 @@ Decl *D) {
 
 大多数其他实体以相同的方式构建——语义分析的复杂性是唯一的区别。模块和过程需要做更多的工作，打开了一个新的作用域。打开一个新的作用域很容易:只需要实例化一个新的作用域对象。在解析模块或过程之后，必须删除作用域。
 
-这必须可靠，我们不想在出现语法错误时将名称添加到错误的作用域中，这是C++中资源获取即初始化(RAII)习惯用法的经典用法。另一个复杂之处在于过程可以递归地调用自身，所以在使用过程之前，必须将其名称添加到当前作用域。语义分析器有两个方法来进入和离开作用域。作用域与声明相关联:
+这一类实现必须可靠，我们不想在出现语法错误时将名称添加到错误的作用域中，这是C++中资源获取即初始化(Resource Acquisition Is Initialization, RAII)习惯用法的经典用法。另一个复杂之处在于过程可以递归地调用自身，所以在使用过程之前，必须将其名称添加到当前作用域。语义分析器有两个方法来进入和离开作用域。作用域与声明相关联:
 
 \begin{cpp}
 void Sema::enterScope(Decl *D) {
@@ -431,9 +431,4 @@ int main(int argc_, const char **argv_) {
 $ tinylang Gcd.mod
 \end{shell}
 
-这是一个有效的程序，看起来好像什么也没发生。一定要修改文件，并输出一些错误消息。我们将在下一章中添加代码生成的过程。
-
-
-
-
-
+这是一个有效的程序，看起来好像什么也没发生。一定要尝试修改代码文件，使它输出一些错误消息。我们将在下一章中添加代码生成的过程。
