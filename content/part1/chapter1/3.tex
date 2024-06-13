@@ -67,7 +67,7 @@ $ git clone --config core.autocrlf=false \
   https://github.com/llvm/llvm-project.git
 \end{shell}
 
-这个Git命令将最新的源代码从GitHub克隆到一个名为llvm-project的本地目录中。现在使用以下命令，将当前目录更改为llvm-project目录:
+这个Git命令将最新的源代码从GitHub克隆到一个名为llvm-project的本地目录中。现在使用以下命令，将当前目录切换到llvm-project目录:
 
 \begin{shell}
 $ cd llvm-project
@@ -157,7 +157,7 @@ $ cmake -DLLVM_ENABLE_PROJECTS=clang -B build -S llvm
 生成构建文件后，可以使用以下命令编译LLVM和clang:
 
 \begin{shell}
-$ cmake –-build build
+$ cmake --build build
 \end{shell}
 
 我们告诉CMake在配置步骤中生成Ninja文件，所以这个命令在底层运行Ninja。但若为支持多构建配置的生成器(如Visual Studio)生成构建文件，则需要使用-{}-config选项指定要用于构建的配置。根据硬件资源的不同，该命令的运行时间从15分钟(具有大量CPU内核、内存和快速存储的服务器)到几个小时(具有有限内存的双核Windows笔记本)不等。
@@ -167,7 +167,7 @@ $ cmake –-build build
 假设有四个可用的CPU内核，而Ninja应该只使用两个(因为你有并行任务要运行)。就使用以下命令进行编译:
 
 \begin{shell}
-$ cmake --build build –j2
+$ cmake --build build -j2
 \end{shell}
 
 编译完成后，运行测试检查是否一切都如预期的那样工作:
@@ -193,6 +193,3 @@ $ cmake --install build
 \end{shell}
 
 类Unix系统上，安装目录是/usr/local。在Windows上，使用C:\verb|\|Program Files\verb|\|LLVM。这可以修改，下一节将解释如何实现。
-
-
-
